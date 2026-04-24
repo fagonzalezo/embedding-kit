@@ -20,15 +20,23 @@ pathologies in embedding spaces and learns improved embeddings via contrastive t
 
 ## Installation
 
+### uv
+
 ```bash
-# basic
-uv sync
-# with fast FAISS kNN (recommended for n > 50 000)
-uv sync --extra fast
+uv add git+https://github.com/fagonzalezo/embedkit.git
+
+# With fast FAISS kNN (recommended for n > 50 000):
+uv add "embedkit[fast] @ git+https://github.com/fagonzalezo/embedkit.git"
 ```
 
-Dependencies: `numpy`, `scipy`, `scikit-learn`, `scikit-dimension`, `skhubness`,
-`torch`, `pandas`, `matplotlib`, `seaborn`, `umap-learn`.
+### pip
+
+```bash
+pip install git+https://github.com/fagonzalezo/embedkit.git
+
+# With fast FAISS kNN:
+pip install "embedkit[fast] @ git+https://github.com/fagonzalezo/embedkit.git"
+```
 
 ---
 
