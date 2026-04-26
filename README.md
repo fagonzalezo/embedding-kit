@@ -1,6 +1,6 @@
-# EmbedKit
+# Embedding Kit
 
-A Python library for analyzing and improving ML embedding spaces. EmbedKit has two pillars:
+A Python library for analyzing and improving ML embedding spaces. Embedding Kit has two pillars:
 
 - **Analysis** — a suite of geometry-aware metrics that diagnose problems in an embedding space (hubness, distance collapse, anisotropy, intrinsic dimensionality mismatch, etc.) and produce actionable recommendations.
 - **Improvement** — a contrastive learning pipeline that trains a small MLP projector to produce geometrically healthier embeddings, guided by the analysis report.
@@ -40,19 +40,19 @@ All estimators follow the sklearn `fit` / `transform` API and accept `np.ndarray
 ### uv
 
 ```bash
-uv add git+https://github.com/fagonzalezo/embedkit.git
+uv add git+https://github.com/fagonzalezo/embedding-kit.git
 
 # With fast FAISS kNN (recommended for n > 50 000):
-uv add "embedkit[fast] @ git+https://github.com/fagonzalezo/embedkit.git"
+uv add "embedkit[fast] @ git+https://github.com/fagonzalezo/embedding-kit.git"
 ```
 
 ### pip
 
 ```bash
-pip install git+https://github.com/fagonzalezo/embedkit.git
+pip install git+https://github.com/fagonzalezo/embedding-kit.git
 
 # With fast FAISS kNN:
-pip install "embedkit[fast] @ git+https://github.com/fagonzalezo/embedkit.git"
+pip install "embedkit[fast] @ git+https://github.com/fagonzalezo/embedding-kit.git"
 ```
 
 ## Quickstart
@@ -76,16 +76,16 @@ y = np.load("labels.npy")
 X_refined = EmbedKit(mode="supervised", epochs=100).fit_transform(X, y=y)
 ```
 
-See [`examples/`](https://github.com/fagonzalezo/embedkit/tree/main/examples) for full usage patterns including low-level API, custom augmentations, and workflow integrations.
+See [`examples/`](https://github.com/fagonzalezo/embedding-kit/tree/main/examples) for full usage patterns including low-level API, custom augmentations, and workflow integrations.
 
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
-| [Concepts Manual](https://github.com/fagonzalezo/embedkit/blob/main/docs/manual.md) | Full guide to analysis metrics, the improvement pipeline, and visualization |
-| [Metric Guide](https://github.com/fagonzalezo/embedkit/blob/main/skills/embedkit/references/metric_guide.md) | Per-metric healthy ranges, pathology thresholds, geometric meaning, and downstream consequences |
-| [Workflow Guide](https://github.com/fagonzalezo/embedkit/blob/main/skills/embedkit/references/workflow_guide.md) | Integration patterns for HuggingFace, PyTorch training loops, scikit-learn pipelines, RAG / vector stores, and ONNX export |
-| [Examples](https://github.com/fagonzalezo/embedkit/tree/main/examples) | Runnable notebooks |
+| [Concepts Manual](https://github.com/fagonzalezo/embedding-kit/blob/main/docs/manual.md) | Full guide to analysis metrics, the improvement pipeline, and visualization |
+| [Metric Guide](https://github.com/fagonzalezo/embedding-kit/blob/main/skills/embedkit/references/metric_guide.md) | Per-metric healthy ranges, pathology thresholds, geometric meaning, and downstream consequences |
+| [Workflow Guide](https://github.com/fagonzalezo/embedding-kit/blob/main/skills/embedkit/references/workflow_guide.md) | Integration patterns for HuggingFace, PyTorch training loops, scikit-learn pipelines, RAG / vector stores, and ONNX export |
+| [Examples](https://github.com/fagonzalezo/embedding-kit/tree/main/examples) | Runnable notebooks |
 
 ## Claude Code Skill
 
@@ -95,13 +95,13 @@ EmbedKit ships a [Claude Code](https://claude.ai/code) skill at `skills/embedkit
 
 **Option 1 — Copy from a cloned repo (global install):**
 ```bash
-git clone https://github.com/fagonzalezo/embedkit.git
+git clone https://github.com/fagonzalezo/embedding-kit.git
 cp -r embedkit/skills/embedkit ~/.claude/skills/
 ```
 
 **Option 2 — Symlink (keeps the skill in sync with the repo):**
 ```bash
-git clone https://github.com/fagonzalezo/embedkit.git
+git clone https://github.com/fagonzalezo/embedding-kit.git
 ln -s "$(pwd)/embedkit/skills/embedkit" ~/.claude/skills/embedkit
 ```
 
@@ -114,4 +114,4 @@ The skill is already present at `skills/embedkit/` and Claude Code picks it up a
 - A pathology → improvement decision table (which loss and augmentation to use for each detected geometric problem)
 - Visualization and persistence guides
 - Common pitfall warnings (e.g., don't L2-normalize before analysis, temperature sensitivity for NTXentLoss)
-- Pointers to the [Metric Guide](https://github.com/fagonzalezo/embedkit/blob/main/skills/embedkit/references/metric_guide.md) and [Workflow Guide](https://github.com/fagonzalezo/embedkit/blob/main/skills/embedkit/references/workflow_guide.md)
+- Pointers to the [Metric Guide](https://github.com/fagonzalezo/embedding-kit/blob/main/skills/embedkit/references/metric_guide.md) and [Workflow Guide](https://github.com/fagonzalezo/embedding-kit/blob/main/skills/embedkit/references/workflow_guide.md)
