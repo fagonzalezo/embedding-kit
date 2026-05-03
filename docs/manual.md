@@ -564,7 +564,7 @@ print(trainer.history)             # {"loss": [...], "uniformity": [...], ...}
 
 | Condition | Effect |
 |-----------|--------|
-| `severity == "high"` | Uses `CompositeAugmentation([GaussianNoise, FeatureDropout])` instead of `GaussianNoise` alone |
+| `augmentation == "auto"` | Uses `EmbeddingMixup(k=report.suggested_k, alpha=0.4)` regardless of severity |
 | `mode == "self_supervised"` | Base loss is `NTXentLoss` |
 | `mode == "supervised"` | Base loss is `SupConLoss` |
 | `k_skewness > 5` | Adds `AlignUniformLoss` (weight 0.5) via `CombinedLoss` |

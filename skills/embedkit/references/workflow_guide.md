@@ -301,7 +301,7 @@ X_refined = sess.run(["refined"], {"embedding": X.astype(np.float32)})[0]
 | Source | Typical dim | Common issue | Suggested approach |
 |---|---|---|---|
 | BERT / RoBERTa (CLS) | 768 | Anisotropy, moderate hubness | `mode="self_supervised"`, `AlignUniformLoss` |
-| Sentence-Transformers | 384–768 | Generally healthy; mild hubness | `GaussianNoise`, `NTXentLoss` |
+| Sentence-Transformers | 384–768 | Generally healthy; mild hubness | `EmbeddingMixup`, `NTXentLoss` |
 | OpenAI `text-embedding-*` | 1536–3072 | Distance collapse at high dim | Aggressive `target_dim` reduction |
 | CLIP vision | 512–1024 | Anisotropy | `AlignUniformLoss` |
 | Word2Vec / GloVe | 100–300 | Low intrinsic dim | Modest reduction, `KNNPairs` |

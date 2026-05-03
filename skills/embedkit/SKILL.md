@@ -23,19 +23,19 @@ pathologies in embedding spaces and learns improved embeddings via contrastive t
 ### uv
 
 ```bash
-uv add git+https://github.com/fagonzalezo/embedkit.git
+uv add git+https://github.com/fagonzalezo/embedding-kit.git
 
 # With fast FAISS kNN (recommended for n > 50 000):
-uv add "embedkit[fast] @ git+https://github.com/fagonzalezo/embedkit.git"
+uv add "embedkit[fast] @ git+https://github.com/fagonzalezo/embedding-kit.git"
 ```
 
 ### pip
 
 ```bash
-pip install git+https://github.com/fagonzalezo/embedkit.git
+pip install git+https://github.com/fagonzalezo/embedding-kit.git
 
 # With fast FAISS kNN:
-pip install "embedkit[fast] @ git+https://github.com/fagonzalezo/embedkit.git"
+pip install "embedkit[fast] @ git+https://github.com/fagonzalezo/embedding-kit.git"
 ```
 
 ---
@@ -117,12 +117,12 @@ For detailed interpretation of every metric and its healthy ranges, read
 
 | Detected pathology | Metric signal | Recommended improvement |
 |---|---|---|
-| Severe hubness | `k_skewness > 5` | `AlignUniformLoss` + `CompositeAugmentation` |
-| Moderate hubness | `k_skewness 2–5` | `NTXentLoss` + `GaussianNoise` |
+| Severe hubness | `k_skewness > 5` | `AlignUniformLoss` (loss escalation; augmentation stays `EmbeddingMixup`) |
+| Moderate hubness | `k_skewness 2–5` | `NTXentLoss` + `EmbeddingMixup` |
 | High anisotropy | `participation_ratio < 0.1 × D` | `AlignUniformLoss` or PCA whitening first |
 | Distance collapse | `concentration_ratio > 0.8` | Reduce `target_dim` aggressively |
 | Sparse manifold | `ID/D < 0.1` | Strong bottleneck (low `target_dim`) |
-| Low neighbor stability | `mean_consistency < 0.5` | `GaussianNoise(adaptive=True)` or `EmbeddingMixup` |
+| Low neighbor stability | `mean_consistency < 0.5` | `EmbeddingMixup` (auto-config default) |
 | Poor spread / clusters | `uniformity > -1.0` | `AlignUniformLoss` |
 | Supervised, class labels available | any severity | `mode="supervised"`, `SupConLoss` |
 | Sparse / NLP embeddings | high dim, sparse values | `FeatureDropout` augmentation |

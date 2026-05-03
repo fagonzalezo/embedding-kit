@@ -9,11 +9,7 @@ import numpy as np
 import torch
 
 from embedkit.analysis.report import EmbedKitAnalyzer, EmbedKitReport
-from embedkit.improvement.augmentation import (
-    CompositeAugmentation,
-    GaussianNoise,
-    FeatureDropout,
-)
+from embedkit.improvement.augmentation import EmbeddingMixup
 from embedkit.improvement.losses import (
     AlignUniformLoss,
     CombinedLoss,
@@ -156,11 +152,10 @@ class EmbedKit:
         )
         model.load_state_dict(bundle["state_dict"])
         # minimal trainer wrapper just for transform
-        from embedkit.improvement.augmentation import GaussianNoise
         from embedkit.improvement.losses import NTXentLoss
         trainer = Trainer(
             model=model,
-            augmentation=GaussianNoise(),
+            augmentation=EmbeddingMixup(),
             loss=NTXentLoss(),
             epochs=0,
         )
@@ -176,12 +171,7 @@ class EmbedKit:
     def _resolve_augmentation(self, report: EmbedKitReport):
         if self.augmentation_cfg != "auto":
             return self.augmentation_cfg
-        if report.severity == "high":
-            return CompositeAugmentation(
-                [GaussianNoise(std=0.05, adaptive=True), FeatureDropout(p=0.1)],
-                mode="sequential",
-            )
-        return GaussianNoise(std=0.05, adaptive=True)
+        return EmbeddingMixup(k=report.suggested_k, alpha=0.4)
 
     def _resolve_loss(self, report: EmbedKitReport):
         if self.loss_cfg != "auto":

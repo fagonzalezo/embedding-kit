@@ -178,11 +178,9 @@ its spectrum. Sigma is chosen by the median heuristic from the report's
 | 2–3 | `"medium"` — some pathologies present |
 | ≥ 4 | `"high"` — multiple severe pathologies |
 
-The score contributions from each check are listed per-metric above. `EmbedKit` uses
-severity to choose augmentation aggressiveness:
-
-- `"high"` → `CompositeAugmentation([GaussianNoise, FeatureDropout], mode="sequential")`
-- `"low"/"medium"` → `GaussianNoise(std=0.05, adaptive=True)`
+The score contributions from each check are listed per-metric above. `EmbedKit` auto-config
+always uses `EmbeddingMixup(k=report.suggested_k, alpha=0.4)` regardless of severity. Severity
+still escalates the *loss* (adding `AlignUniformLoss` when `k_skewness > 5`).
 
 ---
 
