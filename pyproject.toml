@@ -23,8 +23,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-fast = ["faiss-cpu>=1.7"]
-dev  = ["pytest>=8", "pytest-cov", "ruff", "mypy"]
+fast     = ["faiss-cpu>=1.7"]
+dev      = ["pytest>=8", "pytest-cov", "ruff", "mypy"]
+examples = ["torchvision>=0.16"]
 
 [tool.ruff]
 line-length = 100

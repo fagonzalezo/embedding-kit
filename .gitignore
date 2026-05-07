@@ -21,3 +21,4 @@ htmlcov/
 .python-version
 CLAUDE.md
 claude/
+examples/data/
