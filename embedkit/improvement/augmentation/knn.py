@@ -17,27 +17,36 @@ class KNNPairs(BaseAugmentation):
     ):
         self.k = k
         self.hard_negatives = hard_negatives
-        # Precomputed (N, k) integer index; set by Trainer before the loop to
-        # avoid repeated exact-kNN calls inside the training step.
         self.neighbor_index = neighbor_index
+        self._X_ref: torch.Tensor | None = None  # full training set, set by precompute
 
     def precompute(self, X: np.ndarray) -> None:
-        """Build and cache the neighbor index for dataset X (call once before fit)."""
+        """Build and cache the neighbor index and reference embeddings for X."""
         from embedkit.utils.neighbors import knn
         _, indices = knn(X, self.k)
         self.neighbor_index = indices  # (N, k) int64
+        self._X_ref = torch.from_numpy(X)  # kept on CPU; moved to device on demand
 
-    def __call__(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        if self.neighbor_index is not None:
-            return self._from_precomputed(x)
+    def __call__(
+        self,
+        x: torch.Tensor,
+        indices: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if self.neighbor_index is not None and indices is not None and self._X_ref is not None:
+            return self._from_precomputed(x, indices)
         return self._from_batch(x)
 
-    def _from_precomputed(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        # x is a batch drawn by DataLoader; we need the dataset-level row indices
-        # so this path is only safe when the DataLoader preserves dataset order
-        # (shuffle=False) or the Trainer passes the global indices alongside x.
-        # For the common shuffled-batch case, fall back to batch-level kNN.
-        return self._from_batch(x)
+    def _from_precomputed(
+        self,
+        x: torch.Tensor,
+        indices: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        idx_np = indices.cpu().numpy()
+        # Randomly pick one of the k neighbors for each anchor.
+        rand_col = np.random.randint(0, self.k, size=len(idx_np))
+        neighbor_global = self.neighbor_index[idx_np, rand_col]  # (B,)
+        x_j = self._X_ref[neighbor_global].to(x.device, dtype=x.dtype)
+        return x, x_j
 
     def _from_batch(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         from embedkit.utils.neighbors import knn

@@ -121,7 +121,7 @@ class EmbedKitAnalyzer(BaseAnalyzer):
         random_state: int | None = 42,
     ):
         self.k = k
-        self.id_methods = id_methods or ["TwoNN", "MLE", "lPCA"]
+        self.id_methods = id_methods or ["TwoNN", "MLE", "lPCA", "MOM"]
         self.metric = metric
         self.n_max = n_max
         self.d_max = d_max

@@ -21,5 +21,5 @@ class FeatureMasking(BaseAugmentation):
             mask[:, start : start + self.block_size] = 0.0
         return mask
 
-    def __call__(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def __call__(self, x: torch.Tensor, indices=None) -> tuple[torch.Tensor, torch.Tensor]:
         return x * self._make_mask(x), x * self._make_mask(x)

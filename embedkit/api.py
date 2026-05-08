@@ -9,7 +9,7 @@ import numpy as np
 import torch
 
 from embedkit.analysis.report import EmbedKitAnalyzer, EmbedKitReport
-from embedkit.improvement.augmentation import EmbeddingMixup
+from embedkit.improvement.augmentation import EmbeddingMixup, KNNPairs
 from embedkit.improvement.losses import (
     AlignUniformLoss,
     CombinedLoss,
@@ -37,8 +37,10 @@ class EmbedKit:
         lr: float = 3e-4,
         weight_decay: float = 1e-4,
         scheduler: str | None = "cosine",
-        eval_every: int = 10,
-        early_stopping_patience: int | None = None,
+        eval_every: int = 5,
+        early_stopping_patience: int | None = 10,
+        monitor: str = "k_skewness",
+        val_split: float = 0.1,
         device: str | torch.device | None = None,
         id_methods: list[str] | None = None,
         random_state: int | None = 42,
@@ -57,6 +59,8 @@ class EmbedKit:
         self.scheduler = scheduler
         self.eval_every = eval_every
         self.early_stopping_patience = early_stopping_patience
+        self.monitor = monitor
+        self.val_split = val_split
         self.device = device
         self.id_methods = id_methods
         self.random_state = random_state
@@ -113,7 +117,10 @@ class EmbedKit:
             weight_decay=self.weight_decay,
             scheduler=self.scheduler,
             eval_every=self.eval_every,
+            eval_metrics=[self.monitor],
             early_stopping_patience=self.early_stopping_patience,
+            monitor=self.monitor,
+            val_split=self.val_split,
             device=self.device,
             random_state=self.random_state,
         )
@@ -171,18 +178,15 @@ class EmbedKit:
     def _resolve_augmentation(self, report: EmbedKitReport):
         if self.augmentation_cfg != "auto":
             return self.augmentation_cfg
-        return EmbeddingMixup(k=report.suggested_k, alpha=0.4)
+        return KNNPairs(k=5)
 
     def _resolve_loss(self, report: EmbedKitReport):
         if self.loss_cfg != "auto":
             return self.loss_cfg
 
-        hubby = report.hubness.k_skewness > 5
         if self.mode == "self_supervised":
             base = NTXentLoss(temperature=0.07)
         else:
             base = SupConLoss(temperature=0.07)
 
-        if hubby:
-            return CombinedLoss([(base, 1.0), (AlignUniformLoss(), 0.5)])
-        return base
+        return CombinedLoss([(base, 1.0), (AlignUniformLoss(), 0.5)])

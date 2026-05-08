@@ -23,15 +23,24 @@ class CompositeAugmentation(BaseAugmentation):
         self.augs = augs
         self.mode = mode
 
-    def __call__(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def precompute(self, X) -> None:
+        for aug in self.augs:
+            if hasattr(aug, "precompute"):
+                aug.precompute(X)
+
+    def __call__(
+        self,
+        x: torch.Tensor,
+        indices: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         if self.mode == "random_choice":
             aug = random.choice(self.augs)
-            return aug(x)
+            return aug(x, indices)
         # sequential: chain views through all augmentations
         xi, xj = x, x
         for aug in self.augs:
-            xi, _ = aug(xi)
-            _, xj = aug(xj)
+            xi, _ = aug(xi, indices)
+            _, xj = aug(xj, indices)
         return xi, xj
 
 

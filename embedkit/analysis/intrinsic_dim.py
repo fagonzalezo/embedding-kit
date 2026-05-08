@@ -25,7 +25,7 @@ class IntrinsicDimensionEstimator(BaseAnalyzer):
     def __init__(
         self,
         methods: list[str] | None = None,
-        aggregate: str = "mean",
+        aggregate: str = "median",
         n_max: int = 5_000,
         random_state: int | None = 42,
     ):

@@ -33,6 +33,7 @@ class Trainer:
         eval_subsample: int = 5_000,
         early_stopping_patience: int | None = None,
         monitor: str = "uniformity",
+        val_split: float = 0.0,
         device: str | torch.device | None = None,
         random_state: int | None = 42,
     ):
@@ -51,6 +52,7 @@ class Trainer:
         self.eval_subsample = eval_subsample
         self.early_stopping_patience = early_stopping_patience
         self.monitor = monitor
+        self.val_split = val_split
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
         self.random_state = random_state
         self.history: dict[str, list] = {"loss": []}
@@ -64,9 +66,34 @@ class Trainer:
         n = X_np.shape[0]
         has_labels = y is not None
 
+        # Carve a held-out validation split for early stopping when requested.
+        # Precompute and the DataLoader use only the training portion so the
+        # val set never contributes gradients or neighbor structure.
+        X_val_np: np.ndarray | None = None
+        if self.val_split > 0.0:
+            rng_split = np.random.default_rng(self.random_state)
+            n_val = max(1, int(n * self.val_split))
+            val_idx = rng_split.choice(n, n_val, replace=False)
+            train_mask = np.ones(n, dtype=bool)
+            train_mask[val_idx] = False
+            X_val_np = X_np[val_idx]
+            X_np = X_np[train_mask]
+            if has_labels:
+                y = np.asarray(y)
+                y = y[train_mask]
+            n = X_np.shape[0]
+
+        # Precompute neighbor structures for augmentations that support it
+        # (e.g. KNNPairs), so global dataset-level positives can be used.
+        if hasattr(self.augmentation, "precompute"):
+            self.augmentation.precompute(X_np)
+
         # Keep data on CPU; pin_memory lets CUDA transfers overlap with compute.
+        # Global row indices (position 1) let index-aware augmentations look up
+        # dataset-level neighbors even under a shuffled DataLoader.
         X_cpu = torch.from_numpy(X_np)
-        tensors = [X_cpu]
+        idx_cpu = torch.arange(n, dtype=torch.long)
+        tensors = [X_cpu, idx_cpu]
         if has_labels:
             y_arr = np.asarray(y)
             tensors.append(torch.from_numpy(y_arr))
@@ -78,8 +105,11 @@ class Trainer:
             drop_last=True, pin_memory=pin, num_workers=0,
         )
 
-        # Draw a fixed eval subsample once to keep eval cost constant.
-        if n > self.eval_subsample and self.random_state is not None:
+        # Determine the array used for early-stopping evaluation.
+        # Prefer the held-out val split; fall back to a subsample of training data.
+        if X_val_np is not None:
+            X_eval = X_val_np
+        elif n > self.eval_subsample and self.random_state is not None:
             rng = np.random.default_rng(self.random_state)
             eval_idx = rng.choice(n, self.eval_subsample, replace=False)
             X_eval = X_np[eval_idx]
@@ -93,14 +123,16 @@ class Trainer:
 
         best_score = float("inf")
         patience_count = 0
+        self.stopped_epoch_: int = self.epochs
 
         for epoch in range(1, self.epochs + 1):
             self.model.train()
             ep_losses = []
             for batch in loader:
                 x_batch = batch[0].to(self.device, non_blocking=pin)
-                lbl_batch = batch[1].to(self.device, non_blocking=pin) if has_labels else None
-                x_i, x_j = self.augmentation(x_batch)
+                idx_batch = batch[1]  # global row indices; kept on CPU for array indexing
+                lbl_batch = batch[2].to(self.device, non_blocking=pin) if has_labels else None
+                x_i, x_j = self.augmentation(x_batch, idx_batch)
                 z_i = self.model(x_i)
                 z_j = self.model(x_j)
                 l = self.loss(z_i, z_j, lbl_batch)
@@ -130,6 +162,7 @@ class Trainer:
                     else:
                         patience_count += 1
                     if patience_count >= self.early_stopping_patience:
+                        self.stopped_epoch_ = epoch
                         break
 
         return self

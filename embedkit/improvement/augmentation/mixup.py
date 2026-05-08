@@ -12,7 +12,7 @@ class EmbeddingMixup(BaseAugmentation):
         self.k = k
         self.alpha = alpha
 
-    def __call__(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def __call__(self, x: torch.Tensor, indices=None) -> tuple[torch.Tensor, torch.Tensor]:
         from embedkit.utils.neighbors import knn
         import numpy as np
 
