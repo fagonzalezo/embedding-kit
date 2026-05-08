@@ -64,7 +64,7 @@ from embedkit import EmbedKitAnalyzer
 
 analyzer = EmbedKitAnalyzer(
     k=10,                                    # kNN size; auto = sqrt(n)/2 if None
-    id_methods=["TwoNN", "MLE", "lPCA"],     # ID estimators (default)
+    id_methods=["TwoNN", "MLE", "lPCA", "MOM"],  # ID estimators (default)
     metric="euclidean",                       # distance metric
     random_state=42,
 )
@@ -111,19 +111,21 @@ For detailed interpretation of every metric and its healthy ranges, read
 
 | Detected pathology | Metric signal | Recommended improvement |
 |---|---|---|
-| Severe hubness | `k_skewness > 5` | `AlignUniformLoss` (loss escalation; augmentation stays `EmbeddingMixup`) |
-| Moderate hubness | `k_skewness 2–5` | `NTXentLoss` + `EmbeddingMixup` |
+| Severe hubness | `k_skewness > 5` | `AlignUniformLoss` + `KNNPairs` |
+| Moderate hubness | `k_skewness 2–5` | `NTXentLoss` + `KNNPairs` |
 | High anisotropy | `participation_ratio < 0.1 × D` | `AlignUniformLoss` or PCA whitening first |
 | Distance collapse | `concentration_ratio > 0.8` | Reduce `target_dim` aggressively |
 | Sparse manifold | `ID/D < 0.1` | Strong bottleneck (low `target_dim`) |
-| Low neighbor stability | `mean_consistency < 0.5` | `EmbeddingMixup` (auto-config default) |
+| Low neighbor stability | `mean_consistency < 0.5` | `KNNPairs` (auto-config default) |
 | Poor spread / clusters | `uniformity > -1.0` | `AlignUniformLoss` |
 | Supervised, class labels available | any severity | `mode="supervised"`, `SupConLoss` |
 | Sparse / NLP embeddings | high dim, sparse values | `FeatureDropout` augmentation |
-| Locally smooth, pretrained | low severity | `KNNPairs` (no augmentation noise) |
+| Locally smooth, pretrained | low severity | `EmbeddingMixup` |
 
-When `mode="auto"` is left as default, `EmbedKit` applies this table automatically
-based on the analysis report (see `api.py:_resolve_loss` and `_resolve_augmentation`).
+When `augmentation="auto"` and `loss="auto"` (the defaults), `EmbedKit` auto-configures
+`KNNPairs(k=5)` + `CombinedLoss(NTXent + 0.5·AlignUniform)` for self-supervised mode,
+and `KNNPairs(k=5)` + `CombinedLoss(SupCon + 0.5·AlignUniform)` for supervised mode
+(see `api.py:_resolve_loss` and `_resolve_augmentation`).
 
 ---
 
@@ -214,10 +216,10 @@ X_refined = trainer.transform(X)
 
 | Class | Best for |
 |---|---|
-| `GaussianNoise(std, adaptive)` | Default; robust to most situations |
+| `GaussianNoise(std, adaptive)` | Robust baseline for most situations |
 | `FeatureDropout(p)` | Sparse / over-complete NLP embeddings |
 | `EmbeddingMixup(alpha, k)` | Locally smooth, trusted embeddings |
-| `KNNPairs(k, hard_negatives)` | Pretrained embeddings with good local structure |
+| `KNNPairs(k, hard_negatives)` | Auto-config default; pretrained embeddings with good local structure |
 | `FeatureMasking(mask_ratio)` | Structured, correlated embeddings |
 | `CompositeAugmentation(augs, mode)` | High-severity or combination strategies |
 
