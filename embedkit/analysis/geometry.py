@@ -55,7 +55,6 @@ class DistanceConcentration(BaseAnalyzer):
         else:
             Xs = X
 
-        # pairwise distances (upper triangle)
         from sklearn.metrics import pairwise_distances
         dists = pairwise_distances(Xs, metric="euclidean")
         upper = dists[np.triu_indices_from(dists, k=1)]
@@ -73,21 +72,35 @@ class DistanceConcentration(BaseAnalyzer):
 
 
 class IsotropyAnalyzer(BaseAnalyzer):
+    def __init__(self, d_max: int = 2000, n_components: int = 512):
+        self.d_max = d_max
+        self.n_components = n_components
+
     def fit(self, X, y=None) -> IsotropyResult:
         X = self._prepare(X)
+        n, d = X.shape
         Xc = X - X.mean(axis=0)
-        cov = np.cov(Xc.T)
-        if cov.ndim == 0:
-            eigenvalues = np.array([float(cov)])
+
+        if d > self.d_max:
+            # Randomized SVD: never form the D×D covariance matrix.
+            # Eigenvalues of cov = s**2 / (n-1)
+            from sklearn.utils.extmath import randomized_svd
+            k = min(self.n_components, d, n - 1)
+            _, s, _ = randomized_svd(Xc, n_components=k, random_state=0)
+            eigenvalues = (s ** 2 / max(n - 1, 1)).astype(np.float32)
         else:
-            eigenvalues = np.linalg.eigvalsh(cov)
+            cov = np.cov(Xc.T)
+            if cov.ndim == 0:
+                eigenvalues = np.array([float(cov)])
+            else:
+                eigenvalues = np.linalg.eigvalsh(cov)
+
         eigenvalues = np.sort(eigenvalues)[::-1].astype(np.float32)
         eigenvalues = np.maximum(eigenvalues, 0.0)
         total = eigenvalues.sum()
         evr = eigenvalues / (total + 1e-10)
 
         pr = float((eigenvalues.sum() ** 2) / (np.sum(eigenvalues ** 2) + 1e-10))
-        # effective rank via entropy
         p = evr + 1e-10
         p /= p.sum()
         eff_rank = float(np.exp(-np.sum(p * np.log(p))))
@@ -109,28 +122,39 @@ class NeighborConsistency(BaseAnalyzer):
         n_perturbations: int = 5,
         noise_std: float = 0.01,
         metric: str = "euclidean",
+        subsample: int = 10_000,
         random_state: int | None = 42,
     ):
         self.k = k
         self.n_perturbations = n_perturbations
         self.noise_std = noise_std
         self.metric = metric
+        self.subsample = subsample
         self.random_state = random_state
 
     def fit(self, X, y=None) -> NeighborConsistencyResult:
         X = self._prepare(X)
         rng = np.random.default_rng(self.random_state)
+        n = X.shape[0]
+        if n > self.subsample:
+            idx = rng.choice(n, self.subsample, replace=False)
+            X = X[idx]
+            n = self.subsample
+
         _, base_indices = knn(X, self.k, metric=self.metric)
         base_sets = [set(row) for row in base_indices]
 
+        std = self.noise_std * float(np.std(X))
+        noise_buf = np.empty(X.shape, dtype=np.float64)
         consistencies = []
         for _ in range(self.n_perturbations):
-            noise = rng.normal(0, self.noise_std * np.std(X), size=X.shape).astype(np.float32)
-            Xp = X + noise
+            rng.standard_normal(out=noise_buf)
+            noise_buf *= std
+            Xp = (X + noise_buf.astype(X.dtype))
             _, pert_indices = knn(Xp, self.k, metric=self.metric)
             fracs = [
                 len(base_sets[i] & set(pert_indices[i])) / self.k
-                for i in range(X.shape[0])
+                for i in range(n)
             ]
             consistencies.append(np.mean(fracs))
 
@@ -158,13 +182,13 @@ class UniformityScore(BaseAnalyzer):
         else:
             Xs = X
 
-        # L2 normalize
         norms = np.linalg.norm(Xs, axis=1, keepdims=True) + 1e-10
-        Zs = Xs / norms
+        Zs = (Xs / norms).astype(np.float32)
 
         # Wang & Isola uniformity: log E[exp(-t ||z_i - z_j||^2)]
-        sq_diffs = np.sum((Zs[:, None, :] - Zs[None, :, :]) ** 2, axis=-1)
-        upper = sq_diffs[np.triu_indices_from(sq_diffs, k=1)]
-        uniformity = float(np.log(np.mean(np.exp(-self.t * upper)) + 1e-10))
+        # Use pdist to avoid the N×N×D broadcast tensor.
+        from scipy.spatial.distance import pdist
+        sq_dists = pdist(Zs, metric="sqeuclidean")
+        uniformity = float(np.log(np.mean(np.exp(-self.t * sq_dists)) + 1e-10))
 
         return UniformityResult(uniformity=uniformity)

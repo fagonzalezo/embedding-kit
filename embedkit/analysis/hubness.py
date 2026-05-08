@@ -23,21 +23,32 @@ class HubnessResult(BaseResult):
 
 
 class HubnessAnalyzer(BaseAnalyzer):
-    def __init__(self, k: int = 10, hub_threshold: float = 2.0, metric: str = "euclidean"):
+    def __init__(
+        self,
+        k: int = 10,
+        hub_threshold: float = 2.0,
+        metric: str = "euclidean",
+        subsample: int = 20_000,
+        random_state: int | None = 42,
+    ):
         self.k = k
         self.hub_threshold = hub_threshold
         self.metric = metric
+        self.subsample = subsample
+        self.random_state = random_state
 
     def fit(self, X, y=None) -> HubnessResult:
         X = self._prepare(X)
+        rng = np.random.default_rng(self.random_state)
         n = X.shape[0]
+        if n > self.subsample:
+            idx = rng.choice(n, self.subsample, replace=False)
+            X = X[idx]
+            n = self.subsample
+
         _, indices = knn(X, self.k, metric=self.metric)
 
-        # k-occurrence: how many times each point appears as a kNN
-        N_k = np.zeros(n, dtype=np.int64)
-        for row in indices:
-            for idx in row:
-                N_k[idx] += 1
+        N_k = np.bincount(indices.ravel(), minlength=n).astype(np.int64)
 
         mean_N = N_k.mean()
         std_N = N_k.std()
@@ -45,7 +56,6 @@ class HubnessAnalyzer(BaseAnalyzer):
             np.mean((N_k - mean_N) ** 3) / (std_N ** 3 + 1e-10)
         )
 
-        # Robin Hood index (Gini-like inequality measure)
         sorted_N = np.sort(N_k)
         n_arr = np.arange(1, n + 1)
         robinhood = float(
@@ -59,15 +69,13 @@ class HubnessAnalyzer(BaseAnalyzer):
         antihub_ratio = float(len(antihubs) / n)
         hub_ratio = float(len(hubs) / n)
 
-        # Hub contamination: fraction of kNN of hubs that are other hubs
         if len(hubs) == 0:
             hub_contamination = 0.0
         else:
             hub_set = set(hubs.tolist())
-            contamination_counts = []
-            for h in hubs:
-                neighbors = indices[h]
-                contamination_counts.append(sum(1 for nb in neighbors if nb in hub_set))
+            contamination_counts = [
+                sum(1 for nb in indices[h] if nb in hub_set) for h in hubs
+            ]
             hub_contamination = float(np.mean(contamination_counts) / self.k)
 
         return HubnessResult(

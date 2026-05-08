@@ -26,14 +26,20 @@ class IntrinsicDimensionEstimator(BaseAnalyzer):
         self,
         methods: list[str] | None = None,
         aggregate: str = "mean",
+        n_max: int = 5_000,
         random_state: int | None = 42,
     ):
         self.methods = methods or ["TwoNN", "MLE", "lPCA"]
         self.aggregate = aggregate
+        self.n_max = n_max
         self.random_state = random_state
 
     def fit(self, X, y=None) -> IntrinsicDimensionResult:
         X = self._prepare(X, min_n=5)
+        n = X.shape[0]
+        if n > self.n_max:
+            rng = np.random.default_rng(self.random_state)
+            X = X[rng.choice(n, self.n_max, replace=False)]
         estimates: dict[str, float] = {}
         local_estimates: dict[str, np.ndarray] = {}
 

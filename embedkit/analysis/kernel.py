@@ -23,6 +23,8 @@ class KernelDiagnosticsResult(BaseResult):
 
 
 class KernelDiagnostics(BaseAnalyzer):
+    _SUBSAMPLE_MAX = 3000
+
     def __init__(
         self,
         sigma: float | Literal["median"] | None = "median",
@@ -36,11 +38,19 @@ class KernelDiagnostics(BaseAnalyzer):
         self.random_state = random_state
 
     def fit(self, X, y=None) -> KernelDiagnosticsResult:
+        import warnings
         X = self._prepare(X)
         rng = np.random.default_rng(self.random_state)
         n = X.shape[0]
-        if n > self.subsample:
-            idx = rng.choice(n, self.subsample, replace=False)
+        effective_sub = min(self.subsample, self._SUBSAMPLE_MAX)
+        if self.subsample > self._SUBSAMPLE_MAX:
+            warnings.warn(
+                f"KernelDiagnostics.subsample capped at {self._SUBSAMPLE_MAX} "
+                f"(requested {self.subsample}) to prevent O(N³) eigendecomposition.",
+                stacklevel=2,
+            )
+        if n > effective_sub:
+            idx = rng.choice(n, effective_sub, replace=False)
             Xs = X[idx]
             ys = y[idx] if y is not None else None
         else:
@@ -52,13 +62,10 @@ class KernelDiagnostics(BaseAnalyzer):
 
         ns = Xs.shape[0]
         n_comp = min(self.n_components, ns - 1)
-        if ns > 2000:
-            from scipy.sparse.linalg import eigsh
-            eigenvalues = eigsh(K, k=n_comp, which="LM", return_eigenvectors=False)
-            eigenvalues = np.sort(eigenvalues)[::-1]
-        else:
-            eigenvalues = np.sort(np.linalg.eigvalsh(K))[::-1]
-            eigenvalues = eigenvalues[:n_comp]
+        # Always use eigsh (top-k only) — never the full dense spectrum.
+        from scipy.sparse.linalg import eigsh
+        eigenvalues = eigsh(K, k=n_comp, which="LM", return_eigenvectors=False)
+        eigenvalues = np.sort(eigenvalues)[::-1]
 
         eigenvalues = np.maximum(eigenvalues, 0.0).astype(np.float32)
         total = eigenvalues.sum() + 1e-10

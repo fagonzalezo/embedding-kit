@@ -116,29 +116,33 @@ class EmbedKitAnalyzer(BaseAnalyzer):
         k: int | None = None,
         id_methods: list[str] | None = None,
         metric: str = "euclidean",
+        n_max: int = 20_000,
+        d_max: int = 2_000,
         random_state: int | None = 42,
     ):
         self.k = k
         self.id_methods = id_methods or ["TwoNN", "MLE", "lPCA"]
         self.metric = metric
+        self.n_max = n_max
+        self.d_max = d_max
         self.random_state = random_state
 
     def fit(self, X, y=None) -> EmbedKitReport:
         X = self._prepare(X, min_n=5)
         n, d = X.shape
-        k = self.k or max(5, round(np.sqrt(n) / 2))
+        k = self.k or max(5, round(np.sqrt(min(n, self.n_max)) / 2))
 
         id_est = IntrinsicDimensionEstimator(
-            methods=self.id_methods, random_state=self.random_state
+            methods=self.id_methods, n_max=min(5_000, self.n_max), random_state=self.random_state
         )
         id_result = id_est.fit(X)
 
-        hub = HubnessAnalyzer(k=k, metric=self.metric)
+        hub = HubnessAnalyzer(k=k, metric=self.metric, subsample=self.n_max, random_state=self.random_state)
         hub_result = hub.fit(X)
 
         dc = DistanceConcentration(random_state=self.random_state)
-        iso = IsotropyAnalyzer()
-        nc = NeighborConsistency(k=k, metric=self.metric, random_state=self.random_state)
+        iso = IsotropyAnalyzer(d_max=self.d_max)
+        nc = NeighborConsistency(k=k, metric=self.metric, subsample=self.n_max, random_state=self.random_state)
         uni = UniformityScore(random_state=self.random_state)
         geo_bundle = GeometryBundle(
             distance_concentration=dc.fit(X),

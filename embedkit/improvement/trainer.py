@@ -30,6 +30,7 @@ class Trainer:
         warmup_epochs: int = 10,
         eval_every: int = 10,
         eval_metrics: list[str] | None = None,
+        eval_subsample: int = 5_000,
         early_stopping_patience: int | None = None,
         monitor: str = "uniformity",
         device: str | torch.device | None = None,
@@ -47,6 +48,7 @@ class Trainer:
         self.warmup_epochs = warmup_epochs
         self.eval_every = eval_every
         self.eval_metrics = eval_metrics or ["uniformity"]
+        self.eval_subsample = eval_subsample
         self.early_stopping_patience = early_stopping_patience
         self.monitor = monitor
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
@@ -59,16 +61,30 @@ class Trainer:
             np.random.seed(self.random_state)
 
         X_np = _to_numpy(X)
-        X_t = _to_tensor(X_np, device=self.device)
+        n = X_np.shape[0]
         has_labels = y is not None
 
-        tensors = [X_t]
+        # Keep data on CPU; pin_memory lets CUDA transfers overlap with compute.
+        X_cpu = torch.from_numpy(X_np)
+        tensors = [X_cpu]
         if has_labels:
-            y_t = torch.tensor(np.asarray(y), device=self.device)
-            tensors.append(y_t)
+            y_arr = np.asarray(y)
+            tensors.append(torch.from_numpy(y_arr))
 
         dataset = TensorDataset(*tensors)
-        loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, drop_last=True)
+        pin = self.device.type == "cuda"
+        loader = DataLoader(
+            dataset, batch_size=self.batch_size, shuffle=True,
+            drop_last=True, pin_memory=pin, num_workers=0,
+        )
+
+        # Draw a fixed eval subsample once to keep eval cost constant.
+        if n > self.eval_subsample and self.random_state is not None:
+            rng = np.random.default_rng(self.random_state)
+            eval_idx = rng.choice(n, self.eval_subsample, replace=False)
+            X_eval = X_np[eval_idx]
+        else:
+            X_eval = X_np
 
         self.model.to(self.device)
         self.loss.to(self.device)
@@ -82,8 +98,8 @@ class Trainer:
             self.model.train()
             ep_losses = []
             for batch in loader:
-                x_batch = batch[0]
-                lbl_batch = batch[1] if has_labels else None
+                x_batch = batch[0].to(self.device, non_blocking=pin)
+                lbl_batch = batch[1].to(self.device, non_blocking=pin) if has_labels else None
                 x_i, x_j = self.augmentation(x_batch)
                 z_i = self.model(x_i)
                 z_j = self.model(x_j)
@@ -99,7 +115,7 @@ class Trainer:
             self.history["loss"].append(mean_loss)
 
             if epoch % self.eval_every == 0:
-                metrics = self._evaluate(X_np)
+                metrics = self._evaluate(X_eval)
                 for k, v in metrics.items():
                     self.history.setdefault(k, []).append(v)
 
@@ -118,24 +134,28 @@ class Trainer:
 
         return self
 
-    def transform(self, X) -> np.ndarray | torch.Tensor:
+    def transform(self, X, batch_size: int | None = None) -> np.ndarray | torch.Tensor:
+        """Transform X in mini-batches to avoid GPU OOM on large datasets."""
         was_tensor = isinstance(X, torch.Tensor)
         X_np = _to_numpy(X)
-        X_t = _to_tensor(X_np, device=self.device)
+        bs = batch_size or max(self.batch_size * 4, 1024)
         self.model.eval()
+        chunks = []
         with torch.no_grad():
-            Z = self.model(X_t)
-        if was_tensor:
-            return Z.cpu()
-        return Z.cpu().numpy()
+            for start in range(0, X_np.shape[0], bs):
+                x_chunk = _to_tensor(X_np[start: start + bs], device=self.device)
+                chunks.append(self.model(x_chunk).cpu())
+        Z = torch.cat(chunks, dim=0)
+        return Z if was_tensor else Z.numpy()
 
     def _evaluate(self, X_np: np.ndarray) -> dict[str, float]:
         metrics: dict[str, float] = {}
         try:
             from embedkit.analysis.geometry import UniformityScore, IsotropyAnalyzer
             from embedkit.analysis.hubness import HubnessAnalyzer
-            Z = self.transform(X_np)
-            Z_np = Z if isinstance(Z, np.ndarray) else Z.numpy()
+            Z_np = self.transform(X_np)
+            if isinstance(Z_np, torch.Tensor):
+                Z_np = Z_np.numpy()
             if "uniformity" in self.eval_metrics:
                 metrics["uniformity"] = UniformityScore().fit(Z_np).uniformity
             if "isotropy" in self.eval_metrics:
@@ -155,7 +175,6 @@ class Trainer:
         if self.optimizer_name == "lars":
             try:
                 from torch.optim import SGD
-                # simple LARS approximation via SGD + large lr
                 return SGD(params, lr=self.lr * 10, momentum=0.9, weight_decay=self.weight_decay)
             except Exception:
                 return torch.optim.Adam(params, lr=self.lr, weight_decay=self.weight_decay)

@@ -1,10 +1,13 @@
-"""Shared kNN computation with optional FAISS backend and simple result caching."""
+"""Shared kNN computation with optional FAISS backend and bounded result cache."""
 
 from __future__ import annotations
 
+from collections import OrderedDict
+
 import numpy as np
 
-_cache: dict = {}
+_MAX_CACHE = 8
+_cache: OrderedDict = OrderedDict()
 
 
 def knn(
@@ -16,11 +19,13 @@ def knn(
     """Return (distances, indices) arrays of shape (n_samples, k).
 
     Uses FAISS when installed and backend='auto', otherwise sklearn.
-    Results are cached by (id(X), k, metric) so repeated calls on the same
-    array within a session are free.
+    Results are cached by array address+shape+dtype so repeated calls on the
+    same array within a session are free. Cache is bounded to _MAX_CACHE entries
+    (LRU eviction) to prevent unbounded memory growth.
     """
-    cache_key = (id(X), k, metric)
+    cache_key = (X.ctypes.data, X.shape, X.dtype, k, metric)
     if cache_key in _cache:
+        _cache.move_to_end(cache_key)
         return _cache[cache_key]
 
     use_faiss = False
@@ -39,13 +44,14 @@ def knn(
         result = _knn_sklearn(X, k, metric)
 
     _cache[cache_key] = result
+    if len(_cache) > _MAX_CACHE:
+        _cache.popitem(last=False)
     return result
 
 
 def _knn_sklearn(X: np.ndarray, k: int, metric: str):
     from sklearn.neighbors import NearestNeighbors
-    # Request k+1 to exclude self (index 0 is always the point itself when querying training data)
-    nn = NearestNeighbors(n_neighbors=k + 1, metric=metric, algorithm="auto")
+    nn = NearestNeighbors(n_neighbors=k + 1, metric=metric, algorithm="auto", n_jobs=-1)
     nn.fit(X)
     distances, indices = nn.kneighbors(X)
     return distances[:, 1:].astype(np.float32), indices[:, 1:].astype(np.int64)
@@ -61,11 +67,9 @@ def _knn_faiss(X: np.ndarray, k: int, metric: str):
         faiss.normalize_L2(X32)
         index = faiss.IndexFlatIP(d)
     else:
-        # fallback for unsupported metrics
         return _knn_sklearn(X, k, metric)
     index.add(X32)
     distances, indices = index.search(X32, k + 1)
-    # remove self
     return distances[:, 1:].astype(np.float32), indices[:, 1:].astype(np.int64)
 
 
