@@ -32,7 +32,7 @@ All estimators follow the sklearn `fit` / `transform` API and accept `np.ndarray
 ### Ecosystem integration
 - Sklearn-compatible (`fit` / `transform`, usable in `Pipeline`)
 - Accepts `np.ndarray` and `torch.Tensor` inputs
-- Optional FAISS backend for ~10× faster kNN on large datasets (n > 50 000)
+- FAISS-backed kNN for fast geometry diagnostics on large datasets
 - Model save/load with `EmbedKit.save()` / `EmbedKit.load()`
 
 ## Installation
@@ -41,9 +41,6 @@ All estimators follow the sklearn `fit` / `transform` API and accept `np.ndarray
 
 ```bash
 uv add git+https://github.com/fagonzalezo/embedding-kit.git
-
-# With fast FAISS kNN (recommended for n > 50 000):
-uv add "embedkit[fast] @ git+https://github.com/fagonzalezo/embedding-kit.git"
 
 # With torchvision (required for image-classification examples):
 uv add "embedkit[examples] @ git+https://github.com/fagonzalezo/embedding-kit.git"
@@ -54,9 +51,6 @@ uv add "embedkit[examples] @ git+https://github.com/fagonzalezo/embedding-kit.gi
 ```bash
 pip install git+https://github.com/fagonzalezo/embedding-kit.git
 
-# With fast FAISS kNN:
-pip install "embedkit[fast] @ git+https://github.com/fagonzalezo/embedding-kit.git"
-
 # With torchvision (required for image-classification examples):
 pip install "embedkit[examples] @ git+https://github.com/fagonzalezo/embedding-kit.git"
 ```
@@ -65,7 +59,6 @@ pip install "embedkit[examples] @ git+https://github.com/fagonzalezo/embedding-k
 
 | Extra | Installs | When to use |
 |---|---|---|
-| `fast` | `faiss-cpu` | Large datasets (n > 50 000) — ~10× faster kNN |
 | `examples` | `torchvision` | Running image-classification examples (e.g., `examples/04_image_classification.*`) |
 
 ## Quickstart

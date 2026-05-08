@@ -24,18 +24,12 @@ pathologies in embedding spaces and learns improved embeddings via contrastive t
 
 ```bash
 uv add git+https://github.com/fagonzalezo/embedding-kit.git
-
-# With fast FAISS kNN (recommended for n > 50 000):
-uv add "embedkit[fast] @ git+https://github.com/fagonzalezo/embedding-kit.git"
 ```
 
 ### pip
 
 ```bash
 pip install git+https://github.com/fagonzalezo/embedding-kit.git
-
-# With fast FAISS kNN:
-pip install "embedkit[fast] @ git+https://github.com/fagonzalezo/embedding-kit.git"
 ```
 
 ---
@@ -312,9 +306,7 @@ with Euclidean distance), pass `normalize=False`.
 The default `0.07` works well for most cases; go lower (colder) if representations
 collapse early in training.
 
-**FAISS vs sklearn backends.** `embedkit.utils.neighbors.knn()` auto-selects FAISS if
-installed. With FAISS you get ~10× faster kNN for large n. Install with
-`uv sync --extra fast`.
+**FAISS-backed kNN.** `embedkit.utils.neighbors.knn()` uses FAISS by default (mandatory dep) with an LRU result cache. If FAISS fails to import at runtime it falls back to sklearn and emits a `RuntimeWarning` — check your `faiss-cpu` install if you see it.
 
 **`target_dim="auto"` sets dim to ≈ 1.5 × intrinsic dimension.** If intrinsic
 dimension estimates are unreliable (small n or noisy data), override with an explicit

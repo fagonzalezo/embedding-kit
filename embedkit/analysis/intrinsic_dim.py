@@ -46,16 +46,29 @@ class IntrinsicDimensionEstimator(BaseAnalyzer):
         for method in self.methods:
             if method not in _SUPPORTED:
                 raise ValueError(f"Unknown ID method: {method}. Choose from {_SUPPORTED}")
+
+        def _fit_one(method: str):
             try:
                 est = _build_estimator(method, self.random_state)
                 est.fit(X)
-                estimates[method] = float(est.dimension_)
-                if method in _LOCAL_METHODS and hasattr(est, "dimension_pw_"):
-                    local_estimates[method] = np.asarray(est.dimension_pw_, dtype=np.float32)
+                dim = float(est.dimension_)
+                local = (
+                    np.asarray(est.dimension_pw_, dtype=np.float32)
+                    if method in _LOCAL_METHODS and hasattr(est, "dimension_pw_")
+                    else None
+                )
+                return method, dim, local
             except Exception as e:
-                estimates[method] = float("nan")
                 import warnings
                 warnings.warn(f"ID method {method} failed: {e}")
+                return method, float("nan"), None
+
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(len(self.methods), 4)) as pool:
+            for method, dim, local in pool.map(_fit_one, self.methods):
+                estimates[method] = dim
+                if local is not None:
+                    local_estimates[method] = local
 
         valid = [v for v in estimates.values() if not np.isnan(v)]
         if not valid:

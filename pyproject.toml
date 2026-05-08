@@ -20,10 +20,10 @@ dependencies = [
     "matplotlib>=3.7",
     "seaborn>=0.13",
     "umap-learn>=0.5",
+    "faiss-cpu>=1.7",
 ]
 
 [project.optional-dependencies]
-fast     = ["faiss-cpu>=1.7"]
 dev      = ["pytest>=8", "pytest-cov", "ruff", "mypy"]
 examples = ["torchvision>=0.16"]
 

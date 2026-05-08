@@ -141,22 +141,28 @@ class NeighborConsistency(BaseAnalyzer):
             X = X[idx]
             n = self.subsample
 
+        # Scale perturbation count down for large subsamples to keep wall time bounded.
+        n_pert = self.n_perturbations if n <= 2000 else max(2, self.n_perturbations - (n // 2000 - 1))
+
         _, base_indices = knn(X, self.k, metric=self.metric)
-        base_sets = [set(row) for row in base_indices]
 
         std = self.noise_std * float(np.std(X))
         noise_buf = np.empty(X.shape, dtype=np.float64)
         consistencies = []
-        for _ in range(self.n_perturbations):
+        for _ in range(n_pert):
             rng.standard_normal(out=noise_buf)
             noise_buf *= std
             Xp = (X + noise_buf.astype(X.dtype))
             _, pert_indices = knn(Xp, self.k, metric=self.metric)
-            fracs = [
-                len(base_sets[i] & set(pert_indices[i])) / self.k
-                for i in range(n)
-            ]
-            consistencies.append(np.mean(fracs))
+            # Vectorized intersection: (n, k, 1) == (n, 1, k) → (n, k, k), sum over both dims.
+            # O(n·k²) NumPy ops instead of a Python loop with set intersections.
+            matches = (
+                (base_indices[:, :, None] == pert_indices[:, None, :])
+                .any(axis=2)
+                .sum(axis=1)
+                .astype(np.float32)
+            ) / self.k
+            consistencies.append(float(matches.mean()))
 
         arr = np.array(consistencies, dtype=np.float32)
         return NeighborConsistencyResult(

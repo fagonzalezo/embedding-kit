@@ -1,13 +1,15 @@
-"""Shared kNN computation with optional FAISS backend and bounded result cache."""
+"""Shared kNN computation with FAISS backend and bounded result cache."""
 
 from __future__ import annotations
 
+import warnings
 from collections import OrderedDict
 
 import numpy as np
 
 _MAX_CACHE = 8
 _cache: OrderedDict = OrderedDict()
+_faiss_warned = False  # emit the fallback warning only once per process
 
 
 def knn(
@@ -18,10 +20,10 @@ def knn(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return (distances, indices) arrays of shape (n_samples, k).
 
-    Uses FAISS when installed and backend='auto', otherwise sklearn.
-    Results are cached by array address+shape+dtype so repeated calls on the
-    same array within a session are free. Cache is bounded to _MAX_CACHE entries
-    (LRU eviction) to prevent unbounded memory growth.
+    Uses FAISS (the mandatory default); falls back to sklearn with a warning
+    if FAISS cannot be imported at runtime. Results are cached by array
+    address+shape+dtype so repeated calls on the same array within a session
+    are free. Cache is bounded to _MAX_CACHE entries (LRU eviction).
     """
     cache_key = (X.ctypes.data, X.shape, X.dtype, k, metric)
     if cache_key in _cache:
@@ -36,7 +38,15 @@ def knn(
         except ImportError:
             if backend == "faiss":
                 raise
-            use_faiss = False
+            global _faiss_warned
+            if not _faiss_warned:
+                warnings.warn(
+                    "faiss import failed — falling back to sklearn kNN, which is much slower. "
+                    "Check your faiss-cpu installation.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                _faiss_warned = True
 
     if use_faiss:
         result = _knn_faiss(X, k, metric)

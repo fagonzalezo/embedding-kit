@@ -72,11 +72,8 @@ class HubnessAnalyzer(BaseAnalyzer):
         if len(hubs) == 0:
             hub_contamination = 0.0
         else:
-            hub_set = set(hubs.tolist())
-            contamination_counts = [
-                sum(1 for nb in indices[h] if nb in hub_set) for h in hubs
-            ]
-            hub_contamination = float(np.mean(contamination_counts) / self.k)
+            hub_mask = N_k > threshold  # boolean (n,)
+            hub_contamination = float(hub_mask[indices[hubs]].mean())
 
         return HubnessResult(
             k_skewness=k_skewness,

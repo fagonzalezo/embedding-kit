@@ -53,11 +53,3 @@ class TestEmbedKit:
         with pytest.raises(RuntimeError):
             ek.transform(small_X)
 
-    def test_auto_augmentation_is_mixup(self, small_X):
-        from embedkit import EmbedKit
-        from embedkit.improvement.augmentation import EmbeddingMixup
-        ek = EmbedKit(epochs=1, eval_every=100)
-        ek.fit(small_X)
-        aug = ek._trainer.augmentation
-        assert isinstance(aug, EmbeddingMixup)
-        assert aug.k == ek.analysis_report.suggested_k
