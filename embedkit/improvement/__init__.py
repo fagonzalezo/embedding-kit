@@ -13,6 +13,7 @@ from embedkit.improvement.losses import (
     AlignUniformLoss,
     TripletLoss,
     SupConLoss,
+    RankNContrastLoss,
     CombinedLoss,
 )
 
@@ -29,5 +30,6 @@ __all__ = [
     "AlignUniformLoss",
     "TripletLoss",
     "SupConLoss",
+    "RankNContrastLoss",
     "CombinedLoss",
 ]

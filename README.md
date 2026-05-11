@@ -21,7 +21,7 @@ All estimators follow the sklearn `fit` / `transform` API and accept `np.ndarray
 ### Improvement
 - **`EmbeddingRefiner`** — a PyTorch `nn.Module` (MLP projector with optional L2 normalization)
 - **Augmentations**: `GaussianNoise`, `FeatureDropout`, `EmbeddingMixup`, `KNNPairs`, `FeatureMasking`, `CompositeAugmentation`
-- **Losses**: `NTXentLoss`, `AlignUniformLoss`, `SupConLoss`, `TripletLoss`, `CombinedLoss`
+- **Losses**: `NTXentLoss`, `AlignUniformLoss`, `SupConLoss`, `TripletLoss`, `RankNContrastLoss`, `CombinedLoss`
 - **Diagnostics-driven auto-config** — `EmbedKit` reads the analysis report and automatically selects the best loss function, augmentation strategy, and target dimension
 - **Self-supervised and supervised** training modes
 

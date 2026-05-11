@@ -25,6 +25,18 @@ def labels_tensor():
     return torch.randint(0, 4, (64,))
 
 
+@pytest.fixture
+def cont_labels_tensor():
+    torch.manual_seed(1)
+    return torch.randn(64)
+
+
+@pytest.fixture
+def vec_labels_tensor():
+    torch.manual_seed(2)
+    return torch.randn(64, 3)
+
+
 class TestAugmentations:
     def test_gaussian_noise_shape(self, small_tensor):
         from embedkit.improvement.augmentation import GaussianNoise
@@ -124,6 +136,43 @@ class TestLosses:
         loss.backward()
         assert z.grad is not None
 
+    def test_rnc_loss_gradient_scalar(self, small_tensor, cont_labels_tensor):
+        from embedkit.improvement.losses import RankNContrastLoss
+        z = small_tensor.requires_grad_(True)
+        loss_fn = RankNContrastLoss()
+        loss = loss_fn(z, z + 0.01, cont_labels_tensor)
+        loss.backward()
+        assert z.grad is not None
+        assert not torch.isnan(loss)
+
+    def test_rnc_loss_gradient_vector(self, small_tensor, vec_labels_tensor):
+        from embedkit.improvement.losses import RankNContrastLoss
+        z = small_tensor.requires_grad_(True)
+        loss_fn = RankNContrastLoss()
+        loss = loss_fn(z, z + 0.01, vec_labels_tensor)
+        loss.backward()
+        assert z.grad is not None
+        assert not torch.isnan(loss)
+
+    def test_rnc_loss_requires_labels(self, small_tensor):
+        from embedkit.improvement.losses import RankNContrastLoss
+        loss_fn = RankNContrastLoss()
+        with pytest.raises((ValueError, TypeError)):
+            loss_fn(small_tensor, small_tensor + 0.01)
+
+    def test_rnc_loss_chunked_matches_full(self, small_tensor, cont_labels_tensor):
+        from embedkit.improvement.losses import RankNContrastLoss
+        z = small_tensor
+        loss_full = RankNContrastLoss()(z, z + 0.01, cont_labels_tensor)
+        loss_chunked = RankNContrastLoss(chunk_size=32)(z, z + 0.01, cont_labels_tensor)
+        assert torch.allclose(loss_full, loss_chunked, atol=1e-5)
+
+    def test_rnc_loss_nonnegative(self, small_tensor, cont_labels_tensor):
+        from embedkit.improvement.losses import RankNContrastLoss
+        loss_fn = RankNContrastLoss()
+        loss = loss_fn(small_tensor, small_tensor + 0.01, cont_labels_tensor)
+        assert loss.item() >= 0
+
 
 class TestEmbeddingRefiner:
     def test_forward_shape(self):
@@ -194,6 +243,23 @@ class TestTrainer:
         trainer.fit(X, y=y)
         Z = trainer.transform(X)
         assert Z.shape == (X.shape[0], 8)
+
+    def test_trainer_supervised_continuous(self, small_X):
+        from embedkit.improvement import EmbeddingRefiner, Trainer, GaussianNoise, RankNContrastLoss
+        rng = np.random.default_rng(1)
+        y = rng.standard_normal(small_X.shape[0]).astype(np.float32)
+        model = EmbeddingRefiner(input_dim=small_X.shape[1], target_dim=8)
+        trainer = Trainer(
+            model=model,
+            augmentation=GaussianNoise(std=0.05),
+            loss=RankNContrastLoss(),
+            epochs=2,
+            batch_size=32,
+            eval_every=100,
+        )
+        trainer.fit(small_X, y=y)
+        Z = trainer.transform(small_X)
+        assert Z.shape == (small_X.shape[0], 8)
 
     def test_loss_decreases(self, small_X):
         from embedkit.improvement import EmbeddingRefiner, Trainer, GaussianNoise, NTXentLoss

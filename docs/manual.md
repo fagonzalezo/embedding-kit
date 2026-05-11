@@ -489,6 +489,32 @@ loss = loss_fn(z_i, z_j, labels=y_batch)
 
 ---
 
+#### RankNContrastLoss — Rank-N-Contrast for Regression
+
+Supervised contrastive loss for continuous or multi-dimensional labels (Zha et al., 2023). Rather than defining positives by class membership, it imposes a ranking constraint: for each anchor, samples *closer* in label space must produce *higher* cosine similarity in the embedding space than samples farther away. The ranking is distribution-free — no kernel bandwidth to tune.
+
+Supports both scalar regression targets (shape `(n,)`) and vector targets (shape `(n, k)` for multi-output regression).
+
+**Parameters:** `temperature=0.07`, `chunk_size=None`
+
+- `chunk_size`: when set, the (2N × 2N) similarity matrix is computed in row-blocks of this size, reducing peak GPU memory at the cost of slightly more compute.
+
+**Requires labels** (raises `ValueError` otherwise).
+
+**Use when:** supervised refinement with continuous targets such as regression scores, ratings, or multi-dimensional attribute vectors — where class-boundary losses (`SupConLoss`, `TripletLoss`) cannot apply.
+
+```python
+from embedkit.improvement.losses import RankNContrastLoss
+
+loss_fn = RankNContrastLoss(temperature=0.07)
+loss = loss_fn(z_i, z_j, labels=y_batch)   # y_batch: (N,) or (N, k)
+
+# memory-efficient variant for large batches:
+loss_fn = RankNContrastLoss(temperature=0.07, chunk_size=128)
+```
+
+---
+
 #### CombinedLoss
 
 Weighted sum of multiple loss functions. Useful for combining complementary objectives, e.g., a classification-aware loss (SupConLoss) with a geometry-aware term (AlignUniformLoss).
@@ -662,5 +688,7 @@ Schroff, F., Kalenichenko, D., & Philbin, J. (2015). FaceNet: A unified embeddin
 van den Oord, A., Li, Y., & Vinyals, O. (2018). Representation learning with contrastive predictive coding. *arXiv preprint arXiv:1807.03748*.
 
 Wang, T., & Isola, P. (2020). Understanding contrastive representation learning through alignment and uniformity on the hypersphere. In *Proceedings of the 37th International Conference on Machine Learning (ICML 2020)*, PMLR 119.
+
+Zha, K., Cao, P., Son, J., Yang, Y., & Katabi, D. (2023). Rank-N-Contrast: Learning continuous representations for regression. In *Advances in Neural Information Processing Systems* (Vol. 36). Curran Associates.
 
 Zhang, H., Cissé, M., Dauphin, Y. N., & Lopez-Paz, D. (2018). mixup: Beyond empirical risk minimization. In *International Conference on Learning Representations (ICLR 2018)*.

@@ -119,6 +119,7 @@ For detailed interpretation of every metric and its healthy ranges, read
 | Low neighbor stability | `mean_consistency < 0.5` | `KNNPairs` (auto-config default) |
 | Poor spread / clusters | `uniformity > -1.0` | `AlignUniformLoss` |
 | Supervised, class labels available | any severity | `mode="supervised"`, `SupConLoss` |
+| Supervised, continuous/regression labels | any severity | `mode="supervised"`, `RankNContrastLoss` |
 | Sparse / NLP embeddings | high dim, sparse values | `FeatureDropout` augmentation |
 | Locally smooth, pretrained | low severity | `EmbeddingMixup` |
 
@@ -172,7 +173,8 @@ from embedkit.improvement.augmentation import (
     KNNPairs, FeatureMasking, CompositeAugmentation,
 )
 from embedkit.improvement.losses import (
-    NTXentLoss, AlignUniformLoss, TripletLoss, SupConLoss, CombinedLoss,
+    NTXentLoss, AlignUniformLoss, TripletLoss, SupConLoss,
+    RankNContrastLoss, CombinedLoss,
 )
 
 model = EmbeddingRefiner(
@@ -231,6 +233,7 @@ X_refined = trainer.transform(X)
 | `AlignUniformLoss(alpha, t)` | self-supervised | Explicit hubness / uniformity control |
 | `SupConLoss(temperature)` | supervised | Class labels available |
 | `TripletLoss(margin, mining)` | supervised | Complex class boundaries |
+| `RankNContrastLoss(temperature, chunk_size)` | supervised | Continuous/regression labels; ranks neighbors by label distance |
 | `CombinedLoss([(loss, weight)])` | any | Add uniformity regularization to any base loss |
 
 ---
