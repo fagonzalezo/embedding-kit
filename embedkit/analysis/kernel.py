@@ -83,8 +83,15 @@ class KernelDiagnostics(BaseAnalyzer):
 
         ka = None
         if ys is not None:
-            ys_arr = np.asarray(ys)
-            label_K = (ys_arr[:, None] == ys_arr[None, :]).astype(np.float32)
+            ys_arr = np.asarray(ys, dtype=np.float32)
+            if ys_arr.ndim == 1:
+                # Class labels: indicator kernel (same-class = 1)
+                label_K = (ys_arr[:, None] == ys_arr[None, :]).astype(np.float32)
+            else:
+                # Vector labels: linear (dot-product) kernel between label vectors
+                norms = np.linalg.norm(ys_arr, axis=1, keepdims=True) + 1e-10
+                ys_norm = ys_arr / norms
+                label_K = ys_norm @ ys_norm.T
             ka = float(_kernel_alignment(K, label_K))
 
         return KernelDiagnosticsResult(
