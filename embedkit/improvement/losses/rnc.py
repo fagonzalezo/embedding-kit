@@ -85,5 +85,6 @@ class RankNContrastLoss(BaseLoss):
             S_off_chunk = logits[~eye_chunk].view(end - start, two_n - 1)
             S_sorted = S_off_chunk.gather(1, idx_D[start:end])
             lse_tail = S_sorted.flip(-1).logcumsumexp(-1).flip(-1)
-            losses.append((lse_tail - S_sorted).mean())
-        return torch.stack(losses).mean()
+            losses.append(lse_tail - S_sorted)  # (cs, 2N-1) per-entry terms
+        # Mean over all entries, matching _loss_full even when chunk_size does not divide 2N.
+        return torch.cat(losses, dim=0).mean()

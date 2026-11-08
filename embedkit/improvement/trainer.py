@@ -98,10 +98,29 @@ class Trainer:
             y_arr = np.asarray(y)
             tensors.append(torch.from_numpy(y_arr))
 
+        # Contrastive losses need at least two samples per batch. With drop_last=True,
+        # a batch_size larger than n would yield zero batches per epoch: no training
+        # and a NaN loss (mean of an empty list). Cap the batch at n instead.
+        if n < 2:
+            raise ValueError(
+                f"Trainer.fit needs at least 2 training samples, got {n}"
+                + (f" after val_split={self.val_split}" if self.val_split > 0.0 else "")
+                + "."
+            )
+        batch_size = self.batch_size
+        if batch_size > n:
+            warnings.warn(
+                f"batch_size={self.batch_size} exceeds the number of training samples ({n}); "
+                f"using batch_size={n} (one batch per epoch).",
+                UserWarning,
+                stacklevel=2,
+            )
+            batch_size = n
+
         dataset = TensorDataset(*tensors)
         pin = self.device.type == "cuda"
         loader = DataLoader(
-            dataset, batch_size=self.batch_size, shuffle=True,
+            dataset, batch_size=batch_size, shuffle=True,
             drop_last=True, pin_memory=pin, num_workers=0,
         )
 

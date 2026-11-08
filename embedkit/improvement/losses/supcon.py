@@ -42,7 +42,8 @@ class SupConLoss(BaseLoss):
         sim = torch.mm(z, z.T) / self.temperature
         eye_mask = torch.eye(two_n, device=z.device, dtype=torch.bool)
         sim = sim.masked_fill(eye_mask, float("-inf"))
-        log_prob = F.log_softmax(sim, dim=1)
+        # Zero the (−inf) diagonal so 0 * (−inf) = NaN never appears in pos_mask * log_prob.
+        log_prob = F.log_softmax(sim, dim=1).masked_fill(eye_mask, 0.0)
         n_pos = pos_mask.sum(dim=1).clamp(min=1)
         loss = -(pos_mask * log_prob).sum(dim=1) / n_pos
         return loss.mean()
@@ -54,12 +55,15 @@ class SupConLoss(BaseLoss):
         losses = []
         for start in range(0, two_n, cs):
             end = min(start + cs, two_n)
+            m = end - start
             rows = z[start:end]
             logits = torch.mm(rows, z.T) / self.temperature  # (cs, 2N)
-            for i in range(end - start):
-                logits[i, start + i] = float("-inf")
-            log_prob = F.log_softmax(logits, dim=1)  # (cs, 2N)
+            diag = torch.zeros(m, two_n, dtype=torch.bool, device=z.device)
+            diag[torch.arange(m, device=z.device), torch.arange(start, end, device=z.device)] = True
+            logits = logits.masked_fill(diag, float("-inf"))
+            log_prob = F.log_softmax(logits, dim=1).masked_fill(diag, 0.0)  # (cs, 2N)
             pm_chunk = pos_mask[start:end]  # (cs, 2N)
             n_pos = pm_chunk.sum(dim=1).clamp(min=1)
-            losses.append((-(pm_chunk * log_prob).sum(dim=1) / n_pos).mean())
-        return torch.stack(losses).mean()
+            losses.append(-(pm_chunk * log_prob).sum(dim=1) / n_pos)  # per-row losses
+        # Mean over all rows (not mean of chunk means, which overweights a short last chunk).
+        return torch.cat(losses).mean()

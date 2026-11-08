@@ -164,3 +164,27 @@ class TestEmbedKitAnalyzer:
         report = EmbedKitAnalyzer(id_methods=["TwoNN"]).fit(small_X)
         _, d = small_X.shape
         assert 4 <= report.suggested_target_dim <= d
+
+
+def test_analysis_does_not_silence_warnings():
+    """skdim's import calls warnings.filterwarnings("ignore"); it must not leak to the user.
+
+    Runs in a fresh interpreter so skdim is imported for the first time inside embedkit.
+    """
+    import subprocess
+    import sys
+    import textwrap
+
+    code = textwrap.dedent(
+        """
+        import warnings
+        import numpy as np
+        from embedkit.analysis.intrinsic_dim import IntrinsicDimensionEstimator
+        before = list(warnings.filters)
+        X = np.random.default_rng(0).standard_normal((200, 8))
+        IntrinsicDimensionEstimator(methods=["TwoNN"]).fit(X)
+        assert warnings.filters == before, warnings.filters[:3]
+        """
+    )
+    res = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr[-2000:]

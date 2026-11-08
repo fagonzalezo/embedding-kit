@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -90,7 +91,11 @@ class IntrinsicDimensionEstimator(BaseAnalyzer):
 
 
 def _build_estimator(method: str, random_state):
-    import skdim.id as skid
+    # skdim.id._FisherS calls warnings.filterwarnings("ignore") at import time, which
+    # silences every warning in the user's process. catch_warnings() restores the
+    # global filter list when the block exits.
+    with warnings.catch_warnings():
+        import skdim.id as skid
 
     cls_map = {
         "TwoNN": skid.TwoNN,
