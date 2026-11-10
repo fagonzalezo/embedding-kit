@@ -669,10 +669,11 @@ Release as 0.5.0.
 ### Phase 2 notes (2026-11-10)
 
 - **Exit criterion met.** `benchmarks/run.py --experiment e1 --datasets pets_resnet50 digits
-  synthetic_anisotropic --seeds 3` at `d0b6069` (CPU, laptop) reproduces the pilot's baseline rows:
+  synthetic_anisotropic --seeds 3` (CPU, laptop) reproduces the pilot's baseline rows:
   117 compared values (kNN Euclidean and cosine, the C = 1 probe), largest difference 0.0035
   (`benchmarks/review_2026_11/compare_pilot.py`). Results and `REPORT.md` are in
-  `benchmarks/results/e1/`.
+  `benchmarks/results/e1/`. The result files record commit `d0b6069`; that commit was later
+  rewritten as `ab68bac` to drop a local tool file from the history. The code is identical.
 - The check found a probe artefact: all-but-the-top left ~1e-17 in an all-zero digits pixel,
   proportional to the removed component, and standardisation scaled it back up (+3 to +6 points).
   `linear_probe` now only centres numerically constant columns.
@@ -686,8 +687,9 @@ Release as 0.5.0.
 - `benchmarks/datasets.py` of the plan is `benchmarks/bench_datasets.py` (the plan's name would
   shadow Hugging Face's `datasets` package in the extraction script).
 - Cluster (2026-11-10): clone `/projects/iris/fabio.gonzalezosorio/embedding-kit`, data root
-  `$BASE/data/embedkit-bench` (Pets copied), venv `$BASE/envs/embedkit`. Jobs submitted: setup
-  3076918, CUDA test suite 3076919, GPU feature extraction 3076920, ANN extraction 3076921.
+  `$BASE/data/embedkit-bench` (Pets copied), venv `$BASE/envs/embedkit`. Setup 3076918 done
+  (torch 2.11 from the container). ANN extraction 3076921 failed: ann-benchmarks.com returns 403 to
+  urllib's default User-Agent (fixed in `extract_features.py`, to resubmit).
 
 ## Open points for the next session
 

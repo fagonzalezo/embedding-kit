@@ -28,6 +28,7 @@ import argparse
 import datetime as dt
 import json
 import pickle
+import shutil
 import sys
 import time
 import urllib.request
@@ -215,7 +216,10 @@ def _ann(name: str):
         if not path.exists():
             path.parent.mkdir(parents=True, exist_ok=True)
             tmp = path.with_suffix(".part")
-            urllib.request.urlretrieve(url, tmp)
+            # ann-benchmarks.com answers 403 to urllib's default User-Agent.
+            req = urllib.request.Request(url, headers={"User-Agent": "embedkit-bench"})
+            with urllib.request.urlopen(req, timeout=60) as resp, open(tmp, "wb") as f:
+                shutil.copyfileobj(resp, f, length=1 << 20)
             tmp.replace(path)
         with h5py.File(path, "r") as f:
             arrays = dict(X_train=np.asarray(f["train"], dtype=np.float32),
