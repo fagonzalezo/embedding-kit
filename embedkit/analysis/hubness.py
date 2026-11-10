@@ -37,16 +37,26 @@ class HubnessAnalyzer(BaseAnalyzer):
         self.subsample = subsample
         self.random_state = random_state
 
-    def fit(self, X, y=None) -> HubnessResult:
-        X = self._prepare(X)
-        rng = np.random.default_rng(self.random_state)
-        n = X.shape[0]
-        if n > self.subsample:
-            idx = rng.choice(n, self.subsample, replace=False)
-            X = X[idx]
-            n = self.subsample
+    def fit(self, X, y=None, neighbor_index: np.ndarray | None = None) -> HubnessResult:
+        """Compute hubness statistics.
 
-        _, indices = knn(X, self.k, metric=self.metric)
+        neighbor_index:
+            Optional precomputed kNN graph of ``X`` (shape ``(n, >= k)``, row ``i`` holding
+            the neighbours of row ``i`` in ascending distance, without ``i`` itself), for
+            example from :func:`embedkit.utils.neighbors.knn`. When given, it is used as is:
+            ``X`` is not subsampled and no search is run. Its first ``k`` columns are used.
+        """
+        X = self._prepare(X)
+        n = X.shape[0]
+        if neighbor_index is not None:
+            indices = _check_neighbor_index(neighbor_index, n, self.k)
+        else:
+            rng = np.random.default_rng(self.random_state)
+            if n > self.subsample:
+                idx = rng.choice(n, self.subsample, replace=False)
+                X = X[idx]
+                n = self.subsample
+            _, indices = knn(X, self.k, metric=self.metric)
 
         N_k = np.bincount(indices.ravel(), minlength=n).astype(np.int64)
 
@@ -85,3 +95,13 @@ class HubnessAnalyzer(BaseAnalyzer):
             antihubs=antihubs,
             hub_contamination=hub_contamination,
         )
+
+
+def _check_neighbor_index(neighbor_index, n: int, k: int) -> np.ndarray:
+    """Validate a precomputed kNN graph for ``n`` points and return its first ``k`` columns."""
+    indices = np.asarray(neighbor_index)
+    if indices.ndim != 2 or indices.shape[0] != n or indices.shape[1] < k:
+        raise ValueError(
+            f"neighbor_index must have shape ({n}, >= {k}), got {indices.shape}"
+        )
+    return indices[:, :k].astype(np.int64, copy=False)

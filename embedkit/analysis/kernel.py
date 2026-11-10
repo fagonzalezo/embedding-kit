@@ -1,14 +1,15 @@
-"""RBF kernel diagnostics: effective rank, spectral gap, alignment."""
+"""RBF kernel diagnostics: effective rank, spectral gap, centred kernel alignment."""
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from typing import Literal
 
 import numpy as np
-from scipy import linalg as scipy_linalg
 
 from embedkit.analysis._base import BaseAnalyzer, BaseResult
+from embedkit.utils.validation import encode_labels
 
 
 @dataclass(frozen=True)
@@ -18,8 +19,23 @@ class KernelDiagnosticsResult(BaseResult):
     condition_number: float
     row_sum_skewness: float
     eigenvalues: np.ndarray
-    kernel_alignment: float | None
+    centered_kernel_alignment: float | None
     sigma: float
+
+    @property
+    def kernel_alignment(self) -> float | None:
+        """Deprecated alias of ``centered_kernel_alignment``.
+
+        The old statistic was not centred; the value returned here is the centred one.
+        """
+        warnings.warn(
+            "KernelDiagnosticsResult.kernel_alignment is deprecated; use "
+            "centered_kernel_alignment (the old, uncentred statistic mostly measured class "
+            "balance).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.centered_kernel_alignment
 
 
 class KernelDiagnostics(BaseAnalyzer):
@@ -38,8 +54,16 @@ class KernelDiagnostics(BaseAnalyzer):
         self.random_state = random_state
 
     def fit(self, X, y=None) -> KernelDiagnosticsResult:
-        import warnings
+        """Kernel spectrum diagnostics and, when ``y`` is given, centred kernel alignment.
+
+        ``y`` may be a list, array or tensor of class labels (strings, booleans or integers),
+        of continuous values ``(n,)``, or of vector values ``(n, m)``; see ``encode_labels``.
+        """
         X = self._prepare(X)
+        labels, label_kind = None, None
+        if y is not None:
+            labels, label_kind = encode_labels(y, n_samples=X.shape[0])
+            labels = labels.numpy()
         rng = np.random.default_rng(self.random_state)
         n = X.shape[0]
         effective_sub = min(self.subsample, self._SUBSAMPLE_MAX)
@@ -52,10 +76,10 @@ class KernelDiagnostics(BaseAnalyzer):
         if n > effective_sub:
             idx = rng.choice(n, effective_sub, replace=False)
             Xs = X[idx]
-            ys = y[idx] if y is not None else None
+            ys = labels[idx] if labels is not None else None
         else:
             Xs = X
-            ys = y
+            ys = labels
 
         sigma = self._resolve_sigma(Xs)
         K = self._rbf_kernel(Xs, sigma)
@@ -81,18 +105,9 @@ class KernelDiagnostics(BaseAnalyzer):
         rs_std = row_sums.std() + 1e-10
         row_sum_skewness = float(np.mean(((row_sums - rs_mean) / rs_std) ** 3))
 
-        ka = None
+        cka = None
         if ys is not None:
-            ys_arr = np.asarray(ys, dtype=np.float32)
-            if ys_arr.ndim == 1:
-                # Class labels: indicator kernel (same-class = 1)
-                label_K = (ys_arr[:, None] == ys_arr[None, :]).astype(np.float32)
-            else:
-                # Vector labels: linear (dot-product) kernel between label vectors
-                norms = np.linalg.norm(ys_arr, axis=1, keepdims=True) + 1e-10
-                ys_norm = ys_arr / norms
-                label_K = ys_norm @ ys_norm.T
-            ka = float(_kernel_alignment(K, label_K))
+            cka = _centered_kernel_alignment(K, _label_kernel(ys, label_kind))
 
         return KernelDiagnosticsResult(
             effective_rank=eff_rank,
@@ -100,7 +115,7 @@ class KernelDiagnostics(BaseAnalyzer):
             condition_number=condition_number,
             row_sum_skewness=row_sum_skewness,
             eigenvalues=eigenvalues,
-            kernel_alignment=ka,
+            centered_kernel_alignment=cka,
             sigma=float(sigma),
         )
 
@@ -127,9 +142,38 @@ class KernelDiagnostics(BaseAnalyzer):
         return np.exp(-(dists ** 2) / (2 * sigma ** 2 + 1e-10)).astype(np.float32)
 
 
-def _kernel_alignment(K1: np.ndarray, K2: np.ndarray) -> float:
-    def frobenius(A, B):
-        return float(np.sum(A * B))
-    num = frobenius(K1, K2)
-    denom = np.sqrt(frobenius(K1, K1) * frobenius(K2, K2) + 1e-10)
-    return num / denom
+def _label_kernel(labels: np.ndarray, kind: str) -> np.ndarray:
+    """Indicator kernel for classes; RBF with median-heuristic bandwidth for continuous labels."""
+    if kind == "class":
+        return (labels[:, None] == labels[None, :]).astype(np.float64)
+    from scipy.spatial.distance import pdist, squareform
+
+    Y = labels.astype(np.float64)
+    if Y.ndim == 1:
+        Y = Y[:, None]
+    pair = pdist(Y)
+    positive = pair[pair > 0]
+    if positive.size == 0:
+        return np.ones((len(Y), len(Y)))  # constant labels
+    bandwidth = float(np.median(pair)) or float(positive.mean())
+    return np.exp(-(squareform(pair) ** 2) / (2 * bandwidth**2))
+
+
+def _center(K: np.ndarray) -> np.ndarray:
+    """``H K H`` with ``H = I - 11^T / n``."""
+    K = np.asarray(K, dtype=np.float64)
+    return K - K.mean(axis=0, keepdims=True) - K.mean(axis=1, keepdims=True) + K.mean()
+
+
+def _centered_kernel_alignment(K1: np.ndarray, K2: np.ndarray) -> float:
+    """``<HK1H, HK2H>_F / (||HK1H||_F ||HK2H||_F)``; NaN when either kernel is constant."""
+    Kc, Lc = _center(K1), _center(K2)
+    denom = float(np.sqrt(np.sum(Kc * Kc) * np.sum(Lc * Lc)))
+    if denom <= 1e-12:
+        warnings.warn(
+            "Centred kernel alignment is undefined: one of the kernels is constant "
+            "(for example, all labels are equal).",
+            stacklevel=3,
+        )
+        return float("nan")
+    return float(np.sum(Kc * Lc) / denom)

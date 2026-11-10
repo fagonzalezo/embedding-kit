@@ -68,7 +68,7 @@ analyzer = EmbedKitAnalyzer(
     metric="euclidean",                       # distance metric
     random_state=42,
 )
-report = analyzer.fit(X, y=None)    # y enables kernel_alignment
+report = analyzer.fit(X, y=None)    # y enables centered_kernel_alignment
 ```
 
 `EmbedKitAnalyzer.fit()` runs all diagnostics in one pass and returns an
@@ -113,8 +113,8 @@ For detailed interpretation of every metric and its healthy ranges, read
 |---|---|---|
 | Severe hubness | `k_skewness > 5` | `AlignUniformLoss` + `KNNPairs` |
 | Moderate hubness | `k_skewness 2–5` | `NTXentLoss` + `KNNPairs` |
-| High anisotropy | `participation_ratio < 0.1 × D` | `AlignUniformLoss` or PCA whitening first |
-| Distance collapse | `concentration_ratio > 0.8` | Reduce `target_dim` aggressively |
+| High anisotropy | `participation_ratio_normalized < 0.1` | `AlignUniformLoss` or PCA whitening first |
+| Distance collapse | `distance_cv < 0.02` (provisional) | Reduce `target_dim` aggressively |
 | Sparse manifold | `ID/D < 0.1` | Strong bottleneck (low `target_dim`) |
 | Low neighbor stability | `mean_consistency < 0.5` | `KNNPairs` (auto-config default) |
 | Poor spread / clusters | `uniformity > -1.0` | `AlignUniformLoss` |
@@ -201,7 +201,7 @@ trainer = Trainer(
     loss=loss_fn,
     epochs=200,
     batch_size=256,
-    optimizer="adam",     # "adam" | "sgd" | "lars"
+    optimizer="adam",     # "adam" | "sgd"
     lr=3e-4,
     weight_decay=1e-4,
     scheduler="cosine",
@@ -218,10 +218,10 @@ X_refined = trainer.transform(X)
 
 | Class | Best for |
 |---|---|
-| `GaussianNoise(std, adaptive)` | Robust baseline for most situations |
+| `GaussianNoise(std, adaptive, relative)` | Robust baseline for most situations |
 | `FeatureDropout(p)` | Sparse / over-complete NLP embeddings |
 | `EmbeddingMixup(alpha, k)` | Locally smooth, trusted embeddings |
-| `KNNPairs(k, hard_negatives)` | Auto-config default; pretrained embeddings with good local structure |
+| `KNNPairs(k, neighbor_index, metric)` | Auto-config default; pretrained embeddings with good local structure |
 | `FeatureMasking(mask_ratio)` | Structured, correlated embeddings |
 | `CompositeAugmentation(augs, mode)` | High-severity or combination strategies |
 
@@ -311,7 +311,7 @@ with Euclidean distance), pass `normalize=False`.
 The default `0.07` works well for most cases; go lower (colder) if representations
 collapse early in training.
 
-**FAISS-backed kNN.** `embedkit.utils.neighbors.knn()` uses FAISS by default (mandatory dep) with an LRU result cache. If FAISS fails to import at runtime it falls back to sklearn and emits a `RuntimeWarning` — check your `faiss-cpu` install if you see it.
+**kNN backend.** `embedkit.utils.neighbors.knn()` runs an exact scikit-learn search by default and caches nothing. FAISS is optional (`pip install embedkit[faiss]`); select it with `backend="faiss"` or `EMBEDKIT_KNN_BACKEND=faiss`. Both return true distances (Euclidean, or `1 - cos` for cosine), ascending, without the query point.
 
 **`target_dim="auto"` sets dim to ≈ 1.5 × intrinsic dimension.** If intrinsic
 dimension estimates are unreliable (small n or noisy data), override with an explicit

@@ -32,7 +32,7 @@ All estimators follow the sklearn `fit` / `transform` API and accept `np.ndarray
 ### Ecosystem integration
 - Sklearn-compatible (`fit` / `transform`, usable in `Pipeline`)
 - Accepts `np.ndarray` and `torch.Tensor` inputs
-- FAISS-backed kNN for fast geometry diagnostics on large datasets
+- Exact kNN through scikit-learn by default; FAISS is an optional, faster backend (see Optional extras)
 - Model save/load with `EmbedKit.save()` / `EmbedKit.load()`
 
 ## Installation
@@ -60,6 +60,11 @@ pip install "embedkit[examples] @ git+https://github.com/fagonzalezo/embedding-k
 | Extra | Installs | When to use |
 |---|---|---|
 | `examples` | `torchvision` | Running image-classification examples (e.g., `examples/04_image_classification.*`) |
+| `faiss` | `faiss-cpu` | Faster exact kNN on large datasets. Enable it with `knn(..., backend="faiss")` or by setting `EMBEDKIT_KNN_BACKEND=faiss`. |
+
+FAISS is not installed by default. Some environments load two copies of the OpenMP runtime when
+FAISS and PyTorch are imported together, which aborts the process (`OMP: Error #15`) or crashes
+inside the search. The default scikit-learn backend gives the same, exact neighbours.
 
 ## Quickstart
 

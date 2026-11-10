@@ -12,7 +12,7 @@ class AnalysisPlotter:
     def plot_eigenvalue_spectrum(self):
         import matplotlib.pyplot as plt
         fig, ax = plt.subplots(figsize=(8, 4))
-        ev = self.report.geometry.isotropy.eigenvalue_spectrum
+        ev = self.report.geometry.isotropy.eigenvalue_spectrum_top
         ax.plot(np.arange(1, len(ev) + 1), ev, marker="o", markersize=3)
         ax.set_xlabel("Component")
         ax.set_ylabel("Eigenvalue")
@@ -64,6 +64,7 @@ class AnalysisPlotter:
 
     def plot_id_local_map(self, X):
         import matplotlib.pyplot as plt
+
         from embedkit.analysis.intrinsic_dim import IntrinsicDimensionEstimator
         from embedkit.utils.validation import _to_numpy
         X_np = _to_numpy(X)
@@ -83,6 +84,7 @@ class AnalysisPlotter:
 
     def plot_hubness_map(self, X):
         import matplotlib.pyplot as plt
+
         from embedkit.utils.validation import _to_numpy
         X_np = _to_numpy(X)
         N_k = self.report.hubness.k_occurrence
@@ -113,7 +115,7 @@ class AnalysisPlotter:
             ax.set_title(title)
 
         # 1: eigenvalue spectrum
-        ev = self.report.geometry.isotropy.eigenvalue_spectrum
+        ev = self.report.geometry.isotropy.eigenvalue_spectrum_top
         axes[0, 0].plot(ev, marker="o", markersize=2)
         axes[0, 0].set_title("Eigenvalue Spectrum")
         axes[0, 0].set_yscale("log")
@@ -135,9 +137,9 @@ class AnalysisPlotter:
         axes[1, 0].set_yscale("log")
 
         # 5: summary metrics
-        names = ["PR", "Isotropy", "NC", "Hub ratio", "Antihub ratio"]
+        names = ["PR/d", "Isotropy", "NC", "Hub ratio", "Antihub ratio"]
         vals = [
-            self.report.geometry.isotropy.participation_ratio,
+            self.report.geometry.isotropy.participation_ratio_normalized,
             self.report.geometry.isotropy.isotropy_score,
             self.report.geometry.neighbor_consistency.mean_consistency,
             self.report.hubness.hub_ratio,

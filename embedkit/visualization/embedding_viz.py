@@ -30,6 +30,7 @@ class EmbeddingVisualizer:
 
     def plot_comparison(self, X_before: np.ndarray, X_after: np.ndarray, labels=None):
         import matplotlib.pyplot as plt
+
         from embedkit.utils.validation import _to_numpy
         Xb = _to_numpy(X_before)
         Xa = _to_numpy(X_after)
@@ -55,7 +56,8 @@ class EmbeddingVisualizer:
 
     def plot_training_trajectory(self, history: dict):
         import matplotlib.pyplot as plt
-        keys = [k for k in history if k != "loss"]
+        # Per-epoch series ("loss", "lr") and the evaluation epochs are not monitors.
+        keys = [k for k in history if k not in ("loss", "lr", "eval_epoch")]
         n_plots = 1 + len(keys)
         fig, axes = plt.subplots(1, n_plots, figsize=(5 * n_plots, 4))
         if n_plots == 1:
@@ -66,16 +68,22 @@ class EmbeddingVisualizer:
         axes[0].set_xlabel("Epoch")
         axes[0].set_ylabel("Loss")
 
+        eval_epochs = history.get("eval_epoch")
         for ax, key in zip(axes[1:], keys):
-            ax.plot(history[key])
+            if eval_epochs is not None and len(eval_epochs) == len(history[key]):
+                ax.plot(eval_epochs, history[key], marker=".")
+                ax.set_xlabel("Epoch")
+            else:
+                ax.plot(history[key])
+                ax.set_xlabel("Evaluation")
             ax.set_title(key)
-            ax.set_xlabel(f"Eval step (every {len(history['loss']) // max(1, len(history[key]))} epochs)")
 
         fig.tight_layout()
         return fig
 
     def plot_knn_graph(self, X: np.ndarray, k: int = 5, highlight_hubs: np.ndarray | None = None):
         import matplotlib.pyplot as plt
+
         from embedkit.utils.neighbors import knn
         from embedkit.utils.validation import _to_numpy
         X_np = _to_numpy(X)

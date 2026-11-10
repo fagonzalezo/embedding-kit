@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 import torch
 
+from embedkit.utils.neighbors import knn
 from embedkit.utils.validation import _to_numpy, _to_tensor, check_n_samples
-from embedkit.utils.neighbors import knn, clear_cache
 
 
 class TestValidation:
@@ -42,9 +42,6 @@ class TestValidation:
 
 
 class TestNeighbors:
-    def setup_method(self):
-        clear_cache()
-
     def test_knn_shape(self):
         X = np.random.randn(50, 8).astype(np.float32)
         dists, idx = knn(X, k=5)
@@ -56,12 +53,6 @@ class TestNeighbors:
         _, idx = knn(X, k=5)
         for i, row in enumerate(idx):
             assert i not in row
-
-    def test_knn_cache(self):
-        X = np.random.randn(30, 4).astype(np.float32)
-        r1 = knn(X, k=3)
-        r2 = knn(X, k=3)
-        assert r1 is r2  # same object from cache
 
     def test_knn_distances_nonneg(self):
         X = np.random.randn(40, 6).astype(np.float32)

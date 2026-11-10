@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Literal
+from dataclasses import dataclass
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -16,12 +16,19 @@ from embedkit.analysis.geometry import (
     IsotropyResult,
     NeighborConsistency,
     NeighborConsistencyResult,
-    UniformityScore,
     UniformityResult,
+    UniformityScore,
 )
 from embedkit.analysis.hubness import HubnessAnalyzer, HubnessResult
 from embedkit.analysis.intrinsic_dim import IntrinsicDimensionEstimator, IntrinsicDimensionResult
 from embedkit.analysis.kernel import KernelDiagnostics, KernelDiagnosticsResult
+from embedkit.utils.neighbors import knn
+
+# Provisional (WP 1.5): distance_cv below this value is reported as distance concentration.
+# For iid Gaussian data CV = 1 / sqrt(2 d) (measured at n = 2,000: 0.0223 at d = 1,000, 0.0183 at
+# d = 1,500, 0.016 at d = 2,000), so 0.02 fires from about d = 1,250, where the old rule
+# (concentration_ratio > 0.8) fired. To be replaced by a null-calibrated threshold in WP 4.1.
+_DISTANCE_CV_THRESHOLD = 0.02
 
 
 @dataclass(frozen=True)
@@ -56,7 +63,18 @@ class EmbedKitReport(BaseResult):
             ("Hubness", "hub_contamination", self.hubness.hub_contamination),
             ("Geometry", "relative_contrast", self.geometry.distance_concentration.relative_contrast),
             ("Geometry", "concentration_ratio", self.geometry.distance_concentration.concentration_ratio),
+            ("Geometry", "distance_cv", self.geometry.distance_concentration.distance_cv),
+            (
+                "Geometry",
+                "relative_contrast_per_query",
+                self.geometry.distance_concentration.relative_contrast_per_query,
+            ),
             ("Geometry", "participation_ratio", self.geometry.isotropy.participation_ratio),
+            (
+                "Geometry",
+                "participation_ratio_normalized",
+                self.geometry.isotropy.participation_ratio_normalized,
+            ),
             ("Geometry", "effective_rank", self.geometry.isotropy.effective_rank),
             ("Geometry", "isotropy_score", self.geometry.isotropy.isotropy_score),
             ("Geometry", "neighbor_consistency", self.geometry.neighbor_consistency.mean_consistency),
@@ -65,6 +83,7 @@ class EmbedKitReport(BaseResult):
             ("Kernel", "spectral_gap", self.kernel.spectral_gap),
             ("Kernel", "condition_number", self.kernel.condition_number),
             ("Kernel", "sigma", self.kernel.sigma),
+            ("Kernel", "centered_kernel_alignment", self.kernel.centered_kernel_alignment),
             ("Summary", "suggested_k", self.suggested_k),
             ("Summary", "suggested_sigma", self.suggested_sigma),
             ("Summary", "suggested_target_dim", self.suggested_target_dim),
@@ -77,33 +96,36 @@ class EmbedKitReport(BaseResult):
         print(f"\n{'='*60}")
         print(f"  EmbedKit Analysis Report  ({n} samples × {d} dims)")
         print(f"{'='*60}")
-        print(f"\n[Intrinsic Dimension]")
+        print("\n[Intrinsic Dimension]")
         print(f"  consensus ID     : {self.intrinsic_dim.consensus:.2f}  (±{self.intrinsic_dim.uncertainty:.2f})")
         for m, v in self.intrinsic_dim.estimates.items():
             print(f"  {m:<14}: {v:.2f}")
-        print(f"\n[Hubness]")
+        print("\n[Hubness]")
         print(f"  k-skewness       : {self.hubness.k_skewness:.3f}")
         print(f"  Robin Hood index : {self.hubness.robinhood_index:.3f}")
         print(f"  hub ratio        : {self.hubness.hub_ratio:.3f}")
         print(f"  antihub ratio    : {self.hubness.antihub_ratio:.3f}")
         print(f"  hub contamination: {self.hubness.hub_contamination:.3f}")
-        print(f"\n[Geometry]")
+        print("\n[Geometry]")
         print(f"  participation_ratio : {self.geometry.isotropy.participation_ratio:.2f}")
+        pr_norm = self.geometry.isotropy.participation_ratio_normalized
+        print(f"  PR (normalized)     : {pr_norm:.3f}")
         print(f"  isotropy_score      : {self.geometry.isotropy.isotropy_score:.3f}")
         print(f"  relative_contrast   : {self.geometry.distance_concentration.relative_contrast:.3f}")
+        print(f"  distance_cv         : {self.geometry.distance_concentration.distance_cv:.4f}")
         print(f"  neighbor_consistency: {self.geometry.neighbor_consistency.mean_consistency:.3f}")
         print(f"  uniformity          : {self.geometry.uniformity.uniformity:.4f}")
-        print(f"\n[Kernel]")
+        print("\n[Kernel]")
         print(f"  sigma            : {self.kernel.sigma:.4f}")
         print(f"  effective_rank   : {self.kernel.effective_rank:.2f}")
         print(f"  spectral_gap     : {self.kernel.spectral_gap:.3f}")
         print(f"  condition_number : {self.kernel.condition_number:.2e}")
-        if self.kernel.kernel_alignment is not None:
-            print(f"  kernel_alignment : {self.kernel.kernel_alignment:.4f}")
+        if self.kernel.centered_kernel_alignment is not None:
+            print(f"  centered kernel alignment: {self.kernel.centered_kernel_alignment:.4f}")
         print(f"\n[Recommendations]  severity={self.severity.upper()}")
         for rec in self.recommendations:
             print(f"  • {rec}")
-        print(f"\n[Auto-config]")
+        print("\n[Auto-config]")
         print(f"  suggested_k          : {self.suggested_k}")
         print(f"  suggested_sigma      : {self.suggested_sigma:.4f}")
         print(f"  suggested_target_dim : {self.suggested_target_dim}")
@@ -137,17 +159,26 @@ class EmbedKitAnalyzer(BaseAnalyzer):
         )
         id_result = id_est.fit(X)
 
+        # The unperturbed kNN graph is computed once, on the same subsample, and shared by the
+        # analyzers that need it.
+        if n > self.n_max:
+            rng = np.random.default_rng(self.random_state)
+            X_graph = X[rng.choice(n, self.n_max, replace=False)]
+        else:
+            X_graph = X
+        _, graph = knn(X_graph, k, metric=self.metric)
+
         hub = HubnessAnalyzer(k=k, metric=self.metric, subsample=self.n_max, random_state=self.random_state)
-        hub_result = hub.fit(X)
+        hub_result = hub.fit(X_graph, neighbor_index=graph)
 
         dc = DistanceConcentration(random_state=self.random_state)
-        iso = IsotropyAnalyzer(d_max=self.d_max)
+        iso = IsotropyAnalyzer(d_max=self.d_max, random_state=self.random_state)
         nc = NeighborConsistency(k=k, metric=self.metric, subsample=self.n_max, random_state=self.random_state)
         uni = UniformityScore(random_state=self.random_state)
         geo_bundle = GeometryBundle(
             distance_concentration=dc.fit(X),
             isotropy=iso.fit(X),
-            neighbor_consistency=nc.fit(X),
+            neighbor_consistency=nc.fit(X_graph, neighbor_index=graph),
             uniformity=uni.fit(X),
         )
 
@@ -220,27 +251,27 @@ def _assess_severity_and_recommendations(
             )
             score += 1
 
-    # Isotropy / participation ratio
-    pr = geo_bundle.isotropy.participation_ratio
-    if pr < 0.1 * d:
+    # Isotropy / participation ratio (normalised by d, so it does not depend on the dimension)
+    pr = geo_bundle.isotropy.participation_ratio_normalized
+    if pr < 0.1:
         recs.append(
-            f"Low participation ratio ({pr:.1f} << {d}): embeddings are highly anisotropic. "
-            "Consider whitening or applying an alignment loss."
+            f"Low participation ratio ({pr:.2f} of {d} dimensions): embeddings are highly "
+            "anisotropic. Consider whitening or applying an alignment loss."
         )
         score += 2
-    elif pr < 0.3 * d:
+    elif pr < 0.3:
         recs.append(
-            f"Moderate anisotropy (participation_ratio={pr:.1f}): "
+            f"Moderate anisotropy (normalized participation ratio={pr:.2f}): "
             "alignment losses or PCA whitening may help."
         )
         score += 1
 
     # Distance concentration
-    cr = geo_bundle.distance_concentration.concentration_ratio
-    if cr > 0.8:
+    cv = geo_bundle.distance_concentration.distance_cv
+    if cv < _DISTANCE_CV_THRESHOLD:
         recs.append(
-            "High distance concentration (concentration_ratio > 0.8): distances are almost "
-            "indistinguishable — standard kNN will degrade."
+            f"High distance concentration (distance_cv={cv:.3f} < {_DISTANCE_CV_THRESHOLD}): "
+            "distances are almost indistinguishable — standard kNN will degrade."
         )
         score += 2
 

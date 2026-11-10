@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import inspect
 import warnings
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -20,6 +20,7 @@ class IntrinsicDimensionResult(BaseResult):
     consensus: float
     local_estimates: dict[str, np.ndarray]
     uncertainty: float
+    n_duplicates_removed: int = 0
 
 
 class IntrinsicDimensionEstimator(BaseAnalyzer):
@@ -36,11 +37,21 @@ class IntrinsicDimensionEstimator(BaseAnalyzer):
         self.random_state = random_state
 
     def fit(self, X, y=None) -> IntrinsicDimensionResult:
+        """Estimate the intrinsic dimension with each method and aggregate the valid estimates.
+
+        Exact duplicate rows are removed first (``n_duplicates_removed`` reports how many):
+        TwoNN divides by the nearest-neighbour distance, which is zero for a duplicated point.
+        The methods run one after the other. Running them in a thread pool made the TwoNN
+        estimate vary from run to run for identical input and seed. An estimate that is not
+        finite and positive counts as a failure: it is recorded as NaN and excluded from the
+        consensus.
+        """
         X = self._prepare(X, min_n=5)
+        X, n_duplicates = _drop_exact_duplicates(X)
         n = X.shape[0]
         if n > self.n_max:
             rng = np.random.default_rng(self.random_state)
-            X = X[rng.choice(n, self.n_max, replace=False)]
+            X = X[np.sort(rng.choice(n, self.n_max, replace=False))]
         estimates: dict[str, float] = {}
         local_estimates: dict[str, np.ndarray] = {}
 
@@ -48,28 +59,21 @@ class IntrinsicDimensionEstimator(BaseAnalyzer):
             if method not in _SUPPORTED:
                 raise ValueError(f"Unknown ID method: {method}. Choose from {_SUPPORTED}")
 
-        def _fit_one(method: str):
+        for method in self.methods:
             try:
-                est = _build_estimator(method, self.random_state)
-                est.fit(X)
+                with np.errstate(all="ignore"):
+                    est = _build_estimator(method, self.random_state)
+                    est.fit(X)
                 dim = float(est.dimension_)
-                local = (
-                    np.asarray(est.dimension_pw_, dtype=np.float32)
-                    if method in _LOCAL_METHODS and hasattr(est, "dimension_pw_")
-                    else None
-                )
-                return method, dim, local
+                if not np.isfinite(dim) or dim <= 0:
+                    raise ValueError(f"non-finite or non-positive estimate ({dim})")
             except Exception as e:
-                import warnings
-                warnings.warn(f"ID method {method} failed: {e}")
-                return method, float("nan"), None
-
-        from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=min(len(self.methods), 4)) as pool:
-            for method, dim, local in pool.map(_fit_one, self.methods):
-                estimates[method] = dim
-                if local is not None:
-                    local_estimates[method] = local
+                warnings.warn(f"ID method {method} failed: {e}", stacklevel=2)
+                estimates[method] = float("nan")
+                continue
+            estimates[method] = dim
+            if method in _LOCAL_METHODS and hasattr(est, "dimension_pw_"):
+                local_estimates[method] = np.asarray(est.dimension_pw_, dtype=np.float32)
 
         valid = [v for v in estimates.values() if not np.isnan(v)]
         if not valid:
@@ -87,7 +91,18 @@ class IntrinsicDimensionEstimator(BaseAnalyzer):
             consensus=consensus,
             local_estimates=local_estimates,
             uncertainty=uncertainty,
+            n_duplicates_removed=n_duplicates,
         )
+
+
+def _drop_exact_duplicates(X: np.ndarray) -> tuple[np.ndarray, int]:
+    """Remove exact duplicate rows, keeping the first occurrence and the original order."""
+    n = X.shape[0]
+    rows = np.ascontiguousarray(X).view(np.dtype((np.void, X.dtype.itemsize * X.shape[1])))
+    _, first = np.unique(rows.ravel(), return_index=True)
+    if len(first) == n:
+        return X, 0
+    return X[np.sort(first)], n - len(first)
 
 
 def _build_estimator(method: str, random_state):
@@ -107,7 +122,7 @@ def _build_estimator(method: str, random_state):
         "FisherS": skid.FisherS,
     }
     cls = cls_map[method]
-    try:
+    # Only DANCo accepts random_state; the other estimators are deterministic.
+    if "random_state" in inspect.signature(cls.__init__).parameters:
         return cls(random_state=random_state)
-    except TypeError:
-        return cls()
+    return cls()

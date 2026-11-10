@@ -8,10 +8,19 @@ from embedkit.improvement.losses.base import BaseLoss
 
 
 class CombinedLoss(BaseLoss):
+    """Weighted sum of losses.
+
+    ``labels`` are forwarded only to members whose ``uses_labels`` attribute is
+    ``True``; the others are called as ``loss(z_i, z_j)``. Exceptions raised by a
+    member (for example a label shape error) propagate unchanged. The combined loss
+    has ``uses_labels = True`` if any member does.
+    """
+
     def __init__(self, losses: list[tuple[BaseLoss, float]]):
         super().__init__()
         self.loss_fns = torch.nn.ModuleList([l for l, _ in losses])
         self.weights = [w for _, w in losses]
+        self.uses_labels = any(getattr(l, "uses_labels", False) for l, _ in losses)
 
     def forward(
         self,
@@ -19,10 +28,10 @@ class CombinedLoss(BaseLoss):
         z_j: torch.Tensor,
         labels: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        total = torch.tensor(0.0, device=z_i.device)
+        terms = []
         for loss_fn, w in zip(self.loss_fns, self.weights):
-            try:
-                total = total + w * loss_fn(z_i, z_j, labels)
-            except (TypeError, ValueError):
-                total = total + w * loss_fn(z_i, z_j)
-        return total
+            if getattr(loss_fn, "uses_labels", False):
+                terms.append(w * loss_fn(z_i, z_j, labels))
+            else:
+                terms.append(w * loss_fn(z_i, z_j))
+        return sum(terms, torch.zeros((), device=z_i.device, dtype=z_i.dtype))

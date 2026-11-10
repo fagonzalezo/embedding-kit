@@ -45,9 +45,12 @@ EmbedKit supports seven estimators, each making different geometric assumptions:
 
 **Result fields:**
 - `estimates` — per-method ID values.
-- `consensus` — aggregate across methods (mean by default).
+- `consensus` — aggregate across methods (median by default).
 - `uncertainty` — standard deviation of per-method estimates.
 - `local_estimates` — per-point local ID for methods that support it (TwoNN, MLE, lPCA).
+- `n_duplicates_removed` — exact duplicate rows dropped before estimation (duplicates make TwoNN divide by zero and MLE return 0).
+
+A method whose estimate is not finite or not positive is reported as NaN, with a warning, and left out of the consensus. Methods run one after another; running them in threads made results vary between runs with the same `random_state`.
 
 **Ranges & interpretation:**
 - `consensus`: positive float in `[1, D]`. A value close to D means the embedding fills the ambient space. Values much smaller than D reveal an under-utilized, low-dimensional manifold. The library flags `ID/D < 0.1` as a strong signal for dimensionality reduction and `ID/D < 0.3` as a moderate signal.
@@ -106,19 +109,21 @@ In high-dimensional spaces, pairwise Euclidean distances tend to concentrate nea
 
 **Class:** `DistanceConcentration(subsample, n_bins, random_state)`
 
-**Result fields:** `relative_contrast`, `concentration_ratio`, `distance_histogram`, `bin_edges`
+**Result fields:** `distance_cv`, `relative_contrast_per_query`, `relative_contrast`, `concentration_ratio`, `distance_histogram`, `bin_edges`
 
 **Ranges & interpretation:**
 
+- `distance_cv` = standard deviation over mean of the pairwise distances: `[0, ∞)`. **Larger is better.** For iid Gaussian data it is about `1 / sqrt(2d)`. The report flags concentration below 0.02 (a provisional threshold, to be replaced by a null-calibrated statistic). Robust to a single duplicated pair.
+- `relative_contrast_per_query` = median over query points of `(d_max − d_min) / d_min`, with zero distances excluded.
 - `relative_contrast` = `(d_max − d_min) / d_mean`: `[0, ∞)`. **Larger is better.** Near 0 means the distance histogram is a narrow spike; high-dimensional random data can push this below 0.1. Values above 1.0 indicate a healthy spread of distances.
-- `concentration_ratio` = `d_min / d_max`: `[0, 1]`. Near 0 = healthy (minimum distances are much smaller than maximum). Near 1 = severe concentration (every pair of points is nearly the same distance apart). The library issues a warning above 0.8.
+- `concentration_ratio` = `d_min / d_max`: `[0, 1]`. Near 0 = healthy (minimum distances are much smaller than maximum). Near 1 = severe concentration (every pair of points is nearly the same distance apart). One duplicated pair sets it to 0, so the report no longer uses it (since 0.1.3).
 
 ```python
 from embedkit.analysis.geometry import DistanceConcentration
 
 result = DistanceConcentration().fit(X)
 print(f"Relative contrast:  {result.relative_contrast:.3f}")
-print(f"Concentration ratio:{result.concentration_ratio:.3f}")
+print(f"Distance CV:        {result.distance_cv:.4f}")
 ```
 
 ---
@@ -129,14 +134,17 @@ An *isotropic* embedding space uses all directions equally — variance is sprea
 
 **Why it matters.** Anisotropy often co-occurs with hubness (a few dominant directions create hub structure). It also wastes capacity: if 700 of 768 dimensions carry negligible variance, those dimensions add noise but no signal. Studies of language model embeddings have shown that strong anisotropy is common in pre-trained representations and degrades downstream tasks (Mu et al., 2018).
 
-**Class:** `IsotropyAnalyzer()`
+**Class:** `IsotropyAnalyzer(n_components=512, n_max=5000, random_state=42)`
 
-**Result fields:** `isotropy_score`, `participation_ratio`, `effective_rank`, `eigenvalue_spectrum`, `explained_variance_ratio`
+**Result fields:** `isotropy_score`, `participation_ratio`, `participation_ratio_corrected`, `participation_ratio_normalized`, `effective_rank`, `eigenvalue_spectrum_top`, `explained_variance_ratio`
+
+All statistics are computed exactly, from the covariance or the Gram matrix of at most `n_max` rows, at any dimension. `eigenvalue_spectrum_top` holds the top `n_components` eigenvalues, for plotting (`eigenvalue_spectrum` is a deprecated alias).
 
 **Ranges & interpretation:**
 
-- `isotropy_score` = `effective_rank / D`: `[0, 1]` (clipped). **1 = perfectly isotropic** (all directions used equally); near 0 = the space has effectively collapsed to a single direction.
-- `participation_ratio` = `(Σλᵢ)² / Σλᵢ²`: `[1, D]`. Intuitively, the number of eigenvalue-weighted dimensions that contribute to the space. Near D = isotropic. The library flags `PR < 0.1 × D` as highly anisotropic and `PR < 0.3 × D` as moderately anisotropic.
+- `isotropy_score` = `effective_rank / min(n − 1, D)`: `[0, 1]` (clipped). **1 = perfectly isotropic** (all directions used equally); near 0 = the space has effectively collapsed to a single direction.
+- `participation_ratio` = `(Σλᵢ)² / Σλᵢ²`: `[1, D]`. Intuitively, the number of eigenvalue-weighted dimensions that contribute to the space. Near D = isotropic. The sample value is biased downward by about `1 / (1 + D/n)`, so an isotropic Gaussian with n = 3,000 gives 0.75·D at D = 1,000 and 0.55·D at D = 2,500.
+- `participation_ratio_corrected`: the same ratio with an unbiased estimate of `tr(Σ²)` (exact for Gaussian data), clipped to `[1, D]`. `participation_ratio_normalized` = corrected / D, in `[0, 1]`; the report flags values below 0.1 as highly and below 0.3 as moderately anisotropic.
 - `effective_rank` = `exp(H)` where H is the entropy of the normalized eigenvalue spectrum: `[1, D]`. Measures how many "effective" principal components are needed to describe the space.
 
 ```python
@@ -203,7 +211,7 @@ The RBF (Gaussian) kernel matrix `K(xᵢ, xⱼ) = exp(−‖xᵢ − xⱼ‖² /
 
 When `sigma="median"` (default), σ is set to the median pairwise distance — a standard heuristic.
 
-**Result fields:** `effective_rank`, `spectral_gap`, `condition_number`, `row_sum_skewness`, `eigenvalues`, `kernel_alignment`, `sigma`
+**Result fields:** `effective_rank`, `spectral_gap`, `condition_number`, `row_sum_skewness`, `eigenvalues`, `centered_kernel_alignment`, `sigma`
 
 **Ranges & interpretation:**
 
@@ -212,12 +220,12 @@ When `sigma="median"` (default), σ is set to the median pairwise distance — a
 | `effective_rank` | [1, subsample_size] | high | low (kernel dominated by 1 component) |
 | `spectral_gap` | [0, 1] | large | near 0 (no clear cluster structure) |
 | `condition_number` | [1, ∞) | near 1 | > 1e6 (numerically unstable) |
-| `kernel_alignment` | [0, 1] or None | near 1 | near 0 (kernel unrelated to labels) |
+| `centered_kernel_alignment` | [−1, 1] or None | near 1 | near 0 (kernel unrelated to labels) |
 
 - `effective_rank`: measures how many eigenvalues carry non-trivial weight. High effective rank = the kernel captures diverse structure in the data.
 - `spectral_gap`: ratio between adjacent leading eigenvalues. A large gap after the first k eigenvalues indicates k well-separated clusters that the kernel can discriminate.
 - `condition_number`: ratio of largest to smallest eigenvalue. Large values indicate numerical ill-conditioning that will destabilize kernel solvers and gradient computations.
-- `kernel_alignment`: populated only when labels `y` are passed to `fit(X, y)`. Measures alignment between the data kernel matrix and the ideal label kernel (Cristianini et al., 2001); near 1 means the RBF geometry reflects the class structure.
+- `centered_kernel_alignment`: populated only when labels `y` are passed to `fit(X, y)`. Centred alignment (both kernels centred, `HKH`) between the data kernel and a label kernel (Cristianini et al., 2001): the indicator kernel for class labels (integers, strings, booleans), an RBF kernel with a median-heuristic bandwidth for continuous labels (1-D floats or 2-D arrays). About 0 for labels independent of the data; near 1 means the RBF geometry reflects the labels. `kernel_alignment` is a deprecated alias (before 0.1.3 it was uncentred, and mostly measured class balance).
 
 ```python
 from embedkit.analysis.kernel import KernelDiagnostics
@@ -295,11 +303,13 @@ Contrastive learning requires *positive pairs*: two different views of the same 
 
 #### GaussianNoise
 
-Adds independent isotropic Gaussian noise to each embedding, producing two noisy views.
+Adds independent Gaussian noise to each embedding, producing two noisy views.
+
+With `relative=True` (the default since 0.1.3), `std` is a multiple of the per-dimension standard deviation of the training data, computed by `precompute` (the trainer calls it); the expected noise norm is then about `std` times the norm of the centred data, whatever the embedding's scale. `relative=False` gives the old absolute standard deviation.
 
 When `adaptive=True`, the noise standard deviation is scaled per-point by the mean distance to its k-nearest neighbors. This adapts the perturbation magnitude to the local density: tight clusters get smaller noise, sparse regions get larger noise.
 
-**Parameters:** `std=0.05`, `adaptive=False`, `k=10`
+**Parameters:** `std=0.05`, `adaptive=False`, `k=10`, `relative=True`
 
 ```python
 from embedkit.improvement.augmentation import GaussianNoise
@@ -348,9 +358,11 @@ x_i, x_j = aug(x_batch)
 
 #### KNNPairs
 
-Instead of perturbing `x` to create a view, `KNNPairs` uses an actual nearest neighbor as the positive partner. The anchor `x` and its closest neighbor `x_pos` form the pair `(x, x_pos)`. This augmentation carries the strongest geometric signal: the network explicitly learns that a point and its neighbors should map to similar representations.
+Instead of perturbing `x` to create a view, `KNNPairs` uses an actual nearest neighbor as the positive partner. The anchor `x` and one of its `k` nearest neighbors, drawn at random, form the pair `(x, x_pos)`. When the trainer calls `precompute`, neighbors come from the whole training set; otherwise they are searched within the batch. This augmentation carries the strongest geometric signal: the network explicitly learns that a point and its neighbors should map to similar representations.
 
-**Parameters:** `k=10`, `hard_negatives=False`
+`KNNPairs` is a *pair* augmentation (`kind = "pair"`). In a sequential `CompositeAugmentation` it must come first, and at most one pair augmentation is allowed; view augmentations placed after it perturb both the anchor and the neighbor.
+
+**Parameters:** `k=10`, `neighbor_index=None`, `metric="euclidean"`
 
 ```python
 from embedkit.improvement.augmentation import KNNPairs
@@ -495,6 +507,8 @@ Supervised contrastive loss for continuous or multi-dimensional labels (Zha et a
 
 Supports both scalar regression targets (shape `(n,)`) and vector targets (shape `(n, k)` for multi-output regression).
 
+**Ties.** Candidates at exactly the same label distance from an anchor share one denominator, which holds the whole tie group and every farther candidate (as in the authors' code). Label distances are computed exactly, so identical labels always tie, and the loss does not depend on the order of the rows in the batch. To treat nearby continuous values as tied, round the labels before training. Versions before 0.1.3 handled ties incorrectly.
+
 **Parameters:** `temperature=0.07`, `chunk_size=None`
 
 - `chunk_size`: when set, the (2N × 2N) similarity matrix is computed in row-blocks of this size, reducing peak GPU memory at the cost of slightly more compute.
@@ -535,17 +549,21 @@ loss = loss_fn(z_i, z_j)
 
 `Trainer` orchestrates the full contrastive training loop. It handles batching, optimization, learning rate scheduling, periodic evaluation against analysis metrics, early stopping, and loss history tracking.
 
-**Class:** `Trainer(model, augmentation, loss, epochs, batch_size, optimizer, lr, weight_decay, scheduler, warmup_epochs, eval_every, eval_metrics, early_stopping_patience, monitor, device, random_state)`
+**Class:** `Trainer(model, augmentation, loss, epochs, batch_size, optimizer, lr, weight_decay, scheduler, warmup_epochs, eval_every, eval_metrics, eval_subsample, eval_k, eval_metric, early_stopping_patience, monitor, restore_best, val_split, device, random_state)`
 
 **Key parameters:**
 
 | Parameter | Options | Notes |
 |-----------|---------|-------|
-| `optimizer` | `"adam"`, `"sgd"`, `"lars"` | Adam is a safe default |
-| `scheduler` | `"cosine"`, `"step"`, `"plateau"`, `None` | Cosine annealing with warmup is recommended |
-| `eval_metrics` | `["uniformity", "isotropy", "k_skewness"]` | Metrics tracked during training |
-| `monitor` | any `eval_metrics` key | Metric watched for early stopping |
-| `early_stopping_patience` | int or `None` | Stops after N evaluations without improvement |
+| `optimizer` | `"adam"`, `"sgd"` | Adam is a safe default |
+| `scheduler` | `"cosine"`, `"step"`, `"plateau"`, `None` | Cosine is stepped per batch, step per epoch, plateau per evaluation |
+| `warmup_epochs` | int, default 0 | Linear learning-rate warm-up before the scheduler |
+| `eval_metrics` | names in `trainer.MONITORS`: `"uniformity"`, `"isotropy"`, `"k_skewness"` | Metrics tracked during training; the monitor is always added |
+| `eval_k`, `eval_metric` | default 10, `"cosine"` | Neighbourhood used by `k_skewness` |
+| `monitor` | a name in `MONITORS` | Metric watched for early stopping; its direction (min or max) comes from the registry |
+| `early_stopping_patience` | int or `None` | Stops after N **evaluations** (not epochs) without improvement |
+| `restore_best` | bool, default `True` | With early stopping, reload the best evaluation's weights at the end (`best_score_`, `best_epoch_`) |
+| `device` | `None`, `"cuda"`, `"mps"`, `"cpu"` | `None` picks CUDA, then MPS, then CPU |
 
 **Workflow:**
 

@@ -9,6 +9,8 @@ from embedkit.improvement.losses.base import BaseLoss
 
 
 class NTXentLoss(BaseLoss):
+    uses_labels = False
+
     def __init__(self, temperature: float = 0.07, chunk_size: int | None = None):
         super().__init__()
         self.temperature = temperature
@@ -42,20 +44,14 @@ class NTXentLoss(BaseLoss):
         """Memory-efficient row-block computation of NT-Xent."""
         two_n = 2 * n
         cs = self.chunk_size
+        cols = torch.arange(two_n, device=z.device)
         losses = []
         for start in range(0, two_n, cs):
             end = min(start + cs, two_n)
-            rows = z[start:end]  # (cs, d)
-            logits = torch.mm(rows, z.T) / self.temperature  # (cs, 2N)
-            for i in range(end - start):
-                logits[i, start + i] = float("-inf")
-            targets = torch.where(
-                torch.arange(end - start, device=z.device) + start < n,
-                targets_i[start:end] if start < n else targets_j[start - n:end - n],
-                targets_j[max(0, start - n):max(0, end - n)] if start >= n else targets_i[start:end],
-            )
-            # Simpler: just build targets for this slice
-            global_idx = torch.arange(start, end, device=z.device)
-            tgt = torch.where(global_idx < n, global_idx + n, global_idx - n)
-            losses.append(F.cross_entropy(logits, tgt))
-        return torch.stack(losses).mean()
+            rows = torch.arange(start, end, device=z.device)
+            logits = torch.mm(z[start:end], z.T) / self.temperature  # (m, 2N)
+            logits = logits.masked_fill(cols[None, :] == rows[:, None], float("-inf"))
+            tgt = torch.where(rows < n, rows + n, rows - n)  # the other view of each row
+            losses.append(F.cross_entropy(logits, tgt, reduction="none"))
+        # Average over all 2N rows, so a short last chunk is not over-weighted.
+        return torch.cat(losses).mean()

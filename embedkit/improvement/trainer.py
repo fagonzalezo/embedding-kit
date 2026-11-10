@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import copy
 import warnings
+from collections.abc import Callable
 from typing import Any, Literal
 
 import numpy as np
@@ -12,10 +14,122 @@ from torch.utils.data import DataLoader, TensorDataset
 from embedkit.improvement.augmentation.base import BaseAugmentation
 from embedkit.improvement.losses.base import BaseLoss
 from embedkit.improvement.model import EmbeddingRefiner
-from embedkit.utils.validation import _to_numpy, _to_tensor
+from embedkit.utils.validation import _to_numpy, _to_tensor, encode_labels
+
+# ---------------------------------------------------------------------------------------------
+# Monitors
+# ---------------------------------------------------------------------------------------------
+# A monitor is a statistic of the refined embedding Z of the evaluation split. Each entry is
+# (function, direction): direction "min" means lower is better, "max" means higher is better.
+# Early stopping, best-weight tracking and ReduceLROnPlateau read the direction from here.
+# Functions take Z and keyword arguments k, metric and random_state.
+
+MonitorFn = Callable[..., float]
+
+
+def _monitor_uniformity(Z: np.ndarray, *, k: int, metric: str, random_state) -> float:
+    from embedkit.analysis.geometry import UniformityScore
+
+    return float(UniformityScore(random_state=random_state).fit(Z).uniformity)
+
+
+def _monitor_isotropy(Z: np.ndarray, *, k: int, metric: str, random_state) -> float:
+    from embedkit.analysis.geometry import IsotropyAnalyzer
+
+    return float(IsotropyAnalyzer().fit(Z).isotropy_score)
+
+
+def _monitor_k_skewness(Z: np.ndarray, *, k: int, metric: str, random_state) -> float:
+    from embedkit.analysis.hubness import HubnessAnalyzer
+
+    k_eff = min(k, Z.shape[0] - 1)
+    return float(
+        HubnessAnalyzer(k=k_eff, metric=metric, random_state=random_state).fit(Z).k_skewness
+    )
+
+
+MONITORS: dict[str, tuple[MonitorFn, Literal["min", "max"]]] = {
+    # Wang & Isola uniformity, log E[exp(-t ||z_i - z_j||^2)]: lower is more uniform.
+    "uniformity": (_monitor_uniformity, "min"),
+    # Normalised effective rank of the covariance spectrum: higher is more isotropic.
+    "isotropy": (_monitor_isotropy, "max"),
+    # Skewness of the k-occurrence distribution: lower means less hubness.
+    "k_skewness": (_monitor_k_skewness, "min"),
+}
+
+
+def _check_monitor_name(name: str) -> None:
+    if name not in MONITORS:
+        raise ValueError(f"Unknown monitor {name!r}. Available: {sorted(MONITORS)}")
+
+
+def _is_improvement(score: float, best: float | None, direction: str) -> bool:
+    if not np.isfinite(score):
+        return False
+    if best is None:
+        return True
+    return score < best if direction == "min" else score > best
+
+
+# ---------------------------------------------------------------------------------------------
+# Device selection
+# ---------------------------------------------------------------------------------------------
+
+
+def _default_device() -> torch.device:
+    """CUDA if available, then Apple MPS, then CPU."""
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    mps = getattr(torch.backends, "mps", None)
+    if mps is not None and mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
 
 
 class Trainer:
+    """Train an :class:`EmbeddingRefiner` with a contrastive loss.
+
+    Parameters (selected)
+    ---------------------
+    scheduler:
+        ``"cosine"`` (cosine annealing, stepped per batch), ``"step"`` (learning rate times
+        0.1 every ``epochs // 3`` epochs, stepped per epoch), ``"plateau"``
+        (``ReduceLROnPlateau`` on the monitor, stepped at each evaluation) or ``None``.
+    warmup_epochs:
+        Linear learning-rate warm-up over this many epochs before the scheduler takes over.
+        0 (the default) disables it.
+    eval_every:
+        Evaluate the monitors every this many epochs.
+    eval_metrics:
+        Names from :data:`MONITORS` to log in ``history`` at each evaluation. The ``monitor``
+        is always added.
+    eval_k, eval_metric:
+        Neighbourhood size and metric used by neighbour-based monitors (``k_skewness``). The
+        default metric is cosine because the refiner's output is L2-normalised.
+    early_stopping_patience:
+        Stop after this many consecutive **evaluations** (not epochs) without improvement of
+        the monitor. With ``eval_every=5`` and a patience of 10, that is 50 epochs. ``None``
+        disables early stopping.
+    monitor:
+        Name in :data:`MONITORS`. Its direction (minimise or maximise) comes from the registry.
+    restore_best:
+        When early stopping is enabled, load the weights of the best evaluation at the end of
+        :meth:`fit`, whether training stopped early or ran out of epochs.
+    device:
+        ``None`` selects CUDA, then Apple MPS, then CPU. If the loss cannot run on MPS, the
+        trainer falls back to CPU with a warning.
+
+    Attributes set by :meth:`fit`
+    -----------------------------
+    best_score_, best_epoch_:
+        Best monitor value and the epoch at which it was reached (``None`` if no evaluation ran).
+    stopped_epoch_:
+        Last epoch trained.
+    history:
+        ``"loss"`` and ``"lr"`` (learning rate at the end of the epoch) per epoch;
+        ``"eval_epoch"`` and one list per monitor, per evaluation.
+    """
+
     def __init__(
         self,
         model: EmbeddingRefiner,
@@ -23,20 +137,39 @@ class Trainer:
         loss: BaseLoss,
         epochs: int = 100,
         batch_size: int = 256,
-        optimizer: Literal["adam", "sgd", "lars"] = "adam",
+        optimizer: Literal["adam", "sgd"] = "adam",
         lr: float = 3e-4,
         weight_decay: float = 1e-4,
         scheduler: Literal["cosine", "step", "plateau", None] = "cosine",
-        warmup_epochs: int = 10,
+        warmup_epochs: int = 0,
         eval_every: int = 10,
         eval_metrics: list[str] | None = None,
         eval_subsample: int = 5_000,
+        eval_k: int = 10,
+        eval_metric: str = "cosine",
         early_stopping_patience: int | None = None,
         monitor: str = "uniformity",
+        restore_best: bool = True,
         val_split: float = 0.0,
         device: str | torch.device | None = None,
         random_state: int | None = 42,
     ):
+        if optimizer not in ("adam", "sgd"):
+            raise ValueError(
+                f"Unknown optimizer {optimizer!r}. Choose 'adam' or 'sgd'. "
+                "('lars' was removed in 0.1.3: it was SGD with a 10x learning rate, not LARS.)"
+            )
+        if scheduler not in ("cosine", "step", "plateau", None):
+            raise ValueError(f"Unknown scheduler {scheduler!r}")
+        if warmup_epochs < 0:
+            raise ValueError("warmup_epochs must be >= 0")
+        _check_monitor_name(monitor)
+        metrics = list(eval_metrics) if eval_metrics is not None else ["uniformity"]
+        for name in metrics:
+            _check_monitor_name(name)
+        if monitor not in metrics:
+            metrics.append(monitor)
+
         self.model = model
         self.augmentation = augmentation
         self.loss = loss
@@ -48,16 +181,27 @@ class Trainer:
         self.scheduler_name = scheduler
         self.warmup_epochs = warmup_epochs
         self.eval_every = eval_every
-        self.eval_metrics = eval_metrics or ["uniformity"]
+        self.eval_metrics = metrics
         self.eval_subsample = eval_subsample
+        self.eval_k = eval_k
+        self.eval_metric = eval_metric
         self.early_stopping_patience = early_stopping_patience
         self.monitor = monitor
+        self.restore_best = restore_best
         self.val_split = val_split
-        self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+        self.device = torch.device(device) if device is not None else _default_device()
         self.random_state = random_state
         self.history: dict[str, list] = {"loss": []}
+        self.best_score_: float | None = None
+        self.best_epoch_: int | None = None
+        self.stopped_epoch_: int = 0
 
-    def fit(self, X, y=None) -> "Trainer":
+    @property
+    def monitor_mode(self) -> Literal["min", "max"]:
+        return MONITORS[self.monitor][1]
+
+    # -----------------------------------------------------------------------------------------
+    def fit(self, X, y=None) -> Trainer:
         if self.random_state is not None:
             torch.manual_seed(self.random_state)
             np.random.seed(self.random_state)
@@ -65,6 +209,9 @@ class Trainer:
         X_np = _to_numpy(X)
         n = X_np.shape[0]
         has_labels = y is not None
+        y_t: torch.Tensor | None = None
+        if has_labels:
+            y_t, _ = encode_labels(y, n_samples=n)
 
         # Carve a held-out validation split for early stopping when requested.
         # Precompute and the DataLoader use only the training portion so the
@@ -78,10 +225,18 @@ class Trainer:
             train_mask[val_idx] = False
             X_val_np = X_np[val_idx]
             X_np = X_np[train_mask]
-            if has_labels:
-                y = np.asarray(y)
-                y = y[train_mask]
+            if y_t is not None:
+                y_t = y_t[torch.from_numpy(train_mask)]
             n = X_np.shape[0]
+
+        if n < 2:
+            raise ValueError(
+                f"Trainer.fit needs at least 2 training samples, got {n}"
+                + (f" after val_split={self.val_split}" if self.val_split > 0.0 else "")
+                + "."
+            )
+
+        self._select_device(X_np, y_t)
 
         # Precompute neighbor structures for augmentations that support it
         # (e.g. KNNPairs), so global dataset-level positives can be used.
@@ -91,22 +246,13 @@ class Trainer:
         # Keep data on CPU; pin_memory lets CUDA transfers overlap with compute.
         # Global row indices (position 1) let index-aware augmentations look up
         # dataset-level neighbors even under a shuffled DataLoader.
-        X_cpu = torch.from_numpy(X_np)
-        idx_cpu = torch.arange(n, dtype=torch.long)
-        tensors = [X_cpu, idx_cpu]
-        if has_labels:
-            y_arr = np.asarray(y)
-            tensors.append(torch.from_numpy(y_arr))
+        tensors = [torch.from_numpy(X_np), torch.arange(n, dtype=torch.long)]
+        if y_t is not None:
+            tensors.append(y_t)
 
         # Contrastive losses need at least two samples per batch. With drop_last=True,
         # a batch_size larger than n would yield zero batches per epoch: no training
         # and a NaN loss (mean of an empty list). Cap the batch at n instead.
-        if n < 2:
-            raise ValueError(
-                f"Trainer.fit needs at least 2 training samples, got {n}"
-                + (f" after val_split={self.val_split}" if self.val_split > 0.0 else "")
-                + "."
-            )
         batch_size = self.batch_size
         if batch_size > n:
             warnings.warn(
@@ -117,32 +263,34 @@ class Trainer:
             )
             batch_size = n
 
-        dataset = TensorDataset(*tensors)
         pin = self.device.type == "cuda"
         loader = DataLoader(
-            dataset, batch_size=batch_size, shuffle=True,
+            TensorDataset(*tensors), batch_size=batch_size, shuffle=True,
             drop_last=True, pin_memory=pin, num_workers=0,
         )
 
-        # Determine the array used for early-stopping evaluation.
-        # Prefer the held-out val split; fall back to a subsample of training data.
+        # Array used for evaluation: the held-out split, else a subsample of the training data.
         if X_val_np is not None:
             X_eval = X_val_np
-        elif n > self.eval_subsample and self.random_state is not None:
+        elif n > self.eval_subsample:
             rng = np.random.default_rng(self.random_state)
-            eval_idx = rng.choice(n, self.eval_subsample, replace=False)
-            X_eval = X_np[eval_idx]
+            X_eval = X_np[rng.choice(n, self.eval_subsample, replace=False)]
         else:
             X_eval = X_np
 
         self.model.to(self.device)
         self.loss.to(self.device)
         opt = self._build_optimizer()
-        sched = self._build_scheduler(opt, len(loader))
+        steps_per_epoch = len(loader)
+        batch_sched, epoch_sched, plateau_sched = self._build_schedulers(opt, steps_per_epoch)
 
-        best_score = float("inf")
+        self.history = {"loss": [], "lr": [], "eval_epoch": []}
+        self.best_score_ = None
+        self.best_epoch_ = None
+        best_state: dict[str, Any] | None = None
         patience_count = 0
-        self.stopped_epoch_: int = self.epochs
+        self.stopped_epoch_ = 0
+        track_best = self.early_stopping_patience is not None
 
         for epoch in range(1, self.epochs + 1):
             self.model.train()
@@ -154,36 +302,45 @@ class Trainer:
                 x_i, x_j = self.augmentation(x_batch, idx_batch)
                 z_i = self.model(x_i)
                 z_j = self.model(x_j)
-                l = self.loss(z_i, z_j, lbl_batch)
+                loss_value = self.loss(z_i, z_j, lbl_batch)
                 opt.zero_grad()
-                l.backward()
+                loss_value.backward()
                 opt.step()
-                if sched is not None and self.scheduler_name != "plateau":
-                    sched.step()
-                ep_losses.append(l.item())
+                if batch_sched is not None:
+                    batch_sched.step()
+                ep_losses.append(loss_value.item())
+            if epoch_sched is not None:
+                epoch_sched.step()
+            self.stopped_epoch_ = epoch
 
-            mean_loss = float(np.mean(ep_losses))
-            self.history["loss"].append(mean_loss)
+            self.history["loss"].append(float(np.mean(ep_losses)))
+            self.history["lr"].append(float(opt.param_groups[0]["lr"]))
 
-            if epoch % self.eval_every == 0:
-                metrics = self._evaluate(X_eval)
-                for k, v in metrics.items():
-                    self.history.setdefault(k, []).append(v)
+            if epoch % self.eval_every != 0:
+                continue
+            metrics = self._evaluate(X_eval)
+            self.history["eval_epoch"].append(epoch)
+            for name, value in metrics.items():
+                self.history.setdefault(name, []).append(value)
+            score = metrics[self.monitor]
 
-                if self.scheduler_name == "plateau" and sched is not None and self.monitor in metrics:
-                    sched.step(metrics[self.monitor])
+            if plateau_sched is not None and epoch > self.warmup_epochs:
+                plateau_sched.step(score)
 
-                if self.early_stopping_patience is not None and self.monitor in metrics:
-                    score = metrics[self.monitor]
-                    if score < best_score:
-                        best_score = score
-                        patience_count = 0
-                    else:
-                        patience_count += 1
-                    if patience_count >= self.early_stopping_patience:
-                        self.stopped_epoch_ = epoch
-                        break
+            if _is_improvement(score, self.best_score_, self.monitor_mode):
+                self.best_score_ = score
+                self.best_epoch_ = epoch
+                patience_count = 0
+                if track_best and self.restore_best:
+                    best_state = _copy_state(self.model)
+            else:
+                patience_count += 1
 
+            if track_best and patience_count >= self.early_stopping_patience:
+                break
+
+        if track_best and self.restore_best and best_state is not None:
+            self.model.load_state_dict(best_state)
         return self
 
     def transform(self, X, batch_size: int | None = None) -> np.ndarray | torch.Tensor:
@@ -191,6 +348,7 @@ class Trainer:
         was_tensor = isinstance(X, torch.Tensor)
         X_np = _to_numpy(X)
         bs = batch_size or max(self.batch_size * 4, 1024)
+        self.model.to(self.device)
         self.model.eval()
         chunks = []
         with torch.no_grad():
@@ -200,46 +358,86 @@ class Trainer:
         Z = torch.cat(chunks, dim=0)
         return Z if was_tensor else Z.numpy()
 
+    def evaluate(self, X) -> dict[str, float]:
+        """Compute every monitor in ``eval_metrics`` on the refined embedding of ``X``."""
+        return self._evaluate(_to_numpy(X))
+
     def _evaluate(self, X_np: np.ndarray) -> dict[str, float]:
-        metrics: dict[str, float] = {}
+        Z_np = self.transform(X_np)
+        return {
+            name: MONITORS[name][0](
+                Z_np, k=self.eval_k, metric=self.eval_metric, random_state=self.random_state
+            )
+            for name in self.eval_metrics
+        }
+
+    # -----------------------------------------------------------------------------------------
+    def _select_device(self, X_np: np.ndarray, y_t: torch.Tensor | None) -> None:
+        """Fall back from MPS to CPU when the loss or augmentation does not run there."""
+        if self.device.type != "mps":
+            return
+        m = min(8, X_np.shape[0])
         try:
-            from embedkit.analysis.geometry import UniformityScore, IsotropyAnalyzer
-            from embedkit.analysis.hubness import HubnessAnalyzer
-            Z_np = self.transform(X_np)
-            if isinstance(Z_np, torch.Tensor):
-                Z_np = Z_np.numpy()
-            if "uniformity" in self.eval_metrics:
-                metrics["uniformity"] = UniformityScore().fit(Z_np).uniformity
-            if "isotropy" in self.eval_metrics:
-                metrics["isotropy"] = IsotropyAnalyzer().fit(Z_np).isotropy_score
-            if "k_skewness" in self.eval_metrics:
-                metrics["k_skewness"] = HubnessAnalyzer().fit(Z_np).k_skewness
-        except Exception as e:
-            warnings.warn(f"Eval step failed: {e}")
-        return metrics
+            x = torch.from_numpy(X_np[:m]).to(self.device)
+            lbl = y_t[:m].to(self.device) if y_t is not None else None
+            probe = copy.deepcopy(self.model).to(self.device)
+            probe.train()
+            loss = copy.deepcopy(self.loss).to(self.device)
+            z_i, z_j = probe(x), probe(x + 0.01 * torch.randn_like(x))
+            loss(z_i, z_j, lbl).backward()
+        except (NotImplementedError, RuntimeError, TypeError) as exc:
+            warnings.warn(
+                f"{type(self.loss).__name__} does not run on MPS ({exc}); training on CPU.",
+                UserWarning,
+                stacklevel=3,
+            )
+            self.device = torch.device("cpu")
 
     def _build_optimizer(self):
         params = list(self.model.parameters()) + list(self.loss.parameters())
         if self.optimizer_name == "adam":
             return torch.optim.Adam(params, lr=self.lr, weight_decay=self.weight_decay)
         if self.optimizer_name == "sgd":
-            return torch.optim.SGD(params, lr=self.lr, momentum=0.9, weight_decay=self.weight_decay)
-        if self.optimizer_name == "lars":
-            try:
-                from torch.optim import SGD
-                return SGD(params, lr=self.lr * 10, momentum=0.9, weight_decay=self.weight_decay)
-            except Exception:
-                return torch.optim.Adam(params, lr=self.lr, weight_decay=self.weight_decay)
+            return torch.optim.SGD(
+                params, lr=self.lr, momentum=0.9, weight_decay=self.weight_decay
+            )
         raise ValueError(f"Unknown optimizer: {self.optimizer_name}")
 
-    def _build_scheduler(self, opt, steps_per_epoch: int):
-        if self.scheduler_name is None:
-            return None
-        total_steps = self.epochs * steps_per_epoch
-        if self.scheduler_name == "cosine":
-            return torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=total_steps)
-        if self.scheduler_name == "step":
-            return torch.optim.lr_scheduler.StepLR(opt, step_size=max(1, self.epochs // 3))
-        if self.scheduler_name == "plateau":
-            return torch.optim.lr_scheduler.ReduceLROnPlateau(opt, patience=5)
-        return None
+    def _build_schedulers(self, opt, steps_per_epoch: int):
+        """Return (per-batch scheduler, per-epoch scheduler, plateau scheduler).
+
+        At most one of the first two is set. Warm-up is linear and is stepped at the same
+        granularity as the scheduler it precedes (per batch for cosine and None, per epoch for
+        step and plateau).
+        """
+        from torch.optim import lr_scheduler as S
+
+        W = self.warmup_epochs
+        name = self.scheduler_name
+
+        def warmup(total_iters: int):
+            return S.LinearLR(opt, start_factor=1.0 / (total_iters + 1), total_iters=total_iters)
+
+        if name == "cosine":
+            total = self.epochs * steps_per_epoch
+            w = min(W * steps_per_epoch, max(total - 1, 0))
+            cosine = S.CosineAnnealingLR(opt, T_max=max(1, total - w))
+            if w == 0:
+                return cosine, None, None
+            return S.SequentialLR(opt, [warmup(w), cosine], milestones=[w]), None, None
+        if name == "step":
+            step = S.StepLR(opt, step_size=max(1, self.epochs // 3), gamma=0.1)
+            if W == 0:
+                return None, step, None
+            return None, S.SequentialLR(opt, [warmup(W), step], milestones=[W]), None
+        if name == "plateau":
+            plateau = S.ReduceLROnPlateau(opt, mode=self.monitor_mode, patience=5)
+            return None, (warmup(W) if W > 0 else None), plateau
+        # No scheduler: warm-up only, if requested.
+        if W > 0:
+            return warmup(W * steps_per_epoch), None, None
+        return None, None, None
+
+
+def _copy_state(model: torch.nn.Module) -> dict[str, Any]:
+    return {k: v.detach().to("cpu", copy=True) for k, v in model.state_dict().items()}

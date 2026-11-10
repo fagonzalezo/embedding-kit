@@ -1,15 +1,40 @@
-"""Shared kNN computation with FAISS backend and bounded result cache."""
+"""Shared exact kNN computation.
+
+Contract of :func:`knn`:
+
+- returns ``(distances, indices)``, both of shape ``(n, k)``;
+- distances are true distances for every backend: Euclidean distance (not squared) for
+  ``metric="euclidean"``, cosine distance ``1 - cos`` for ``metric="cosine"``; each row is
+  sorted in ascending order;
+- the query point itself is excluded *by index*, so a point is never its own neighbour, even
+  when the data contain exact duplicate rows;
+- the input array is never modified;
+- nothing is cached. Callers that need the same graph twice compute it once and pass it on.
+
+Backends: scikit-learn is the default. FAISS (``pip install embedkit[faiss]``) is opt-in with
+``backend="faiss"`` or the environment variable ``EMBEDKIT_KNN_BACKEND=faiss``. Both are exact
+searches; FAISS is only faster.
+"""
 
 from __future__ import annotations
 
+import os
 import warnings
-from collections import OrderedDict
 
 import numpy as np
 
-_MAX_CACHE = 8
-_cache: OrderedDict = OrderedDict()
-_faiss_warned = False  # emit the fallback warning only once per process
+_BACKENDS = ("sklearn", "faiss")
+_ENV_VAR = "EMBEDKIT_KNN_BACKEND"
+
+
+def _resolve_backend(backend: str) -> str:
+    if backend == "auto":
+        backend = os.environ.get(_ENV_VAR, "sklearn").strip().lower() or "sklearn"
+        if backend == "auto":
+            backend = "sklearn"
+    if backend not in _BACKENDS:
+        raise ValueError(f"Unknown kNN backend {backend!r}. Choose from {('auto',) + _BACKENDS}.")
+    return backend
 
 
 def knn(
@@ -18,70 +43,113 @@ def knn(
     metric: str = "euclidean",
     backend: str = "auto",
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Return (distances, indices) arrays of shape (n_samples, k).
+    """Exact k nearest neighbours of every row of ``X`` among the other rows.
 
-    Uses FAISS (the mandatory default); falls back to sklearn with a warning
-    if FAISS cannot be imported at runtime. Results are cached by array
-    address+shape+dtype so repeated calls on the same array within a session
-    are free. Cache is bounded to _MAX_CACHE entries (LRU eviction).
+    Parameters
+    ----------
+    X:
+        Array of shape ``(n, d)``. It is not modified.
+    k:
+        Number of neighbours, ``1 <= k <= n - 1``.
+    metric:
+        ``"euclidean"`` or ``"cosine"`` for every backend. The scikit-learn backend also
+        accepts any metric that ``sklearn.neighbors.NearestNeighbors`` accepts.
+    backend:
+        ``"auto"`` (scikit-learn, unless ``EMBEDKIT_KNN_BACKEND`` says otherwise),
+        ``"sklearn"`` or ``"faiss"``.
+
+    Returns
+    -------
+    distances : float32 array of shape ``(n, k)``, ascending along each row.
+    indices : int64 array of shape ``(n, k)``. Row ``i`` never contains ``i``.
     """
-    cache_key = (X.ctypes.data, X.shape, X.dtype, k, metric)
-    if cache_key in _cache:
-        _cache.move_to_end(cache_key)
-        return _cache[cache_key]
+    X = np.asarray(X)
+    if X.ndim != 2:
+        raise ValueError(f"Expected a 2-D array, got shape {X.shape}")
+    n = X.shape[0]
+    if not 1 <= k <= n - 1:
+        raise ValueError(f"k must be between 1 and n - 1 = {n - 1}, got {k}")
 
-    use_faiss = False
-    if backend in ("auto", "faiss"):
-        try:
-            import faiss  # noqa: F401
-            use_faiss = True
-        except ImportError:
-            if backend == "faiss":
-                raise
-            global _faiss_warned
-            if not _faiss_warned:
-                warnings.warn(
-                    "faiss import failed — falling back to sklearn kNN, which is much slower. "
-                    "Check your faiss-cpu installation.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-                _faiss_warned = True
-
-    if use_faiss:
-        result = _knn_faiss(X, k, metric)
+    resolved = _resolve_backend(backend)
+    if resolved == "faiss":
+        distances, indices = _search_faiss(X, k + 1, metric)
     else:
-        result = _knn_sklearn(X, k, metric)
-
-    _cache[cache_key] = result
-    if len(_cache) > _MAX_CACHE:
-        _cache.popitem(last=False)
-    return result
+        distances, indices = _search_sklearn(X, k + 1, metric)
+    return _drop_self(distances, indices, k)
 
 
-def _knn_sklearn(X: np.ndarray, k: int, metric: str):
+def _drop_self(distances: np.ndarray, indices: np.ndarray, k: int):
+    """Remove the query from each row of a (k + 1)-neighbour search.
+
+    The entry equal to the row index is dropped when present; otherwise (the query was pushed
+    out by exact duplicates) the last entry is dropped.
+    """
+    n = indices.shape[0]
+    is_self = indices == np.arange(n)[:, None]
+    has_self = is_self.any(axis=1)
+    # For rows without the query, mark the last column for removal.
+    is_self[~has_self, -1] = True
+    # Keep only the first marked entry per row (a row cannot contain its own index twice,
+    # but be defensive).
+    first = is_self.argmax(axis=1)
+    keep = np.ones_like(is_self)
+    keep[np.arange(n), first] = False
+    distances = distances[keep].reshape(n, k)
+    indices = indices[keep].reshape(n, k)
+    return distances.astype(np.float32, copy=False), indices.astype(np.int64, copy=False)
+
+
+def _search_sklearn(X: np.ndarray, n_neighbors: int, metric: str):
     from sklearn.neighbors import NearestNeighbors
-    nn = NearestNeighbors(n_neighbors=k + 1, metric=metric, algorithm="auto", n_jobs=-1)
+
+    nn = NearestNeighbors(n_neighbors=n_neighbors, metric=metric, algorithm="auto", n_jobs=-1)
     nn.fit(X)
     distances, indices = nn.kneighbors(X)
-    return distances[:, 1:].astype(np.float32), indices[:, 1:].astype(np.int64)
+    if metric == "cosine":
+        # Rounding can give tiny negative values for identical directions.
+        np.maximum(distances, 0.0, out=distances)
+    return distances, indices
 
 
-def _knn_faiss(X: np.ndarray, k: int, metric: str):
-    import faiss
-    X32 = np.ascontiguousarray(X, dtype=np.float32)
+def _search_faiss(X: np.ndarray, n_neighbors: int, metric: str):
+    try:
+        import faiss
+    except ImportError as exc:  # pragma: no cover - depends on the environment
+        raise ImportError(
+            "backend='faiss' needs the faiss package. Install it with "
+            "`pip install embedkit[faiss]` (or faiss-cpu), or use backend='sklearn'."
+        ) from exc
+
+    if metric not in ("euclidean", "cosine"):
+        warnings.warn(
+            f"The FAISS backend supports 'euclidean' and 'cosine'; using scikit-learn for "
+            f"metric={metric!r}.",
+            stacklevel=3,
+        )
+        return _search_sklearn(X, n_neighbors, metric)
+
+    # Always copy: faiss.normalize_L2 works in place and must not touch the caller's array.
+    X32 = np.array(X, dtype=np.float32, order="C", copy=True)
     d = X32.shape[1]
     if metric == "euclidean":
         index = faiss.IndexFlatL2(d)
-    elif metric in ("cosine", "ip"):
+        index.add(X32)
+        sq, indices = index.search(X32, n_neighbors)
+        distances = np.sqrt(np.maximum(sq, 0.0))
+    else:
         faiss.normalize_L2(X32)
         index = faiss.IndexFlatIP(d)
-    else:
-        return _knn_sklearn(X, k, metric)
-    index.add(X32)
-    distances, indices = index.search(X32, k + 1)
-    return distances[:, 1:].astype(np.float32), indices[:, 1:].astype(np.int64)
+        index.add(X32)
+        sims, indices = index.search(X32, n_neighbors)
+        distances = np.maximum(1.0 - sims, 0.0)  # inner products are sorted descending
+    return distances, indices
 
 
 def clear_cache() -> None:
-    _cache.clear()
+    """Deprecated no-op. :func:`knn` no longer caches results."""
+    warnings.warn(
+        "embedkit.utils.neighbors.clear_cache() is deprecated and does nothing: knn() no "
+        "longer caches results. It will be removed in the next release.",
+        DeprecationWarning,
+        stacklevel=2,
+    )

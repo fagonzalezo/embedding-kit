@@ -9,6 +9,16 @@ from embedkit.improvement.losses.base import BaseLoss
 
 
 class SupConLoss(BaseLoss):
+    """Supervised contrastive loss (Khosla et al., 2020, Eq. 2).
+
+    Positives are the samples with an equal label (plus the other view of the anchor).
+    Labels must be class identifiers of shape ``(N,)`` (or ``(N, 1)``); vector-valued labels
+    are rejected with a ``ValueError``. With ``labels=None`` the only positive of each row
+    is its other view (SimCLR-style).
+    """
+
+    uses_labels = True
+
     def __init__(self, temperature: float = 0.07, chunk_size: int | None = None):
         super().__init__()
         self.temperature = temperature
@@ -24,6 +34,7 @@ class SupConLoss(BaseLoss):
         z = F.normalize(torch.cat([z_i, z_j], dim=0), dim=1)  # (2N, d)
 
         if labels is not None:
+            labels = _check_labels(labels, n)
             lbl = torch.cat([labels, labels], dim=0)
             pos_mask = (lbl.unsqueeze(0) == lbl.unsqueeze(1)).float()
             pos_mask.fill_diagonal_(0.0)
@@ -67,3 +78,17 @@ class SupConLoss(BaseLoss):
             losses.append(-(pm_chunk * log_prob).sum(dim=1) / n_pos)  # per-row losses
         # Mean over all rows (not mean of chunk means, which overweights a short last chunk).
         return torch.cat(losses).mean()
+
+
+def _check_labels(labels: torch.Tensor, n: int) -> torch.Tensor:
+    if labels.dim() == 2 and labels.shape[1] == 1:
+        labels = labels[:, 0]
+    if labels.dim() != 1:
+        raise ValueError(
+            "SupConLoss expects 1-D class labels of shape (N,) (or (N, 1)); "
+            f"got labels of shape {tuple(labels.shape)}. Encode vector-valued labels as class "
+            "ids, or use RankNContrastLoss for continuous or vector targets."
+        )
+    if labels.shape[0] != n:
+        raise ValueError(f"SupConLoss: got {labels.shape[0]} labels for {n} samples")
+    return labels

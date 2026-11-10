@@ -1,16 +1,6 @@
 """Integration tests for EmbedKit high-level API."""
 
-import numpy as np
 import pytest
-
-from embedkit.utils.neighbors import clear_cache
-
-
-@pytest.fixture(autouse=True)
-def reset_cache():
-    clear_cache()
-    yield
-    clear_cache()
 
 
 class TestEmbedKit:

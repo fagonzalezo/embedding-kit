@@ -612,15 +612,15 @@ Release as 0.5.0.
 
 | WP | Title | Status |
 |---|---|---|
-| 0.1 | FAISS optional | not started |
+| 0.1 | FAISS optional | done (2026-11-10, with WP 1.1) |
 | 0.2 | Reproducibility | not started |
 | 0.3 | Continuous integration | not started |
 | 0.4 | Stale documentation | not started |
-| 1.1 | Nearest neighbours | not started |
-| 1.2 | Losses | not started |
-| 1.3 | Trainer | not started |
-| 1.4 | Augmentations | not started |
-| 1.5 | Analysis fixes | not started |
+| 1.1 | Nearest neighbours | done (2026-11-10) |
+| 1.2 | Losses | done (2026-11-10) |
+| 1.3 | Trainer | done (2026-11-10); CUDA run of the loss tests on the cluster still to do |
+| 1.4 | Augmentations | done (2026-11-10) |
+| 1.5 | Analysis fixes | done (2026-11-10); see deviation note below |
 | 2.1 | Metrics | not started |
 | 2.2 | Training-free transforms | not started |
 | 2.3 | Protocol | not started |
@@ -647,6 +647,26 @@ Release as 0.5.0.
 | 7.2 | Selection-based auto-configuration | not started |
 | 7.3 | Robustness and scaling | not started |
 | 7.4 | Documentation | not started |
+
+### Phase 1 notes (2026-11-10)
+
+- **Deviation in WP 1.5 (confirmed by the user, 2026-11-10).** `PR / min(n − 1, d)` cannot meet the WP 1.5 acceptance test (within 0.05 at
+  d = 1,000 and 2,500, n = 3,000): the plug-in participation ratio is biased by about `1 / (1 + d/n)`,
+  giving 0.75 and 0.55. `participation_ratio` stays the plug-in value. A new
+  `participation_ratio_corrected` uses the unbiased Gaussian (Wishart) estimate of `tr(Σ²)`, and
+  `participation_ratio_normalized = corrected / d` is what the report thresholds. `isotropy_score` and
+  `effective_rank` still carry the finite-sample bias (0.85 and 0.66 in the same setting); phase 4 (WP 4.1,
+  4.3) should revisit them with the null models.
+- **`SupConLoss` with vector labels** raises `ValueError` (confirmed by the user). Multi-label
+  supervision, if wanted, belongs to phase 6.
+- **Provisional `distance_cv` threshold:** 0.02 (fires for iid Gaussians from about d = 1,250 at
+  n = 2,000; the old `concentration_ratio > 0.8` rule fired from about d = 1,000). Replace in WP 4.1.
+- **Still open from phase 1 exit criteria:** CI (WP 0.3) does not exist yet, so "all tests pass in CI on
+  both operating systems" is unverified; the version is 0.1.3 but not tagged; the loss tests have not
+  been run on CUDA.
+- Phase 0 WP 0.2 (generators instead of global seeding), 0.3 (CI) and 0.4 (stale `CLAUDE.md`) are
+  not done. Augmentations already draw only from torch's RNG, ready for WP 0.2.
+- `skills/embedkit/references/metric_guide.md` still describes 0.1.2 fields and thresholds (WP 7.4).
 
 ## Open points for the next session
 

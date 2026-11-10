@@ -1,16 +1,6 @@
 """Tests for embedkit.analysis.*"""
 
 import numpy as np
-import pytest
-
-from embedkit.utils.neighbors import clear_cache
-
-
-@pytest.fixture(autouse=True)
-def reset_knn_cache():
-    clear_cache()
-    yield
-    clear_cache()
 
 
 class TestIntrinsicDim:
@@ -79,7 +69,7 @@ class TestGeometry:
         assert 1.0 <= r.participation_ratio <= d + 1e-3
         assert 0.0 <= r.isotropy_score <= 1.0
         assert r.effective_rank >= 1.0
-        assert len(r.eigenvalue_spectrum) == d
+        assert len(r.eigenvalue_spectrum_top) == d
 
     def test_neighbor_consistency(self, small_X):
         from embedkit.analysis.geometry import NeighborConsistency
@@ -111,17 +101,17 @@ class TestKernelDiagnostics:
         assert r.sigma > 0.0
         assert r.condition_number >= 1.0
 
-    def test_kernel_alignment_with_labels(self, small_Xy):
+    def test_centered_kernel_alignment_with_labels(self, small_Xy):
         from embedkit.analysis.kernel import KernelDiagnostics
         X, y = small_Xy
         r = KernelDiagnostics().fit(X, y)
-        assert r.kernel_alignment is not None
-        assert 0.0 <= r.kernel_alignment <= 1.0
+        assert r.centered_kernel_alignment is not None
+        assert 0.0 <= r.centered_kernel_alignment <= 1.0
 
-    def test_kernel_alignment_none_without_labels(self, small_X):
+    def test_centered_kernel_alignment_none_without_labels(self, small_X):
         from embedkit.analysis.kernel import KernelDiagnostics
         r = KernelDiagnostics().fit(small_X)
-        assert r.kernel_alignment is None
+        assert r.centered_kernel_alignment is None
 
 
 class TestEmbedKitAnalyzer:

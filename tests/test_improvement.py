@@ -4,15 +4,6 @@ import numpy as np
 import pytest
 import torch
 
-from embedkit.utils.neighbors import clear_cache
-
-
-@pytest.fixture(autouse=True)
-def reset_cache():
-    clear_cache()
-    yield
-    clear_cache()
-
 
 @pytest.fixture
 def small_tensor():
@@ -95,13 +86,21 @@ class TestAugmentations:
         assert xi.shape == small_tensor.shape
 
     def test_composite_sequential_shape(self, small_tensor):
-        from embedkit.improvement.augmentation import CompositeAugmentation, GaussianNoise, FeatureDropout
+        from embedkit.improvement.augmentation import (
+            CompositeAugmentation,
+            FeatureDropout,
+            GaussianNoise,
+        )
         aug = CompositeAugmentation([GaussianNoise(0.05), FeatureDropout(0.1)], mode="sequential")
         xi, xj = aug(small_tensor)
         assert xi.shape == small_tensor.shape
 
     def test_composite_random_choice_shape(self, small_tensor):
-        from embedkit.improvement.augmentation import CompositeAugmentation, GaussianNoise, FeatureDropout
+        from embedkit.improvement.augmentation import (
+            CompositeAugmentation,
+            FeatureDropout,
+            GaussianNoise,
+        )
         aug = CompositeAugmentation([GaussianNoise(0.05), FeatureDropout(0.1)], mode="random_choice")
         xi, xj = aug(small_tensor)
         assert xi.shape == small_tensor.shape
@@ -179,6 +178,7 @@ class TestLosses:
     def test_supcon_gradient_unchanged(self, labels_tensor):
         """The pre-0.1.2 formula had a NaN value but the same gradient as the fixed one."""
         import torch.nn.functional as F
+
         from embedkit.improvement.losses import SupConLoss
         torch.manual_seed(4)
         z1 = torch.randn(64, 16, requires_grad=True)
@@ -200,7 +200,7 @@ class TestLosses:
         assert torch.allclose(grad_fixed, z1.grad, atol=1e-7)
 
     def test_combined_loss_gradient(self, small_tensor):
-        from embedkit.improvement.losses import CombinedLoss, NTXentLoss, AlignUniformLoss
+        from embedkit.improvement.losses import AlignUniformLoss, CombinedLoss, NTXentLoss
         z = small_tensor.requires_grad_(True)
         loss_fn = CombinedLoss([(NTXentLoss(), 1.0), (AlignUniformLoss(), 0.5)])
         loss = loss_fn(z, z + 0.01)
@@ -274,7 +274,7 @@ class TestEmbeddingRefiner:
 
 class TestTrainer:
     def test_smoke_fit(self, small_X):
-        from embedkit.improvement import EmbeddingRefiner, Trainer, GaussianNoise, NTXentLoss
+        from embedkit.improvement import EmbeddingRefiner, GaussianNoise, NTXentLoss, Trainer
         model = EmbeddingRefiner(input_dim=small_X.shape[1], target_dim=8)
         trainer = Trainer(
             model=model,
@@ -288,7 +288,7 @@ class TestTrainer:
         assert len(trainer.history["loss"]) == 2
 
     def test_transform_output_shape(self, small_X):
-        from embedkit.improvement import EmbeddingRefiner, Trainer, GaussianNoise, NTXentLoss
+        from embedkit.improvement import EmbeddingRefiner, GaussianNoise, NTXentLoss, Trainer
         model = EmbeddingRefiner(input_dim=small_X.shape[1], target_dim=8)
         trainer = Trainer(
             model=model,
@@ -303,7 +303,7 @@ class TestTrainer:
         assert Z.shape == (small_X.shape[0], 8)
 
     def test_supervised_fit(self, small_Xy):
-        from embedkit.improvement import EmbeddingRefiner, Trainer, GaussianNoise, SupConLoss
+        from embedkit.improvement import EmbeddingRefiner, GaussianNoise, SupConLoss, Trainer
         X, y = small_Xy
         model = EmbeddingRefiner(input_dim=X.shape[1], target_dim=8)
         trainer = Trainer(
@@ -323,7 +323,7 @@ class TestTrainer:
     @pytest.mark.parametrize("val_split", [0.0, 0.2])
     def test_batch_size_larger_than_dataset(self, small_X, val_split):
         """n < batch_size used to give zero batches per epoch and a NaN loss."""
-        from embedkit.improvement import EmbeddingRefiner, Trainer, GaussianNoise, NTXentLoss
+        from embedkit.improvement import EmbeddingRefiner, GaussianNoise, NTXentLoss, Trainer
         model = EmbeddingRefiner(input_dim=small_X.shape[1], target_dim=8)
         trainer = Trainer(
             model=model,
@@ -341,11 +341,12 @@ class TestTrainer:
         assert np.all(np.isfinite(trainer.history["loss"]))
         assert trainer.batch_size == 256  # constructor param left untouched
         # The model was actually trained.
-        assert any(not torch.equal(a, b) for a, b in zip(params_before, model.parameters()))
+        assert any(not torch.equal(a, b.detach().cpu()) for a, b in zip(params_before, model.parameters()))
 
     def test_no_warning_when_batch_fits(self, small_X):
         import warnings
-        from embedkit.improvement import EmbeddingRefiner, Trainer, GaussianNoise, NTXentLoss
+
+        from embedkit.improvement import EmbeddingRefiner, GaussianNoise, NTXentLoss, Trainer
         trainer = Trainer(
             model=EmbeddingRefiner(input_dim=small_X.shape[1], target_dim=8),
             augmentation=GaussianNoise(std=0.05),
@@ -359,7 +360,7 @@ class TestTrainer:
             trainer.fit(small_X)
 
     def test_too_few_samples_raises(self, small_X):
-        from embedkit.improvement import EmbeddingRefiner, Trainer, GaussianNoise, NTXentLoss
+        from embedkit.improvement import EmbeddingRefiner, GaussianNoise, NTXentLoss, Trainer
         trainer = Trainer(
             model=EmbeddingRefiner(input_dim=small_X.shape[1], target_dim=8),
             augmentation=GaussianNoise(std=0.05),
@@ -371,7 +372,7 @@ class TestTrainer:
             trainer.fit(small_X[:1])
 
     def test_trainer_supervised_continuous(self, small_X):
-        from embedkit.improvement import EmbeddingRefiner, Trainer, GaussianNoise, RankNContrastLoss
+        from embedkit.improvement import EmbeddingRefiner, GaussianNoise, RankNContrastLoss, Trainer
         rng = np.random.default_rng(1)
         y = rng.standard_normal(small_X.shape[0]).astype(np.float32)
         model = EmbeddingRefiner(input_dim=small_X.shape[1], target_dim=8)
@@ -388,7 +389,7 @@ class TestTrainer:
         assert Z.shape == (small_X.shape[0], 8)
 
     def test_loss_decreases(self, small_X):
-        from embedkit.improvement import EmbeddingRefiner, Trainer, GaussianNoise, NTXentLoss
+        from embedkit.improvement import EmbeddingRefiner, GaussianNoise, NTXentLoss, Trainer
         model = EmbeddingRefiner(input_dim=small_X.shape[1], target_dim=8)
         trainer = Trainer(
             model=model,
