@@ -18,9 +18,9 @@ class CombinedLoss(BaseLoss):
 
     def __init__(self, losses: list[tuple[BaseLoss, float]]):
         super().__init__()
-        self.loss_fns = torch.nn.ModuleList([l for l, _ in losses])
+        self.loss_fns = torch.nn.ModuleList([fn for fn, _ in losses])
         self.weights = [w for _, w in losses]
-        self.uses_labels = any(getattr(l, "uses_labels", False) for l, _ in losses)
+        self.uses_labels = any(getattr(fn, "uses_labels", False) for fn, _ in losses)
 
     def forward(
         self,

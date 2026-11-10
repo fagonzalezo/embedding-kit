@@ -74,7 +74,7 @@ class GaussianNoise(BaseAugmentation):
 
     def __call__(self, x: torch.Tensor, indices=None) -> tuple[torch.Tensor, torch.Tensor]:
         scale = self._scale(x)
-        return x + torch.randn_like(x) * scale, x + torch.randn_like(x) * scale
+        return x + self._randn(x) * scale, x + self._randn(x) * scale
 
 
 class FeatureDropout(BaseAugmentation):
@@ -84,6 +84,6 @@ class FeatureDropout(BaseAugmentation):
         self.p = p
 
     def __call__(self, x: torch.Tensor, indices=None) -> tuple[torch.Tensor, torch.Tensor]:
-        mask_i = (torch.rand_like(x) > self.p).float()
-        mask_j = (torch.rand_like(x) > self.p).float()
+        mask_i = (self._rand(x) > self.p).to(x.dtype)
+        mask_j = (self._rand(x) > self.p).to(x.dtype)
         return x * mask_i, x * mask_j

@@ -64,7 +64,7 @@ class KNNPairs(BaseAugmentation):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         idx_np = indices.cpu().numpy()
         # Randomly pick one of the k neighbors for each anchor.
-        rand_col = torch.randint(0, self.neighbor_index.shape[1], (len(idx_np),)).numpy()
+        rand_col = self._randint(self.neighbor_index.shape[1], (len(idx_np),)).numpy()
         neighbor_global = self.neighbor_index[idx_np, rand_col]  # (B,)
         x_j = self._X_ref[torch.from_numpy(neighbor_global)].to(x.device, dtype=x.dtype)
         return x, x_j
@@ -77,6 +77,6 @@ class KNNPairs(BaseAugmentation):
             raise ValueError("KNNPairs needs at least 2 rows in a batch to find a neighbour")
         k = min(self.k, b - 1)
         _, indices = knn(x.detach().cpu().numpy(), k, metric=self.metric)
-        rand_col = torch.randint(0, k, (b,)).numpy()
+        rand_col = self._randint(k, (b,)).numpy()
         chosen = torch.from_numpy(indices[np.arange(b), rand_col]).to(x.device)
         return x, x[chosen]

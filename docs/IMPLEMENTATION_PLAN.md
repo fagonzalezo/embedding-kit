@@ -613,9 +613,9 @@ Release as 0.5.0.
 | WP | Title | Status |
 |---|---|---|
 | 0.1 | FAISS optional | done (2026-11-10, with WP 1.1) |
-| 0.2 | Reproducibility | not started |
-| 0.3 | Continuous integration | not started |
-| 0.4 | Stale documentation | not started |
+| 0.2 | Reproducibility | done (2026-11-10) |
+| 0.3 | Continuous integration | workflow written (2026-11-10); green run pending a push |
+| 0.4 | Stale documentation | done (2026-11-10) |
 | 1.1 | Nearest neighbours | done (2026-11-10) |
 | 1.2 | Losses | done (2026-11-10) |
 | 1.3 | Trainer | done (2026-11-10); CUDA run of the loss tests on the cluster still to do |
@@ -661,11 +661,10 @@ Release as 0.5.0.
   supervision, if wanted, belongs to phase 6.
 - **Provisional `distance_cv` threshold:** 0.02 (fires for iid Gaussians from about d = 1,250 at
   n = 2,000; the old `concentration_ratio > 0.8` rule fired from about d = 1,000). Replace in WP 4.1.
-- **Still open from phase 1 exit criteria:** CI (WP 0.3) does not exist yet, so "all tests pass in CI on
-  both operating systems" is unverified; the version is 0.1.3 but not tagged; the loss tests have not
-  been run on CUDA.
-- Phase 0 WP 0.2 (generators instead of global seeding), 0.3 (CI) and 0.4 (stale `CLAUDE.md`) are
-  not done. Augmentations already draw only from torch's RNG, ready for WP 0.2.
+- **Still open from phase 1 exit criteria:** a green CI run on both operating systems (needs a push);
+  the loss tests have not been run on CUDA.
+- Phase 0 was completed after phase 1 on the same branch (WP 0.2 to 0.4). The CI workflow has not
+  run yet: it needs the branch pushed.
 - `skills/embedkit/references/metric_guide.md` still describes 0.1.2 fields and thresholds (WP 7.4).
 
 ## Open points for the next session

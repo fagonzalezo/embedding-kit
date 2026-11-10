@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import warnings
 from collections.abc import Callable
@@ -202,9 +203,31 @@ class Trainer:
 
     # -----------------------------------------------------------------------------------------
     def fit(self, X, y=None) -> Trainer:
+        """Train the model on ``X`` (and labels ``y`` for supervised losses).
+
+        With an integer ``random_state`` the run is reproducible on CPU, and the caller's global
+        NumPy and torch random states are left untouched: data order, augmentation draws and
+        dropout all come from generators derived from ``random_state``. (The model's initial
+        weights are drawn when the model is built; build it under a fixed seed too.)
+        """
+        with _rng_scope(self.random_state is not None):
+            return self._fit(X, y)
+
+    def _fit(self, X, y=None) -> Trainer:
+        loader_gen: torch.Generator | None = None
         if self.random_state is not None:
-            torch.manual_seed(self.random_state)
-            np.random.seed(self.random_state)
+            ss_loader, ss_aug_torch, ss_aug_np, ss_global = np.random.SeedSequence(
+                self.random_state
+            ).spawn(4)
+            loader_gen = torch.Generator().manual_seed(_seed_int(ss_loader))
+            aug_torch_gen = torch.Generator().manual_seed(_seed_int(ss_aug_torch))
+            aug_np_rng = np.random.default_rng(ss_aug_np)
+            # Global torch state (dropout inside the model); restored on exit by _rng_scope.
+            torch.manual_seed(_seed_int(ss_global))
+        else:
+            aug_torch_gen, aug_np_rng = None, None
+        if hasattr(self.augmentation, "set_rng"):
+            self.augmentation.set_rng(aug_np_rng, aug_torch_gen)
 
         X_np = _to_numpy(X)
         n = X_np.shape[0]
@@ -266,7 +289,7 @@ class Trainer:
         pin = self.device.type == "cuda"
         loader = DataLoader(
             TensorDataset(*tensors), batch_size=batch_size, shuffle=True,
-            drop_last=True, pin_memory=pin, num_workers=0,
+            drop_last=True, pin_memory=pin, num_workers=0, generator=loader_gen,
         )
 
         # Array used for evaluation: the held-out split, else a subsample of the training data.
@@ -381,9 +404,9 @@ class Trainer:
             x = torch.from_numpy(X_np[:m]).to(self.device)
             lbl = y_t[:m].to(self.device) if y_t is not None else None
             probe = copy.deepcopy(self.model).to(self.device)
-            probe.train()
+            probe.eval()  # no dropout: the probe must not consume random numbers
             loss = copy.deepcopy(self.loss).to(self.device)
-            z_i, z_j = probe(x), probe(x + 0.01 * torch.randn_like(x))
+            z_i, z_j = probe(x), probe(x.roll(1, dims=0))
             loss(z_i, z_j, lbl).backward()
         except (NotImplementedError, RuntimeError, TypeError) as exc:
             warnings.warn(
@@ -437,6 +460,28 @@ class Trainer:
         if W > 0:
             return warmup(W * steps_per_epoch), None, None
         return None, None, None
+
+
+def _seed_int(ss: np.random.SeedSequence) -> int:
+    return int(ss.generate_state(1, dtype=np.uint64)[0] % (2**63 - 1))
+
+
+@contextlib.contextmanager
+def _rng_scope(enabled: bool):
+    """Save the global torch RNG states (CPU, CUDA, MPS) and restore them on exit."""
+    if not enabled:
+        yield
+        return
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(torch.random.fork_rng(devices=[]))  # CPU
+        if torch.cuda.is_available():
+            stack.enter_context(
+                torch.random.fork_rng(devices=list(range(torch.cuda.device_count())))
+            )
+        mps = getattr(torch.backends, "mps", None)
+        if mps is not None and mps.is_available():
+            stack.enter_context(torch.random.fork_rng(devices=[0], device_type="mps"))
+        yield
 
 
 def _copy_state(model: torch.nn.Module) -> dict[str, Any]:

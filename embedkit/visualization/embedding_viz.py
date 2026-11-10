@@ -21,7 +21,8 @@ class EmbeddingVisualizer:
     def _reduce(self, X: np.ndarray) -> np.ndarray:
         if self.method == "pca" or X.shape[1] <= self.n_components:
             from sklearn.decomposition import PCA
-            return PCA(n_components=self.n_components, random_state=self.random_state).fit_transform(X)
+            pca = PCA(n_components=self.n_components, random_state=self.random_state)
+            return pca.fit_transform(X)
         import umap
         return umap.UMAP(
             n_components=self.n_components,

@@ -101,7 +101,9 @@ class TestAugmentations:
             FeatureDropout,
             GaussianNoise,
         )
-        aug = CompositeAugmentation([GaussianNoise(0.05), FeatureDropout(0.1)], mode="random_choice")
+        aug = CompositeAugmentation(
+            [GaussianNoise(0.05), FeatureDropout(0.1)], mode="random_choice"
+        )
         xi, xj = aug(small_tensor)
         assert xi.shape == small_tensor.shape
 
@@ -341,7 +343,8 @@ class TestTrainer:
         assert np.all(np.isfinite(trainer.history["loss"]))
         assert trainer.batch_size == 256  # constructor param left untouched
         # The model was actually trained.
-        assert any(not torch.equal(a, b.detach().cpu()) for a, b in zip(params_before, model.parameters()))
+        after = [p.detach().cpu() for p in model.parameters()]
+        assert any(not torch.equal(a, b) for a, b in zip(params_before, after))
 
     def test_no_warning_when_batch_fits(self, small_X):
         import warnings

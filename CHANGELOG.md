@@ -142,6 +142,28 @@ that fails on 0.1.2.
   failure (warning, NaN, excluded from the consensus), and `random_state` reaches every estimator that
   accepts it. `EmbedKit(target_dim="auto")` can choose a different dimension than in 0.1.2.
 
+### Reproducibility (D13, D24; WP 0.2)
+- **`random_state` did not make a run reproducible (D13).** `EmbedKit` built the refiner, and drew its
+  initial weights, before `Trainer.fit` seeded torch; four identical `EmbedKit(random_state=0)` fits
+  stopped at four different epochs. `EmbedKit` now draws the initial weights from `random_state`, and
+  two fits with the same `random_state` return identical arrays on CPU (GPU and MPS kernels are not
+  guaranteed to be deterministic).
+- **`Trainer.fit` no longer reseeds the global NumPy and torch state.** It used to call
+  `np.random.seed` and `torch.manual_seed`, a side effect on the caller's process. The data order, the
+  augmentation draws and dropout now come from generators derived from `random_state`, and the global
+  CPU, CUDA and MPS random states are restored when `fit` returns.
+- New `BaseAugmentation.set_rng(np_rng, torch_gen)`, called by `Trainer.fit`; every built-in
+  augmentation draws only from these generators. `EmbeddingMixup` draws its mixing weights with NumPy's
+  `beta` from that generator.
+- The MPS capability probe no longer consumes random numbers.
+
+### Tooling (WP 0.3)
+- GitHub Actions workflow (`.github/workflows/ci.yml`): `ruff check embedkit tests` and `pytest` on
+  Ubuntu and macOS with Python 3.10 and 3.12, plus a job that runs the kNN tests with
+  `EMBEDKIT_KNN_BACKEND=faiss`.
+- Ruff ignores the naming rules for math-style names (`X`, `Z`, `F`); the package and tests pass
+  `ruff check`.
+
 ### Other
 - The version is 0.1.3 in both `pyproject.toml` and `embedkit.__version__`.
 - `EmbeddingVisualizer.plot_training_trajectory` plots monitors against `history["eval_epoch"]` and

@@ -66,13 +66,19 @@ class CompositeAugmentation(BaseAugmentation):
         for aug in self.augs:
             aug.precompute(X)
 
+    def set_rng(self, np_rng=None, torch_gen=None) -> None:
+        """Share the generators with every member."""
+        super().set_rng(np_rng, torch_gen)
+        for aug in self.augs:
+            aug.set_rng(np_rng, torch_gen)
+
     def __call__(
         self,
         x: torch.Tensor,
         indices: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         if self.mode == "random_choice":
-            aug = self.augs[int(torch.randint(len(self.augs), (1,)))]
+            aug = self.augs[int(self._randint(len(self.augs), (1,)))]
             return aug(x, indices)
         # sequential: the pair augmentation (if any, always first) yields the two base views;
         # each view augmentation then perturbs each view with its own draw.

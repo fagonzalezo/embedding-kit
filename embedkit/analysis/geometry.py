@@ -240,7 +240,11 @@ class NeighborConsistency(BaseAnalyzer):
             n = self.subsample
 
         # Scale perturbation count down for large subsamples to keep wall time bounded.
-        n_pert = self.n_perturbations if n <= 2000 else max(2, self.n_perturbations - (n // 2000 - 1))
+        n_pert = (
+            self.n_perturbations
+            if n <= 2000
+            else max(2, self.n_perturbations - (n // 2000 - 1))
+        )
 
         if neighbor_index is not None:
             from embedkit.analysis.hubness import _check_neighbor_index

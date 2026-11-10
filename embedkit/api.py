@@ -69,7 +69,7 @@ class EmbedKit:
         self._trainer: Trainer | None = None
         self._config: dict = {}
 
-    def fit(self, X, y=None) -> "EmbedKit":
+    def fit(self, X, y=None) -> EmbedKit:
         X_np = _to_numpy(X)
         n, d = X_np.shape
 
@@ -100,12 +100,16 @@ class EmbedKit:
         }
 
         # Step 3: build model + trainer
-        model = EmbeddingRefiner(
-            input_dim=d,
-            target_dim=target_dim,
-            hidden_dim=self.hidden_dim,
-            n_layers=self.n_layers,
-        )
+        # Draw the initial weights from random_state without touching the caller's RNG state.
+        with torch.random.fork_rng(devices=[], enabled=self.random_state is not None):
+            if self.random_state is not None:
+                torch.default_generator.manual_seed(self.random_state)
+            model = EmbeddingRefiner(
+                input_dim=d,
+                target_dim=target_dim,
+                hidden_dim=self.hidden_dim,
+                n_layers=self.n_layers,
+            )
         self._trainer = Trainer(
             model=model,
             augmentation=augmentation,
@@ -142,7 +146,7 @@ class EmbedKit:
         save_bundle(directory, self._trainer.model, self._config, self.analysis_report)
 
     @classmethod
-    def load(cls, directory: str | Path) -> "EmbedKit":
+    def load(cls, directory: str | Path) -> EmbedKit:
         bundle = load_bundle(directory)
         cfg = bundle["config"]
         obj = cls(

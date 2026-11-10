@@ -6,7 +6,8 @@ import pytest
 class TestEmbedKit:
     def test_self_supervised_fit_transform(self, small_X):
         from embedkit import EmbedKit
-        X_refined = EmbedKit(mode="self_supervised", epochs=3, eval_every=100).fit_transform(small_X)
+        ek = EmbedKit(mode="self_supervised", epochs=3, eval_every=100)
+        X_refined = ek.fit_transform(small_X)
         assert X_refined.shape[0] == small_X.shape[0]
         assert X_refined.shape[1] > 0
 

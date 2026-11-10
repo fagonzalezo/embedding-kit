@@ -1,21 +1,21 @@
-from embedkit.improvement.model import EmbeddingRefiner
-from embedkit.improvement.trainer import Trainer
 from embedkit.improvement.augmentation import (
     CompositeAugmentation,
-    GaussianNoise,
+    EmbeddingMixup,
     FeatureDropout,
     FeatureMasking,
-    EmbeddingMixup,
+    GaussianNoise,
     KNNPairs,
 )
 from embedkit.improvement.losses import (
-    NTXentLoss,
     AlignUniformLoss,
-    TripletLoss,
-    SupConLoss,
-    RankNContrastLoss,
     CombinedLoss,
+    NTXentLoss,
+    RankNContrastLoss,
+    SupConLoss,
+    TripletLoss,
 )
+from embedkit.improvement.model import EmbeddingRefiner
+from embedkit.improvement.trainer import Trainer
 
 __all__ = [
     "EmbeddingRefiner",

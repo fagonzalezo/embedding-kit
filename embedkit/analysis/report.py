@@ -53,6 +53,8 @@ class EmbedKitReport(BaseResult):
     input_shape: tuple[int, int]
 
     def to_dataframe(self) -> pd.DataFrame:
+        dc = self.geometry.distance_concentration
+        nc = self.geometry.neighbor_consistency
         rows = [
             ("ID", "consensus", self.intrinsic_dim.consensus),
             ("ID", "uncertainty", self.intrinsic_dim.uncertainty),
@@ -61,8 +63,8 @@ class EmbedKitReport(BaseResult):
             ("Hubness", "antihub_ratio", self.hubness.antihub_ratio),
             ("Hubness", "hub_ratio", self.hubness.hub_ratio),
             ("Hubness", "hub_contamination", self.hubness.hub_contamination),
-            ("Geometry", "relative_contrast", self.geometry.distance_concentration.relative_contrast),
-            ("Geometry", "concentration_ratio", self.geometry.distance_concentration.concentration_ratio),
+            ("Geometry", "relative_contrast", dc.relative_contrast),
+            ("Geometry", "concentration_ratio", dc.concentration_ratio),
             ("Geometry", "distance_cv", self.geometry.distance_concentration.distance_cv),
             (
                 "Geometry",
@@ -77,7 +79,7 @@ class EmbedKitReport(BaseResult):
             ),
             ("Geometry", "effective_rank", self.geometry.isotropy.effective_rank),
             ("Geometry", "isotropy_score", self.geometry.isotropy.isotropy_score),
-            ("Geometry", "neighbor_consistency", self.geometry.neighbor_consistency.mean_consistency),
+            ("Geometry", "neighbor_consistency", nc.mean_consistency),
             ("Geometry", "uniformity", self.geometry.uniformity.uniformity),
             ("Kernel", "effective_rank", self.kernel.effective_rank),
             ("Kernel", "spectral_gap", self.kernel.spectral_gap),
@@ -93,11 +95,13 @@ class EmbedKitReport(BaseResult):
 
     def print_summary(self) -> None:
         n, d = self.input_shape
+        dc = self.geometry.distance_concentration
         print(f"\n{'='*60}")
         print(f"  EmbedKit Analysis Report  ({n} samples × {d} dims)")
         print(f"{'='*60}")
         print("\n[Intrinsic Dimension]")
-        print(f"  consensus ID     : {self.intrinsic_dim.consensus:.2f}  (±{self.intrinsic_dim.uncertainty:.2f})")
+        id_res = self.intrinsic_dim
+        print(f"  consensus ID     : {id_res.consensus:.2f}  (±{id_res.uncertainty:.2f})")
         for m, v in self.intrinsic_dim.estimates.items():
             print(f"  {m:<14}: {v:.2f}")
         print("\n[Hubness]")
@@ -111,7 +115,7 @@ class EmbedKitReport(BaseResult):
         pr_norm = self.geometry.isotropy.participation_ratio_normalized
         print(f"  PR (normalized)     : {pr_norm:.3f}")
         print(f"  isotropy_score      : {self.geometry.isotropy.isotropy_score:.3f}")
-        print(f"  relative_contrast   : {self.geometry.distance_concentration.relative_contrast:.3f}")
+        print(f"  relative_contrast   : {dc.relative_contrast:.3f}")
         print(f"  distance_cv         : {self.geometry.distance_concentration.distance_cv:.4f}")
         print(f"  neighbor_consistency: {self.geometry.neighbor_consistency.mean_consistency:.3f}")
         print(f"  uniformity          : {self.geometry.uniformity.uniformity:.4f}")
@@ -168,12 +172,16 @@ class EmbedKitAnalyzer(BaseAnalyzer):
             X_graph = X
         _, graph = knn(X_graph, k, metric=self.metric)
 
-        hub = HubnessAnalyzer(k=k, metric=self.metric, subsample=self.n_max, random_state=self.random_state)
+        hub = HubnessAnalyzer(
+            k=k, metric=self.metric, subsample=self.n_max, random_state=self.random_state
+        )
         hub_result = hub.fit(X_graph, neighbor_index=graph)
 
         dc = DistanceConcentration(random_state=self.random_state)
         iso = IsotropyAnalyzer(d_max=self.d_max, random_state=self.random_state)
-        nc = NeighborConsistency(k=k, metric=self.metric, subsample=self.n_max, random_state=self.random_state)
+        nc = NeighborConsistency(
+            k=k, metric=self.metric, subsample=self.n_max, random_state=self.random_state
+        )
         uni = UniformityScore(random_state=self.random_state)
         geo_bundle = GeometryBundle(
             distance_concentration=dc.fit(X),

@@ -97,7 +97,10 @@ class KernelDiagnostics(BaseAnalyzer):
         p = p + 1e-10
         p /= p.sum()
         eff_rank = float(np.exp(-np.sum(p * np.log(p))))
-        spectral_gap = float(eigenvalues[0] / (eigenvalues[1] + 1e-10)) if len(eigenvalues) > 1 else float("inf")
+        if len(eigenvalues) > 1:
+            spectral_gap = float(eigenvalues[0] / (eigenvalues[1] + 1e-10))
+        else:
+            spectral_gap = float("inf")
         condition_number = float(eigenvalues[0] / (eigenvalues[-1] + 1e-10))
 
         row_sums = K.sum(axis=1)

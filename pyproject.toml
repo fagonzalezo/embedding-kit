@@ -33,6 +33,8 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
+# Math-style names are intentional: X and Z for data matrices, F for torch.nn.functional.
+ignore = ["N802", "N803", "N806", "N812", "N814"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

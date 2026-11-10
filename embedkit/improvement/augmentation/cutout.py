@@ -43,11 +43,12 @@ class FeatureMasking(BaseAugmentation):
         if bs == 1:
             n_blocks = min(n_blocks, d)
             # the n_blocks smallest of d uniform draws: a uniform subset, independent per row
-            cols = torch.rand(n, d, device=x.device).topk(n_blocks, dim=1, largest=False).indices
+            u = self._rand(torch.empty(n, d, device=x.device))
+            cols = u.topk(n_blocks, dim=1, largest=False).indices
             masked = torch.zeros(n, d, device=x.device, dtype=torch.bool)
             masked.scatter_(1, cols, True)
         else:
-            starts = torch.randint(0, d - bs + 1, (n, n_blocks), device=x.device)
+            starts = self._randint(d - bs + 1, (n, n_blocks), device=x.device)
             # difference array: +1 where a block starts, -1 just after it ends
             delta = torch.zeros(n, d + 1, device=x.device, dtype=torch.int32)
             delta.scatter_add_(1, starts, torch.ones_like(starts, dtype=torch.int32))
