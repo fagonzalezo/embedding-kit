@@ -625,7 +625,7 @@ Release as 0.5.0.
 | 2.2 | Training-free transforms | done (2026-11-10) |
 | 2.3 | Protocol | done (2026-11-10) |
 | 2.4 | Trainer integration | done (2026-11-10) |
-| 2.5 | Benchmark harness | code done (2026-11-10); cluster clone, setup and feature extraction pending |
+| 2.5 | Benchmark harness | done (2026-11-10); cluster feature extraction running |
 | 3.1 | Run E1 | not started |
 | 3.2 | Run E2 | not started |
 | 3.3 | Write up and gate | not started |
@@ -665,6 +665,29 @@ Release as 0.5.0.
   (run 42858964788). Tagged `v0.1.3` (local tag). Still open: the loss tests have not been run on CUDA.
 - Phase 0 was completed after phase 1 on the same branch (WP 0.2 to 0.4).
 - `skills/embedkit/references/metric_guide.md` still describes 0.1.2 fields and thresholds (WP 7.4).
+
+### Phase 2 notes (2026-11-10)
+
+- **Exit criterion met.** `benchmarks/run.py --experiment e1 --datasets pets_resnet50 digits
+  synthetic_anisotropic --seeds 3` at `d0b6069` (CPU, laptop) reproduces the pilot's baseline rows:
+  117 compared values (kNN Euclidean and cosine, the C = 1 probe), largest difference 0.0035
+  (`benchmarks/review_2026_11/compare_pilot.py`). Results and `REPORT.md` are in
+  `benchmarks/results/e1/`.
+- The check found a probe artefact: all-but-the-top left ~1e-17 in an all-zero digits pixel,
+  proportional to the removed component, and standardisation scaled it back up (+3 to +6 points).
+  `linear_probe` now only centres numerically constant columns.
+- **New `EmbedKit` values** (test kNN, Euclidean, mean ± sd over 3 seeds; pilot in brackets):
+  default 0.895 ± 0.002 on Pets (0.893), 0.932 ± 0.018 on digits (0.966; auto d = 11), 0.731 ± 0.002
+  on synthetic (0.733); supervised 0.915 ± 0.006 (0.918), 0.966 ± 0.022 (0.977), 0.925 ± 0.006
+  (0.928).
+- With selection on validation, only supervised `EmbedKit` beats raw with an interval excluding 0
+  (Pets +0.014, synthetic +0.179). On synthetic, label-free ABTT-3, conceptor, ZCA and whitening gain
+  about +0.16. This is three datasets: E1 in phase 3 is the real test.
+- `benchmarks/datasets.py` of the plan is `benchmarks/bench_datasets.py` (the plan's name would
+  shadow Hugging Face's `datasets` package in the extraction script).
+- Cluster (2026-11-10): clone `/projects/iris/fabio.gonzalezosorio/embedding-kit`, data root
+  `$BASE/data/embedkit-bench` (Pets copied), venv `$BASE/envs/embedkit`. Jobs submitted: setup
+  3076918, CUDA test suite 3076919, GPU feature extraction 3076920, ANN extraction 3076921.
 
 ## Open points for the next session
 
