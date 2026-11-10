@@ -1,6 +1,63 @@
 # Changelog
 
-## 0.1.3 (unreleased)
+## 0.2.0 (unreleased)
+
+Phase 2 of `docs/IMPLEMENTATION_PLAN.md`: any transform, trained or not, can be scored with one call on
+held-out data, against training-free baselines, with a benchmark harness that runs unchanged on a laptop
+and on the cluster.
+
+### Evaluation metrics (WP 2.1)
+- New module `embedkit.evaluation.metrics`: pure functions on arrays, each returning a float.
+  `knn_accuracy` and `linear_probe` (neighbours and fits use the training split only), `recall_at_k`,
+  `trustworthiness`, `continuity`, `knn_overlap`, `linear_cka`, `effective_rank` (RankMe, full
+  singular-value spectrum), `k_skewness`, `nc1` (neural-collapse variability) and `silhouette`.
+  Subsampled metrics use a fixed seed.
+- `linear_probe` standardises on the training split and chooses its regularisation by cross-validation
+  on the training split (logistic regression for classes, ridge for continuous targets); `C=` fixes it
+  instead (`C=1.0, max_iter=3000` reproduces the review pilot's probe).
+- `knn_accuracy`, `linear_probe` and `recall_at_k` accept `return_per_point=True` and also return the
+  per-test-point outcomes.
+- `embedkit.analysis.hubness` exposes `k_occurrence` and `k_occurrence_skewness`, shared by
+  `HubnessAnalyzer` and `k_skewness`. `HubnessAnalyzer` results are unchanged.
+
+### Training-free baselines (WP 2.2)
+- New module `embedkit.baselines`: `Identity`, `CenterNormalize`, `Standardize`, `PCAReduce`,
+  `ZCAWhiten`, `AllButTheTop` (Mu & Viswanath 2018; with `n_components`, the reduce-then-clean
+  algorithm of Raunak et al. 2019), `ConceptorNegation` (Liu et al. 2019, uncentred correlation matrix,
+  `alpha=2`) and `RandomProjection`. They share `fit` / `transform` / `fit_transform` / `get_params`,
+  accept NumPy arrays or tensors, store only statistics of the data passed to `fit`, and compute in
+  float64 with float32 output.
+- `PCAReduce` caps `n_components` at the rank of the centred training data, with a warning, so
+  whitening never divides by a zero eigenvalue. Component signs are deterministic.
+
+### Evaluation protocol (WP 2.3)
+- `embedkit.evaluation.evaluate_transform(make_transform, X_train, X_test, y_train, y_test, seeds=...)`
+  fits a fresh transform per seed on the training split (or on both splits with `transductive=True`,
+  recorded), scores the test split, and returns a tidy DataFrame with one row per seed and metric,
+  fit and transform times, the output dimension and the transform's parameters. `fit_with_labels=True`
+  for supervised methods. `test_pairs=` adds `sts_spearman` for sentence-similarity sets. Metrics come
+  from the registry `embedkit.evaluation.METRICS`; label metrics are skipped without labels.
+- `embedkit.evaluation.compare(results, reference="raw")`: mean ± sd over seeds per method and metric,
+  and the difference to the reference with a paired bootstrap interval over test points where
+  per-point outcomes exist.
+
+### Trainer monitors (WP 2.4)
+- New monitors in `trainer.MONITORS`: `knn_overlap` (max), `effective_rank` (max), `val_loss` (min; the
+  training loss on the validation split with fixed augmentation draws) and `val_knn_accuracy` (max;
+  5-NN accuracy of the validation rows against the training rows). With labels and `val_split > 0`,
+  the validation labels are kept for it. Monitors are called as `fn(Z, **context)` with the input rows,
+  labels and reference pool; custom monitors should accept `**_`. The default monitor is unchanged.
+- `Trainer.evaluate(X, y=None, X_ref=None, y_ref=None)` accepts the labels the new monitors need.
+
+### Benchmark harness (WP 2.5)
+- `benchmarks/`: dataset loaders that never download (`bench_datasets.py`), method grids
+  (`experiments.py`), a resumable runner that writes one JSON file per dataset and method with a
+  validation stage for selection and a test stage (`run.py`), a Markdown report that selects each
+  family's configuration on validation (`report.py`), a cluster-only feature extractor
+  (`extract_features.py`: CIFAR-100/DINOv2, STL-10/CLIP, Banking77 and STS-B with all-mpnet-base-v2,
+  ANN-Benchmarks GloVe/SIFT/GIST), and Slurm jobs for OCCIDATA (`benchmarks/cluster/`).
+
+## 0.1.3 (2026-11-10)
 
 This release fixes defects D1 to D27 of `docs/CRITICAL_REVIEW.md`: every defect rated A or B, and the
 C-rated ones scheduled for phase 1 of `docs/IMPLEMENTATION_PLAN.md` (D28 to D30 come later). Defect numbers refer to section 2 of that review. Several fixes change results or

@@ -58,13 +58,9 @@ class HubnessAnalyzer(BaseAnalyzer):
                 n = self.subsample
             _, indices = knn(X, self.k, metric=self.metric)
 
-        N_k = np.bincount(indices.ravel(), minlength=n).astype(np.int64)
-
+        N_k = k_occurrence(indices, n)
         mean_N = N_k.mean()
-        std_N = N_k.std()
-        k_skewness = float(
-            np.mean((N_k - mean_N) ** 3) / (std_N ** 3 + 1e-10)
-        )
+        k_skewness = k_occurrence_skewness(N_k)
 
         sorted_N = np.sort(N_k)
         n_arr = np.arange(1, n + 1)
@@ -95,6 +91,27 @@ class HubnessAnalyzer(BaseAnalyzer):
             antihubs=antihubs,
             hub_contamination=hub_contamination,
         )
+
+
+def k_occurrence(indices: np.ndarray, n: int) -> np.ndarray:
+    """k-occurrence ``N_k``: how often each of ``n`` points appears in the neighbour lists.
+
+    ``indices`` is a kNN graph of shape ``(n, k)``, for example from
+    :func:`embedkit.utils.neighbors.knn`. Returns an ``int64`` array of length ``n``.
+    """
+    return np.bincount(np.asarray(indices).ravel(), minlength=n).astype(np.int64)
+
+
+def k_occurrence_skewness(N_k: np.ndarray) -> float:
+    """Skewness of the k-occurrence distribution (the "hubness" of Radovanovic et al. 2010).
+
+    Population (biased) skewness ``E[(N - mean)^3] / std^3``; ``1e-10`` is added to the cubed
+    standard deviation, so a constant ``N_k`` gives 0.
+    """
+    N_k = np.asarray(N_k)
+    mean_N = N_k.mean()
+    std_N = N_k.std()
+    return float(np.mean((N_k - mean_N) ** 3) / (std_N ** 3 + 1e-10))
 
 
 def _check_neighbor_index(neighbor_index, n: int, k: int) -> np.ndarray:

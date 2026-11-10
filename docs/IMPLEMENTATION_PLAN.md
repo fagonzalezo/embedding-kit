@@ -614,18 +614,18 @@ Release as 0.5.0.
 |---|---|---|
 | 0.1 | FAISS optional | done (2026-11-10, with WP 1.1) |
 | 0.2 | Reproducibility | done (2026-11-10) |
-| 0.3 | Continuous integration | workflow written (2026-11-10); green run pending a push |
+| 0.3 | Continuous integration | done (2026-11-10; first run green on all jobs) |
 | 0.4 | Stale documentation | done (2026-11-10) |
 | 1.1 | Nearest neighbours | done (2026-11-10) |
 | 1.2 | Losses | done (2026-11-10) |
 | 1.3 | Trainer | done (2026-11-10); CUDA run of the loss tests on the cluster still to do |
 | 1.4 | Augmentations | done (2026-11-10) |
 | 1.5 | Analysis fixes | done (2026-11-10); see deviation note below |
-| 2.1 | Metrics | not started |
-| 2.2 | Training-free transforms | not started |
-| 2.3 | Protocol | not started |
-| 2.4 | Trainer integration | not started |
-| 2.5 | Benchmark harness | not started |
+| 2.1 | Metrics | done (2026-11-10) |
+| 2.2 | Training-free transforms | done (2026-11-10) |
+| 2.3 | Protocol | done (2026-11-10) |
+| 2.4 | Trainer integration | done (2026-11-10) |
+| 2.5 | Benchmark harness | code done (2026-11-10); cluster clone, setup and feature extraction pending |
 | 3.1 | Run E1 | not started |
 | 3.2 | Run E2 | not started |
 | 3.3 | Write up and gate | not started |
@@ -661,10 +661,9 @@ Release as 0.5.0.
   supervision, if wanted, belongs to phase 6.
 - **Provisional `distance_cv` threshold:** 0.02 (fires for iid Gaussians from about d = 1,250 at
   n = 2,000; the old `concentration_ratio > 0.8` rule fired from about d = 1,000). Replace in WP 4.1.
-- **Still open from phase 1 exit criteria:** a green CI run on both operating systems (needs a push);
-  the loss tests have not been run on CUDA.
-- Phase 0 was completed after phase 1 on the same branch (WP 0.2 to 0.4). The CI workflow has not
-  run yet: it needs the branch pushed.
+- **Phase 1 exit criteria:** CI green on Ubuntu and macOS, Python 3.10 and 3.12, and the FAISS job
+  (run 42858964788). Tagged `v0.1.3` (local tag). Still open: the loss tests have not been run on CUDA.
+- Phase 0 was completed after phase 1 on the same branch (WP 0.2 to 0.4).
 - `skills/embedkit/references/metric_guide.md` still describes 0.1.2 fields and thresholds (WP 7.4).
 
 ## Open points for the next session

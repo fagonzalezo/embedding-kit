@@ -23,30 +23,59 @@ from embedkit.utils.validation import _to_numpy, _to_tensor, encode_labels
 # A monitor is a statistic of the refined embedding Z of the evaluation split. Each entry is
 # (function, direction): direction "min" means lower is better, "max" means higher is better.
 # Early stopping, best-weight tracking and ReduceLROnPlateau read the direction from here.
-# Functions take Z and keyword arguments k, metric and random_state.
+#
+# Functions are called as fn(Z, **context) and should accept **_ for context they do not use.
+# The context holds: k, metric, random_state (from eval_k, eval_metric, random_state); X (the
+# input rows of the evaluation split); y (their labels, or None); Z_ref and y_ref (refined
+# training rows and labels, the neighbour pool for val_knn_accuracy, or None); trainer.
 
 MonitorFn = Callable[..., float]
 
 
-def _monitor_uniformity(Z: np.ndarray, *, k: int, metric: str, random_state) -> float:
+def _monitor_uniformity(Z: np.ndarray, *, random_state=None, **_) -> float:
     from embedkit.analysis.geometry import UniformityScore
 
     return float(UniformityScore(random_state=random_state).fit(Z).uniformity)
 
 
-def _monitor_isotropy(Z: np.ndarray, *, k: int, metric: str, random_state) -> float:
+def _monitor_isotropy(Z: np.ndarray, **_) -> float:
     from embedkit.analysis.geometry import IsotropyAnalyzer
 
     return float(IsotropyAnalyzer().fit(Z).isotropy_score)
 
 
-def _monitor_k_skewness(Z: np.ndarray, *, k: int, metric: str, random_state) -> float:
+def _monitor_k_skewness(Z: np.ndarray, *, k: int, metric: str, random_state=None, **_) -> float:
     from embedkit.analysis.hubness import HubnessAnalyzer
 
     k_eff = min(k, Z.shape[0] - 1)
     return float(
         HubnessAnalyzer(k=k_eff, metric=metric, random_state=random_state).fit(Z).k_skewness
     )
+
+
+def _monitor_knn_overlap(Z, *, X, k: int, metric: str, random_state=None, **_) -> float:
+    from embedkit.evaluation.metrics import knn_overlap
+
+    return float(knn_overlap(X, Z, k=min(k, Z.shape[0] - 1), metric_x="euclidean",
+                             metric_z=metric, max_samples=2000, random_state=random_state or 0))
+
+
+def _monitor_effective_rank(Z, **_) -> float:
+    from embedkit.evaluation.metrics import effective_rank
+
+    return float(effective_rank(Z))
+
+
+def _monitor_val_loss(Z, *, X, y, trainer, **_) -> float:
+    return trainer._held_out_loss(X, y)
+
+
+def _monitor_val_knn_accuracy(Z, *, y, Z_ref, y_ref, metric: str, **_) -> float:
+    from embedkit.evaluation.metrics import knn_accuracy
+
+    if y is None or Z_ref is None:
+        raise ValueError("val_knn_accuracy needs labels and val_split > 0")
+    return float(knn_accuracy(Z_ref, y_ref, Z, y, k=min(5, len(Z_ref)), metric=metric))
 
 
 MONITORS: dict[str, tuple[MonitorFn, Literal["min", "max"]]] = {
@@ -56,7 +85,21 @@ MONITORS: dict[str, tuple[MonitorFn, Literal["min", "max"]]] = {
     "isotropy": (_monitor_isotropy, "max"),
     # Skewness of the k-occurrence distribution: lower means less hubness.
     "k_skewness": (_monitor_k_skewness, "min"),
+    # Mean fraction of each point's eval_k input-space (Euclidean) neighbours kept in the output
+    # (eval_metric), on at most 2,000 evaluation rows: higher preserves more local structure.
+    "knn_overlap": (_monitor_knn_overlap, "max"),
+    # RankMe effective rank of the refined evaluation rows: higher is less dimensional collapse.
+    "effective_rank": (_monitor_effective_rank, "max"),
+    # The training loss on the validation split, with the augmentation (fixed draws): lower is
+    # better. Needs val_split > 0.
+    "val_loss": (_monitor_val_loss, "min"),
+    # 5-NN accuracy of the validation rows, neighbours from (a subsample of) the training rows.
+    # Needs labels and val_split > 0.
+    "val_knn_accuracy": (_monitor_val_knn_accuracy, "max"),
 }
+
+_NEEDS_VAL_SPLIT = {"val_loss", "val_knn_accuracy"}
+_NEEDS_LABELS = {"val_knn_accuracy"}
 
 
 def _check_monitor_name(name: str) -> None:
@@ -103,9 +146,12 @@ class Trainer:
         Evaluate the monitors every this many epochs.
     eval_metrics:
         Names from :data:`MONITORS` to log in ``history`` at each evaluation. The ``monitor``
-        is always added.
+        is always added. ``val_loss`` and ``val_knn_accuracy`` need ``val_split > 0``, and
+        ``val_knn_accuracy`` needs labels; with ``val_split > 0`` the labels of the validation
+        rows are kept for it.
     eval_k, eval_metric:
-        Neighbourhood size and metric used by neighbour-based monitors (``k_skewness``). The
+        Neighbourhood size and metric used by neighbour-based monitors (``k_skewness``,
+        ``knn_overlap``; ``val_knn_accuracy`` uses 5 neighbours and ``eval_metric``). The
         default metric is cosine because the refiner's output is L2-normalised.
     early_stopping_patience:
         Stop after this many consecutive **evaluations** (not epochs) without improvement of
@@ -239,7 +285,15 @@ class Trainer:
         # Carve a held-out validation split for early stopping when requested.
         # Precompute and the DataLoader use only the training portion so the
         # val set never contributes gradients or neighbor structure.
+        missing_val = [m for m in self.eval_metrics if m in _NEEDS_VAL_SPLIT]
+        if missing_val and self.val_split <= 0.0:
+            raise ValueError(f"Monitors {missing_val} need val_split > 0")
+        missing_y = [m for m in self.eval_metrics if m in _NEEDS_LABELS]
+        if missing_y and not has_labels:
+            raise ValueError(f"Monitors {missing_y} need labels: call fit(X, y)")
+
         X_val_np: np.ndarray | None = None
+        y_val: np.ndarray | None = None
         if self.val_split > 0.0:
             rng_split = np.random.default_rng(self.random_state)
             n_val = max(1, int(n * self.val_split))
@@ -249,6 +303,7 @@ class Trainer:
             X_val_np = X_np[val_idx]
             X_np = X_np[train_mask]
             if y_t is not None:
+                y_val = y_t[torch.from_numpy(val_idx)].numpy()
                 y_t = y_t[torch.from_numpy(train_mask)]
             n = X_np.shape[0]
 
@@ -293,13 +348,22 @@ class Trainer:
         )
 
         # Array used for evaluation: the held-out split, else a subsample of the training data.
+        # The training subsample is also the neighbour pool for val_knn_accuracy.
+        rng = np.random.default_rng(self.random_state)
+        sub_idx = (
+            np.sort(rng.choice(n, self.eval_subsample, replace=False))
+            if n > self.eval_subsample else np.arange(n)
+        )
         if X_val_np is not None:
-            X_eval = X_val_np
-        elif n > self.eval_subsample:
-            rng = np.random.default_rng(self.random_state)
-            X_eval = X_np[rng.choice(n, self.eval_subsample, replace=False)]
+            X_eval, y_eval = X_val_np, y_val
         else:
-            X_eval = X_np
+            X_eval, y_eval = X_np[sub_idx], None
+        self._eval_ctx = dict(
+            y=y_eval,
+            X_ref=X_np[sub_idx] if y_val is not None else None,
+            y_ref=y_t[torch.from_numpy(sub_idx)].numpy() if y_val is not None else None,
+        )
+        self._val_batch_size = batch_size
 
         self.model.to(self.device)
         self.loss.to(self.device)
@@ -341,7 +405,7 @@ class Trainer:
 
             if epoch % self.eval_every != 0:
                 continue
-            metrics = self._evaluate(X_eval)
+            metrics = self._evaluate(X_eval, **self._eval_ctx)
             self.history["eval_epoch"].append(epoch)
             for name, value in metrics.items():
                 self.history.setdefault(name, []).append(value)
@@ -381,18 +445,63 @@ class Trainer:
         Z = torch.cat(chunks, dim=0)
         return Z if was_tensor else Z.numpy()
 
-    def evaluate(self, X) -> dict[str, float]:
-        """Compute every monitor in ``eval_metrics`` on the refined embedding of ``X``."""
-        return self._evaluate(_to_numpy(X))
+    def evaluate(self, X, y=None, X_ref=None, y_ref=None) -> dict[str, float]:
+        """Compute every monitor in ``eval_metrics`` on the refined embedding of ``X``.
 
-    def _evaluate(self, X_np: np.ndarray) -> dict[str, float]:
+        ``y`` are the labels of ``X``; ``X_ref`` and ``y_ref`` the labelled neighbour pool
+        (``val_knn_accuracy`` needs all three).
+        """
+        y_np = encode_labels(y, n_samples=len(X))[0].numpy() if y is not None else None
+        y_ref_np = (
+            encode_labels(y_ref, n_samples=len(X_ref))[0].numpy() if y_ref is not None else None
+        )
+        return self._evaluate(
+            _to_numpy(X), y=y_np, X_ref=None if X_ref is None else _to_numpy(X_ref), y_ref=y_ref_np
+        )
+
+    def _evaluate(self, X_np: np.ndarray, y=None, X_ref=None, y_ref=None) -> dict[str, float]:
         Z_np = self.transform(X_np)
-        return {
-            name: MONITORS[name][0](
-                Z_np, k=self.eval_k, metric=self.eval_metric, random_state=self.random_state
-            )
-            for name in self.eval_metrics
-        }
+        needs_ref = any(name in _NEEDS_LABELS for name in self.eval_metrics)
+        Z_ref = self.transform(X_ref) if X_ref is not None and needs_ref else None
+        context = dict(
+            X=X_np, y=y, Z_ref=Z_ref, y_ref=y_ref, trainer=self,
+            k=self.eval_k, metric=self.eval_metric, random_state=self.random_state,
+        )
+        return {name: float(MONITORS[name][0](Z_np, **context)) for name in self.eval_metrics}
+
+    def _held_out_loss(self, X_np: np.ndarray, y=None) -> float:
+        """The training loss on held-out rows, with the augmentation, without gradients.
+
+        The augmentation's random draws come from a generator reseeded at every call, so the
+        value changes only when the model does. Index-based augmentations (``KNNPairs``) use
+        their in-batch path, since the rows are not in the training set.
+        """
+        aug = self.augmentation
+        saved = (getattr(aug, "_np_rng", None), getattr(aug, "_torch_gen", None))
+        seed = 0 if self.random_state is None else int(self.random_state)
+        if hasattr(aug, "set_rng"):
+            aug.set_rng(np.random.default_rng(seed), torch.Generator().manual_seed(seed))
+        bs = max(2, min(getattr(self, "_val_batch_size", self.batch_size), len(X_np)))
+        total, count = 0.0, 0
+        self.model.eval()
+        try:
+            with torch.no_grad():
+                for start in range(0, len(X_np), bs):
+                    xb = torch.from_numpy(np.ascontiguousarray(X_np[start: start + bs]))
+                    if len(xb) < 2:
+                        continue
+                    xb = xb.to(self.device)
+                    yb = None
+                    if y is not None:
+                        yb = torch.as_tensor(np.asarray(y[start: start + bs])).to(self.device)
+                    x_i, x_j = aug(xb, None)
+                    value = self.loss(self.model(x_i), self.model(x_j), yb)
+                    total += float(value) * len(xb)
+                    count += len(xb)
+        finally:
+            if hasattr(aug, "set_rng"):
+                aug.set_rng(*saved)
+        return total / max(count, 1)
 
     # -----------------------------------------------------------------------------------------
     def _select_device(self, X_np: np.ndarray, y_t: torch.Tensor | None) -> None:

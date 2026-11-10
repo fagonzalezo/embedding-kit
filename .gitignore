@@ -23,3 +23,5 @@ CLAUDE.md
 claude/
 examples/data/
 docs/BUG-supcon-nan.md
+benchmarks/data/
+.claude/

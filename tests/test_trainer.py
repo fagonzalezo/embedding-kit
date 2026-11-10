@@ -265,3 +265,94 @@ def test_mps_fallback_to_cpu_when_loss_unsupported():
     with pytest.warns(UserWarning, match="does not run on MPS"):
         t._select_device(_data(), None)
     assert t.device.type == "cpu"
+
+
+# --- WP 2.4: label-free monitors and val_knn_accuracy -------------------------------------------
+
+def test_new_monitors_registered_with_directions():
+    M = trainer_mod.MONITORS
+    assert M["knn_overlap"][1] == "max"
+    assert M["effective_rank"][1] == "max"
+    assert M["val_loss"][1] == "min"
+    assert M["val_knn_accuracy"][1] == "max"
+
+
+def test_label_free_monitors_are_logged():
+    t = _trainer(epochs=2, eval_every=1, val_split=0.25,
+                 eval_metrics=["knn_overlap", "effective_rank", "val_loss"])
+    t.fit(_data(n=128))
+    for name in ("knn_overlap", "effective_rank", "val_loss"):
+        assert len(t.history[name]) == 2 and np.isfinite(t.history[name]).all()
+    assert 0.0 <= min(t.history["knn_overlap"]) <= max(t.history["knn_overlap"]) <= 1.0
+    assert 1.0 <= min(t.history["effective_rank"]) <= 4.0 + 1e-6  # output dim is 4
+
+
+def test_val_loss_is_deterministic_for_a_fixed_model():
+    t = _trainer(epochs=1, eval_every=1, val_split=0.25, eval_metrics=["val_loss"])
+    X = _data(n=128)
+    t.fit(X)
+    a, b = t._held_out_loss(X[:40]), t._held_out_loss(X[:40])
+    assert a == b
+
+
+def test_val_loss_matches_training_loss_definition():
+    """With no augmentation randomness and no dropout, val_loss is the loss on the rows."""
+    from embedkit.improvement.augmentation import FeatureDropout
+
+    torch.manual_seed(0)
+    model = EmbeddingRefiner(16, 4, hidden_dim=32, n_layers=1, dropout=0.0)
+    t = Trainer(model, FeatureDropout(p=0.0), NTXentLoss(0.5), epochs=1, batch_size=64,
+                eval_every=1, val_split=0.25, eval_metrics=["val_loss"], device="cpu",
+                random_state=0)
+    X = _data(n=128)
+    t.fit(X)
+    model.eval()
+    with torch.no_grad():
+        z = model(torch.from_numpy(X[:64]))
+        expected = float(NTXentLoss(0.5)(z, z))
+    assert t._held_out_loss(X[:64]) == pytest.approx(expected, rel=1e-5)
+
+
+def test_val_monitors_need_val_split_and_labels():
+    with pytest.raises(ValueError, match="val_split"):
+        _trainer(epochs=1, eval_metrics=["val_loss"]).fit(_data())
+    with pytest.raises(ValueError, match="labels"):
+        _trainer(epochs=1, val_split=0.2, eval_metrics=["val_knn_accuracy"]).fit(_data())
+
+
+def test_val_knn_accuracy_uses_validation_labels(register_monitor):
+    seen = {}
+
+    def spy(Z, **kw):
+        seen.update(kw)
+        return 0.0
+
+    register_monitor("spy_ctx", spy, "min")
+    X = _data(n=200)
+    y = (X[:, 0] > 0).astype(int)
+    t = _trainer(loss=SupConLoss(0.5), epochs=3, eval_every=1, val_split=0.25,
+                 eval_metrics=["val_knn_accuracy", "spy_ctx"], monitor="val_knn_accuracy")
+    t.fit(X, y)
+    assert len(seen["y"]) == 50 and seen["Z_ref"] is not None and len(seen["y_ref"]) == 150
+    # The validation labels are the labels of the validation rows.
+    val_rows = {tuple(r) for r in np.round(seen["X"], 5)}
+    lookup = {tuple(r): lab for r, lab in zip(np.round(X, 5), y)}
+    assert all(lookup[tuple(r)] == lab for r, lab in zip(np.round(seen["X"], 5), seen["y"]))
+    assert len(val_rows) == 50
+    # The logged value is 5-NN accuracy of the validation rows against the training pool.
+    from embedkit.evaluation import knn_accuracy
+
+    pool = np.array([r for r in X if tuple(np.round(r, 5)) not in val_rows])
+    pool_y = np.array([lookup[tuple(r)] for r in np.round(pool, 5)])
+    expected = knn_accuracy(t.transform(pool), pool_y, t.transform(seen["X"]), seen["y"], k=5)
+    assert t.history["val_knn_accuracy"][-1] == pytest.approx(expected)
+    assert t.monitor_mode == "max"
+
+
+def test_public_evaluate_with_reference_pool():
+    X = _data(n=120)
+    y = (X[:, 0] > 0).astype(int)
+    t = _trainer(epochs=1, eval_every=1000, eval_metrics=["val_knn_accuracy"], val_split=0.2)
+    t.fit(X, y)
+    out = t.evaluate(X[:30], y[:30], X_ref=X[30:], y_ref=y[30:])
+    assert 0.0 <= out["val_knn_accuracy"] <= 1.0
