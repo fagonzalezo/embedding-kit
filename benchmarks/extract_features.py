@@ -75,12 +75,16 @@ def _hf_revision(model_id: str) -> str | None:
 # --- images -------------------------------------------------------------------------------------
 
 
+def _collate_images(batch):
+    return [x for x, _ in batch], np.array([y for _, y in batch])
+
+
 def _embed_images(dataset, encode, batch_size: int, device: str):
     import torch
     from torch.utils.data import DataLoader
 
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=4,
-                        collate_fn=lambda b: ([x for x, _ in b], np.array([y for _, y in b])))
+                        collate_fn=_collate_images)
     feats, labels = [], []
     with torch.inference_mode():
         for images, y in loader:
@@ -114,7 +118,9 @@ def _clip_encoder(device: str):
     def encode(images):
         inputs = proc(images=images, return_tensors="pt").to(device)
         with torch.autocast(device_type="cuda", enabled=device.startswith("cuda")):
-            return model.get_image_features(**inputs)
+            out = model.get_image_features(**inputs)
+        # transformers >= 5 returns a model output whose pooler_output is the projected embedding.
+        return out if isinstance(out, torch.Tensor) else out.pooler_output
 
     return encode
 
@@ -139,16 +145,44 @@ def cifar100_dinov2(root: Path, device: str, batch_size: int) -> tuple[dict, dic
     return arrays, meta
 
 
-def stl10_clip(root: Path, device: str, batch_size: int) -> tuple[dict, dict]:
-    from torchvision.datasets import STL10
+# The original STL-10 host (ai.stanford.edu) is unreachable; this mirror has the same splits
+# (5000 train, 8000 test) and the same label order as torchvision's STL10.
+STL10_HF = "tanganke/stl10"
+STL10_CLASSES = ["airplane", "bird", "car", "cat", "deer", "dog", "horse", "monkey", "ship",
+                 "truck"]
 
-    raw = root / "raw"
-    train = STL10(raw, split="train", download=True)
-    test = STL10(raw, split="test", download=True)
+
+class _HFImages:
+    """(PIL image, label) pairs from a Hugging Face split, in its stored order."""
+
+    def __init__(self, split):
+        self.split = split
+
+    def __len__(self):
+        return len(self.split)
+
+    def __getitem__(self, i):
+        row = self.split[i]
+        return row["image"].convert("RGB"), int(row["label"])
+
+
+def stl10_clip(root: Path, device: str, batch_size: int) -> tuple[dict, dict]:
+    from datasets import load_dataset
+    from huggingface_hub import HfApi
+
+    ds = load_dataset(STL10_HF, cache_dir=str(root / "raw" / "hf_datasets"))
+    names = ds["train"].features["label"].names
+    if names != STL10_CLASSES:
+        raise RuntimeError(f"unexpected STL-10 label names: {names}")
     encode = _clip_encoder(device)
-    Xtr, ytr = _embed_images(train, encode, batch_size, device)
-    Xte, yte = _embed_images(test, encode, batch_size, device)
-    meta = dict(model=MODELS["clip"], embedding="get_image_features (projected)", n_classes=10)
+    Xtr, ytr = _embed_images(_HFImages(ds["train"]), encode, batch_size, device)
+    Xte, yte = _embed_images(_HFImages(ds["test"]), encode, batch_size, device)
+    try:
+        revision = HfApi().dataset_info(STL10_HF).sha
+    except Exception:
+        revision = None
+    meta = dict(model=MODELS["clip"], embedding="get_image_features (projected)", n_classes=10,
+                images=f"STL-10 96x96 from the {STL10_HF} mirror", dataset_revision=revision)
     return dict(X_train=Xtr, y_train=ytr, X_test=Xte, y_test=yte), meta
 
 
