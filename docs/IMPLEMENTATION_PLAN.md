@@ -626,7 +626,7 @@ Release as 0.5.0.
 | 2.3 | Protocol | done (2026-11-10) |
 | 2.4 | Trainer integration | done (2026-11-10) |
 | 2.5 | Benchmark harness | done (2026-11-10; cluster features extracted 2026-11-11) |
-| 3.1 | Run E1 | not started |
+| 3.1 | Run E1 | done (2026-11-11; cluster array 3077382) |
 | 3.2 | Run E2 | not started |
 | 3.3 | Write up and gate | not started |
 | 4.1 | Null models | not started |
@@ -706,10 +706,34 @@ Release as 0.5.0.
     as E1 needs. The first, unit-norm extraction is kept in `features/old-normalized/`.
   - `mteb/banking77` has 9,993 / 3,076 examples, not the published 10,003 / 3,080.
 
+### Phase 3 notes (2026-11-11)
+
+- **E1 ran on the cluster** as array 3077382 (7 datasets, 5 seeds for stochastic methods, 1 for
+  deterministic ones, RTX 8000 nodes). Wall time per dataset: Pets 32 min, synthetic 13 min, STL-10
+  20 min, Banking77 70 min, STS-B 23 min, CIFAR-100 8 h 12 min (12 h limit). Results are in
+  `benchmarks/results/e1/`, tables in `benchmarks/results/e1/REPORT.md`. They replace the local
+  3-seed runs of phase 2. digits and 5 Pets/synthetic files come from the cancelled first array and
+  record `a20c252`; the rest record `6ef1a3b`. The two commits differ only in `benchmarks/cluster/env.sh`.
+- **OpenBLAS threads.** With 8 BLAS threads the linear probe's many small lbfgs fits ran 10-20x
+  slower than with 1 to 4 (synthetic raw: 276 s vs 15 s, same values). `env.sh` now sets
+  `OPENBLAS_NUM_THREADS` to half the job's CPUs.
+- **Deviation:** parametric UMAP was not run. `umap-learn` 0.6 is installed but its parametric mode
+  needs TensorFlow/Keras, which the container does not have.
+- STS-B has no class labels, so it has no supervised `EmbedKit` run (32 methods, not 33).
+- **Gate preview** (self-supervised `EmbedKit` vs the training-free baseline best on validation at
+  the same d; paired bootstrap over test points). With the `EmbedKit` configuration selected on
+  validation there are no wins: Pets, Banking77 and CIFAR-100 are ties (d = 64); STL-10 (d = 128,
+  -0.005), digits (d = 32, -0.010) and synthetic (d = 128, -0.165) are losses; STS-B -0.036 at
+  d = 128 (no per-point interval for STS correlation). The one interval above 0 is CIFAR-100 at
+  d = 32 (+0.028 over PCA-whitening-32), which validation did not select. The default `EmbedKit`
+  (auto d = 11 to 28) has no baseline at its d, because baselines use d in {16, 32, 64, 128, 256}.
+- Supervised `EmbedKit` is the best method on validation-selected test kNN on CIFAR-100 (+0.008 over
+  raw), Pets (+0.013) and synthetic (+0.175), with intervals above 0.
+
 ## Open points for the next session
 
 All design decisions in this plan are confirmed. Two practical points remain:
 
-1. **Starting E1 on the cluster** (`sbatch run.slurm.sh` in the cluster clone) waits for the user's go-ahead.
+1. **E2 (WP 3.2)** is next; E1 is done (see phase 3 notes).
 2. **The phase 3 gate.** The outcome is the user's call. Present the E1 and E2 tables with a recommendation and
    wait for confirmation before starting phase 5.

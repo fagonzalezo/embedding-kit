@@ -9,16 +9,16 @@
  "deterministic": true,
  "fit_with_labels": false,
  "seeds": 1,
- "device": "cpu",
+ "device": "cuda",
  "val_fraction": 0.2,
  "git": {
-  "commit": "d0b6069131c778575ed9cac11400ece358611d81",
+  "commit": "6ef1a3b4604b2a3b641a5a50d2f329223729767f",
   "dirty": false
  },
  "embedkit_version": "0.2.0",
- "python": "3.12.13",
- "host": "192.168.0.8",
- "created": "2026-11-10T17:14:29+00:00",
+ "python": "3.12.3",
+ "host": "r9ng-8000-2",
+ "created": "2026-11-11T12:47:11+00:00",
  "dataset_meta": {
   "source": "benchmarks.datasets.make_synthetic_anisotropic",
   "task": "classification",
@@ -37,8 +37,8 @@
     "seed": 0,
     "metric": "knn_accuracy",
     "value": 0.74,
-    "fit_time": 0.114259083988145,
-    "transform_time": 0.0035905000986531377,
+    "fit_time": 0.20274996501393616,
+    "transform_time": 0.008264575153589249,
     "dim": 64,
     "transductive": false,
     "params": {
@@ -53,8 +53,8 @@
     "seed": 0,
     "metric": "knn_accuracy_euclidean",
     "value": 0.7316666666666667,
-    "fit_time": 0.114259083988145,
-    "transform_time": 0.0035905000986531377,
+    "fit_time": 0.20274996501393616,
+    "transform_time": 0.008264575153589249,
     "dim": 64,
     "transductive": false,
     "params": {
@@ -69,8 +69,8 @@
     "seed": 0,
     "metric": "linear_probe",
     "value": 0.9316666666666666,
-    "fit_time": 0.114259083988145,
-    "transform_time": 0.0035905000986531377,
+    "fit_time": 0.20274996501393616,
+    "transform_time": 0.008264575153589249,
     "dim": 64,
     "transductive": false,
     "params": {
@@ -85,8 +85,8 @@
     "seed": 0,
     "metric": "linear_probe_c1",
     "value": 0.9233333333333333,
-    "fit_time": 0.114259083988145,
-    "transform_time": 0.0035905000986531377,
+    "fit_time": 0.20274996501393616,
+    "transform_time": 0.008264575153589249,
     "dim": 64,
     "transductive": false,
     "params": {
@@ -101,8 +101,8 @@
     "seed": 0,
     "metric": "recall_at_10",
     "value": 0.98,
-    "fit_time": 0.114259083988145,
-    "transform_time": 0.0035905000986531377,
+    "fit_time": 0.20274996501393616,
+    "transform_time": 0.008264575153589249,
     "dim": 64,
     "transductive": false,
     "params": {
@@ -117,8 +117,8 @@
     "seed": 0,
     "metric": "trustworthiness",
     "value": 0.9999649272882806,
-    "fit_time": 0.114259083988145,
-    "transform_time": 0.0035905000986531377,
+    "fit_time": 0.20274996501393616,
+    "transform_time": 0.008264575153589249,
     "dim": 64,
     "transductive": false,
     "params": {
@@ -133,8 +133,8 @@
     "seed": 0,
     "metric": "continuity",
     "value": 0.9999672084402623,
-    "fit_time": 0.114259083988145,
-    "transform_time": 0.0035905000986531377,
+    "fit_time": 0.20274996501393616,
+    "transform_time": 0.008264575153589249,
     "dim": 64,
     "transductive": false,
     "params": {
@@ -149,8 +149,8 @@
     "seed": 0,
     "metric": "k_skewness",
     "value": 0.5239705197199541,
-    "fit_time": 0.114259083988145,
-    "transform_time": 0.0035905000986531377,
+    "fit_time": 0.20274996501393616,
+    "transform_time": 0.008264575153589249,
     "dim": 64,
     "transductive": false,
     "params": {
@@ -165,8 +165,8 @@
     "seed": 0,
     "metric": "effective_rank",
     "value": 27.112002832415925,
-    "fit_time": 0.114259083988145,
-    "transform_time": 0.0035905000986531377,
+    "fit_time": 0.20274996501393616,
+    "transform_time": 0.008264575153589249,
     "dim": 64,
     "transductive": false,
     "params": {
@@ -183,8 +183,8 @@
     "seed": 0,
     "metric": "knn_accuracy",
     "value": 0.7433333333333333,
-    "fit_time": 0.12590020801872015,
-    "transform_time": 0.0064163749339058995,
+    "fit_time": 0.23707937309518456,
+    "transform_time": 0.016308557940647006,
     "dim": 64,
     "transductive": false,
     "params": {
@@ -199,8 +199,8 @@
     "seed": 0,
     "metric": "knn_accuracy_euclidean",
     "value": 0.748,
-    "fit_time": 0.12590020801872015,
-    "transform_time": 0.0064163749339058995,
+    "fit_time": 0.23707937309518456,
+    "transform_time": 0.016308557940647006,
     "dim": 64,
     "transductive": false,
     "params": {
@@ -215,8 +215,8 @@
     "seed": 0,
     "metric": "linear_probe",
     "value": 0.938,
-    "fit_time": 0.12590020801872015,
-    "transform_time": 0.0064163749339058995,
+    "fit_time": 0.23707937309518456,
+    "transform_time": 0.016308557940647006,
     "dim": 64,
     "transductive": false,
     "params": {
@@ -231,8 +231,8 @@
     "seed": 0,
     "metric": "linear_probe_c1",
     "value": 0.9286666666666666,
-    "fit_time": 0.12590020801872015,
-    "transform_time": 0.0064163749339058995,
+    "fit_time": 0.23707937309518456,
+    "transform_time": 0.016308557940647006,
     "dim": 64,
     "transductive": false,
     "params": {
@@ -247,8 +247,8 @@
     "seed": 0,
     "metric": "recall_at_10",
     "value": 0.9753333333333334,
-    "fit_time": 0.12590020801872015,
-    "transform_time": 0.0064163749339058995,
+    "fit_time": 0.23707937309518456,
+    "transform_time": 0.016308557940647006,
     "dim": 64,
     "transductive": false,
     "params": {
@@ -263,8 +263,8 @@
     "seed": 0,
     "metric": "trustworthiness",
     "value": 0.9999876361199531,
-    "fit_time": 0.12590020801872015,
-    "transform_time": 0.0064163749339058995,
+    "fit_time": 0.23707937309518456,
+    "transform_time": 0.016308557940647006,
     "dim": 64,
     "transductive": false,
     "params": {
@@ -279,8 +279,8 @@
     "seed": 0,
     "metric": "continuity",
     "value": 0.9999888423521528,
-    "fit_time": 0.12590020801872015,
-    "transform_time": 0.0064163749339058995,
+    "fit_time": 0.23707937309518456,
+    "transform_time": 0.016308557940647006,
     "dim": 64,
     "transductive": false,
     "params": {
@@ -295,8 +295,8 @@
     "seed": 0,
     "metric": "k_skewness",
     "value": 0.9225090195651611,
-    "fit_time": 0.12590020801872015,
-    "transform_time": 0.0064163749339058995,
+    "fit_time": 0.23707937309518456,
+    "transform_time": 0.016308557940647006,
     "dim": 64,
     "transductive": false,
     "params": {
@@ -310,9 +310,9 @@
     "method": "pca-64",
     "seed": 0,
     "metric": "effective_rank",
-    "value": 27.26410834117209,
-    "fit_time": 0.12590020801872015,
-    "transform_time": 0.0064163749339058995,
+    "value": 27.264108341172086,
+    "fit_time": 0.23707937309518456,
+    "transform_time": 0.016308557940647006,
     "dim": 64,
     "transductive": false,
     "params": {
@@ -329,5 +329,5 @@
   "val": [],
   "test": []
  },
- "elapsed": 2.074646458029747
+ "elapsed": 2.726581124123186
 }

@@ -1,0 +1,260 @@
+{
+ "experiment": "e1",
+ "dataset": "stsb_mpnet",
+ "method": "abtt_reduce-16",
+ "family": "abtt_reduce",
+ "params": {
+  "n_remove": 7,
+  "n_components": 16
+ },
+ "deterministic": true,
+ "fit_with_labels": false,
+ "seeds": 1,
+ "device": "cuda",
+ "val_fraction": 0.2,
+ "git": {
+  "commit": "6ef1a3b4604b2a3b641a5a50d2f329223729767f",
+  "dirty": false
+ },
+ "embedkit_version": "0.2.0",
+ "python": "3.12.3",
+ "host": "r9ng-8000-1",
+ "created": "2026-11-11T14:50:39+00:00",
+ "dataset_meta": {
+  "model": "sentence-transformers/all-mpnet-base-v2",
+  "hf_dataset": "sentence-transformers/stsb",
+  "normalized": false,
+  "pooling": "mean, Normalize module removed",
+  "n_test_pairs": 1379,
+  "n_val_pairs": 1500,
+  "dataset": "stsb_mpnet",
+  "created": "2026-11-11T10:23:00+00:00",
+  "model_revision": "e8c3b32edf5434bc2275fc9bab85f82640a19130",
+  "device": "cuda",
+  "seconds": 26.5,
+  "source": "/projects/iris/fabio.gonzalezosorio/data/embedkit-bench/features/stsb_mpnet.npz",
+  "task": "sts"
+ },
+ "stages": {
+  "val": [
+   {
+    "method": "abtt_reduce-16",
+    "seed": 0,
+    "metric": "sts_spearman",
+    "value": 0.7175119430435624,
+    "fit_time": 2.2565264962613583,
+    "transform_time": 0.1411410141736269,
+    "dim": 16,
+    "transductive": false,
+    "params": {
+     "n_remove": 7,
+     "n_components": 16
+    },
+    "per_point": null
+   },
+   {
+    "method": "abtt_reduce-16",
+    "seed": 0,
+    "metric": "trustworthiness",
+    "value": 0.7513065008349168,
+    "fit_time": 2.2565264962613583,
+    "transform_time": 0.1411410141736269,
+    "dim": 16,
+    "transductive": false,
+    "params": {
+     "n_remove": 7,
+     "n_components": 16
+    },
+    "per_point": null
+   },
+   {
+    "method": "abtt_reduce-16",
+    "seed": 0,
+    "metric": "continuity",
+    "value": 0.8693503913987839,
+    "fit_time": 2.2565264962613583,
+    "transform_time": 0.1411410141736269,
+    "dim": 16,
+    "transductive": false,
+    "params": {
+     "n_remove": 7,
+     "n_components": 16
+    },
+    "per_point": null
+   },
+   {
+    "method": "abtt_reduce-16",
+    "seed": 0,
+    "metric": "knn_overlap",
+    "value": 0.1611683848797251,
+    "fit_time": 2.2565264962613583,
+    "transform_time": 0.1411410141736269,
+    "dim": 16,
+    "transductive": false,
+    "params": {
+     "n_remove": 7,
+     "n_components": 16
+    },
+    "per_point": null
+   },
+   {
+    "method": "abtt_reduce-16",
+    "seed": 0,
+    "metric": "linear_cka",
+    "value": 0.32829718610706404,
+    "fit_time": 2.2565264962613583,
+    "transform_time": 0.1411410141736269,
+    "dim": 16,
+    "transductive": false,
+    "params": {
+     "n_remove": 7,
+     "n_components": 16
+    },
+    "per_point": null
+   },
+   {
+    "method": "abtt_reduce-16",
+    "seed": 0,
+    "metric": "k_skewness",
+    "value": 0.6749961546583114,
+    "fit_time": 2.2565264962613583,
+    "transform_time": 0.1411410141736269,
+    "dim": 16,
+    "transductive": false,
+    "params": {
+     "n_remove": 7,
+     "n_components": 16
+    },
+    "per_point": null
+   },
+   {
+    "method": "abtt_reduce-16",
+    "seed": 0,
+    "metric": "effective_rank",
+    "value": 8.963325056803935,
+    "fit_time": 2.2565264962613583,
+    "transform_time": 0.1411410141736269,
+    "dim": 16,
+    "transductive": false,
+    "params": {
+     "n_remove": 7,
+     "n_components": 16
+    },
+    "per_point": null
+   }
+  ],
+  "test": [
+   {
+    "method": "abtt_reduce-16",
+    "seed": 0,
+    "metric": "sts_spearman",
+    "value": 0.7100897873842478,
+    "fit_time": 2.2428219094872475,
+    "transform_time": 0.13775097392499447,
+    "dim": 16,
+    "transductive": false,
+    "params": {
+     "n_remove": 7,
+     "n_components": 16
+    },
+    "per_point": null
+   },
+   {
+    "method": "abtt_reduce-16",
+    "seed": 0,
+    "metric": "trustworthiness",
+    "value": 0.7690162035535106,
+    "fit_time": 2.2428219094872475,
+    "transform_time": 0.13775097392499447,
+    "dim": 16,
+    "transductive": false,
+    "params": {
+     "n_remove": 7,
+     "n_components": 16
+    },
+    "per_point": null
+   },
+   {
+    "method": "abtt_reduce-16",
+    "seed": 0,
+    "metric": "continuity",
+    "value": 0.8763579791470858,
+    "fit_time": 2.2428219094872475,
+    "transform_time": 0.13775097392499447,
+    "dim": 16,
+    "transductive": false,
+    "params": {
+     "n_remove": 7,
+     "n_components": 16
+    },
+    "per_point": null
+   },
+   {
+    "method": "abtt_reduce-16",
+    "seed": 0,
+    "metric": "knn_overlap",
+    "value": 0.18299373040752354,
+    "fit_time": 2.2428219094872475,
+    "transform_time": 0.13775097392499447,
+    "dim": 16,
+    "transductive": false,
+    "params": {
+     "n_remove": 7,
+     "n_components": 16
+    },
+    "per_point": null
+   },
+   {
+    "method": "abtt_reduce-16",
+    "seed": 0,
+    "metric": "linear_cka",
+    "value": 0.3176555713264522,
+    "fit_time": 2.2428219094872475,
+    "transform_time": 0.13775097392499447,
+    "dim": 16,
+    "transductive": false,
+    "params": {
+     "n_remove": 7,
+     "n_components": 16
+    },
+    "per_point": null
+   },
+   {
+    "method": "abtt_reduce-16",
+    "seed": 0,
+    "metric": "k_skewness",
+    "value": 0.6052596786720895,
+    "fit_time": 2.2428219094872475,
+    "transform_time": 0.13775097392499447,
+    "dim": 16,
+    "transductive": false,
+    "params": {
+     "n_remove": 7,
+     "n_components": 16
+    },
+    "per_point": null
+   },
+   {
+    "method": "abtt_reduce-16",
+    "seed": 0,
+    "metric": "effective_rank",
+    "value": 8.959194901631113,
+    "fit_time": 2.2428219094872475,
+    "transform_time": 0.13775097392499447,
+    "dim": 16,
+    "transductive": false,
+    "params": {
+     "n_remove": 7,
+     "n_components": 16
+    },
+    "per_point": null
+   }
+  ]
+ },
+ "errors": {},
+ "warnings": {
+  "val": [],
+  "test": []
+ },
+ "elapsed": 6.338656023144722
+}
