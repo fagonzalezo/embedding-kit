@@ -627,7 +627,7 @@ Release as 0.5.0.
 | 2.4 | Trainer integration | done (2026-11-10) |
 | 2.5 | Benchmark harness | done (2026-11-10; cluster features extracted 2026-11-11) |
 | 3.1 | Run E1 | done (2026-11-11; cluster array 3077382) |
-| 3.2 | Run E2 | running (2026-11-11; `benchmarks/e2.py`, cluster) |
+| 3.2 | Run E2 | done (2026-11-11; cluster array 3077451) |
 | 3.3 | Write up and gate | not started |
 | 4.1 | Null models | not started |
 | 4.2 | Intrinsic dimension | not started |
@@ -729,11 +729,32 @@ Release as 0.5.0.
   (auto d = 11 to 28) has no baseline at its d, because baselines use d in {16, 32, 64, 128, 256}.
 - Supervised `EmbedKit` is the best method on validation-selected test kNN on CIFAR-100 (+0.008 over
   raw), Pets (+0.013) and synthetic (+0.175), with intervals above 0.
+- **E2 ran on the cluster** as array 3077451: four datasets (Pets, CIFAR-100, Banking77, synthetic;
+  one more than the plan asks), 30 configurations each (`c00` is the default recipe at d = 64, the
+  rest a fixed random draw over loss, temperature, augmentation, d and learning rate), 100 epochs,
+  evaluated every 5, seed 0, no early stopping. All 120 runs record `bcba00f`. Wall time: Pets
+  17 min, synthetic 11 min, Banking77 38 min, CIFAR-100 1 h 47 min. Results in
+  `benchmarks/results/e2/`, tables in `benchmarks/results/e2/REPORT.md`.
+- E2 downstream metrics use at most 10,000 training and 5,000 test rows (stratified, seed 0; only
+  CIFAR-100 and Banking77 are subsampled) and a probe with C = 1, so that 20 evaluations per run stay
+  cheap.
+- **E2 outcome, stopping.** No label-free monitor has a median within-run ρ above 0.5 on more than
+  one dataset (uniformity +0.55 on Banking77, isotropy +0.51 on CIFAR-100, both negative on Pets).
+  The validation contrastive loss correlates negatively on every dataset (-0.37 to -0.64): accuracy
+  falls while the loss falls. Training to the last epoch loses 0.005 to 0.012 test kNN on average
+  against the run's best epoch on the real sets, 0.033 on synthetic. By the rule above, early
+  stopping is disabled by default.
+- **E2 outcome, selection.** `knn_overlap` at the last epoch ranks configurations well on the three
+  real sets (across-run ρ +0.72 to +0.79, selection regret at most 0.002) and not on synthetic
+  (-0.03). Uniformity, the current default monitor, ranks Pets backwards (-0.60). The labelled
+  validation kNN accuracy reaches +0.87 to +0.95 everywhere.
+- The best of the 30 configurations at the last epoch is below raw on Banking77 (0.921 vs 0.931) and
+  CIFAR-100 (0.847 vs 0.859), and above it on Pets (0.908 vs 0.901) and synthetic (0.803 vs 0.746).
 
 ## Open points for the next session
 
 All design decisions in this plan are confirmed. Two practical points remain:
 
-1. **E2 (WP 3.2)** is next; E1 is done (see phase 3 notes).
+1. **WP 3.3** (write-up) is next; E1 and E2 are done (see phase 3 notes).
 2. **The phase 3 gate.** The outcome is the user's call. Present the E1 and E2 tables with a recommendation and
    wait for confirmation before starting phase 5.
