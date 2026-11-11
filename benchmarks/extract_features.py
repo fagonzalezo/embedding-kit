@@ -193,9 +193,13 @@ def _sentence_encoder(device: str):
     from sentence_transformers import SentenceTransformer
 
     model = SentenceTransformer(MODELS["mpnet"], device=device)
+    # Raw (unnormalised) embeddings: normalisation is one of the transforms under test. Some
+    # models (all-mpnet-base-v2 among them) end with a Normalize module, which
+    # normalize_embeddings=False does not bypass, so drop it.
+    for key in [k for k, m in model._modules.items() if type(m).__name__ == "Normalize"]:
+        del model._modules[key]
 
     def encode(texts, batch_size):
-        # Raw (unnormalised) embeddings: normalisation is one of the transforms under test.
         return model.encode(list(texts), batch_size=batch_size, convert_to_numpy=True,
                             normalize_embeddings=False, show_progress_bar=False).astype(np.float32)
 
@@ -214,7 +218,7 @@ def banking77_mpnet(root: Path, device: str, batch_size: int) -> tuple[dict, dic
         y_test=np.asarray(ds["test"]["label"], dtype=np.int64),
     )
     return arrays, dict(model=MODELS["mpnet"], hf_dataset="mteb/banking77", n_classes=77,
-                        normalized=False)
+                        normalized=False, pooling="mean, Normalize module removed")
 
 
 def stsb_mpnet(root: Path, device: str, batch_size: int) -> tuple[dict, dict]:
@@ -233,7 +237,8 @@ def stsb_mpnet(root: Path, device: str, batch_size: int) -> tuple[dict, dict]:
         arrays[prefix + "pairs_b"] = np.array([index[s] for s in part["sentence2"]], np.int64)
         arrays[prefix + "scores"] = np.asarray(part["score"], dtype=np.float64)
     return arrays, dict(model=MODELS["mpnet"], hf_dataset="sentence-transformers/stsb",
-                        normalized=False, n_test_pairs=len(ds["test"]),
+                        normalized=False, pooling="mean, Normalize module removed",
+                        n_test_pairs=len(ds["test"]),
                         n_val_pairs=len(ds["validation"]))
 
 
