@@ -618,14 +618,14 @@ Release as 0.5.0.
 | 0.4 | Stale documentation | done (2026-11-10) |
 | 1.1 | Nearest neighbours | done (2026-11-10) |
 | 1.2 | Losses | done (2026-11-10) |
-| 1.3 | Trainer | done (2026-11-10); CUDA run of the loss tests on the cluster still to do |
+| 1.3 | Trainer | done (2026-11-10; full test suite passed on CUDA 2026-11-10) |
 | 1.4 | Augmentations | done (2026-11-10) |
 | 1.5 | Analysis fixes | done (2026-11-10); see deviation note below |
 | 2.1 | Metrics | done (2026-11-10) |
 | 2.2 | Training-free transforms | done (2026-11-10) |
 | 2.3 | Protocol | done (2026-11-10) |
 | 2.4 | Trainer integration | done (2026-11-10) |
-| 2.5 | Benchmark harness | done (2026-11-10); cluster feature extraction running |
+| 2.5 | Benchmark harness | done (2026-11-10; cluster features extracted 2026-11-11) |
 | 3.1 | Run E1 | not started |
 | 3.2 | Run E2 | not started |
 | 3.3 | Write up and gate | not started |
@@ -662,7 +662,8 @@ Release as 0.5.0.
 - **Provisional `distance_cv` threshold:** 0.02 (fires for iid Gaussians from about d = 1,250 at
   n = 2,000; the old `concentration_ratio > 0.8` rule fired from about d = 1,000). Replace in WP 4.1.
 - **Phase 1 exit criteria:** CI green on Ubuntu and macOS, Python 3.10 and 3.12, and the FAISS job
-  (run 42858964788). Tagged `v0.1.3` (local tag). Still open: the loss tests have not been run on CUDA.
+  (run 42858964788). Tagged `v0.1.3` (local tag). The full test suite, loss tests included, passed
+  on CUDA (Quadro RTX 8000, job 3076919, 2026-11-10).
 - Phase 0 was completed after phase 1 on the same branch (WP 0.2 to 0.4).
 - `skills/embedkit/references/metric_guide.md` still describes 0.1.2 fields and thresholds (WP 7.4).
 
@@ -689,12 +690,26 @@ Release as 0.5.0.
 - Cluster (2026-11-10): clone `/projects/iris/fabio.gonzalezosorio/embedding-kit`, data root
   `$BASE/data/embedkit-bench` (Pets copied), venv `$BASE/envs/embedkit`. Setup 3076918 done
   (torch 2.11 from the container). ANN extraction 3076921 failed: ann-benchmarks.com returns 403 to
-  urllib's default User-Agent (fixed in `extract_features.py`, to resubmit).
+  urllib's default User-Agent (fixed in `extract_features.py`; job 3076928 succeeded).
+- CI green on `da13d8c` (all jobs). Tagged `v0.2.0` there (local tag).
+- **Cluster features (2026-11-11), all in `$DATA/features/`.** Sanity check (loaders, finite
+  values, kNN accuracy k = 10 cosine on a 20,000 / 2,000 subset): CIFAR-100/DINOv2 50,000 / 10,000
+  × 768, 0.887; STL-10/CLIP 5,000 / 8,000 × 512, 0.983; Banking77/mpnet 9,993 / 3,076 × 768, 0.926;
+  STS-B/mpnet 10,566 train sentences, 2,552 test sentences (1,379 pairs); GloVe-100, SIFT-128,
+  GIST-960 as published.
+  - STL-10's host (ai.stanford.edu) is unreachable; the features come from the Hugging Face mirror
+    `tanganke/stl10` (same splits and label order; revision recorded in the metadata).
+  - transformers 5 returns a model output from CLIP's `get_image_features`; the projected embedding
+    is its `pooler_output`.
+  - all-mpnet-base-v2 ends with a `Normalize` module that `normalize_embeddings=False` does not
+    bypass. The extractor removes it, so the raw text features are unnormalised (mean norm about 3),
+    as E1 needs. The first, unit-norm extraction is kept in `features/old-normalized/`.
+  - `mteb/banking77` has 9,993 / 3,076 examples, not the published 10,003 / 3,080.
 
 ## Open points for the next session
 
 All design decisions in this plan are confirmed. Two practical points remain:
 
-1. **Cluster access details** (host, scheduler, storage paths, environment setup). Needed from WP 2.5 onwards.
+1. **Starting E1 on the cluster** (`sbatch run.slurm.sh` in the cluster clone) waits for the user's go-ahead.
 2. **The phase 3 gate.** The outcome is the user's call. Present the E1 and E2 tables with a recommendation and
    wait for confirmation before starting phase 5.
