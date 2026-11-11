@@ -627,7 +627,7 @@ Release as 0.5.0.
 | 2.4 | Trainer integration | done (2026-11-10) |
 | 2.5 | Benchmark harness | done (2026-11-10; cluster features extracted 2026-11-11) |
 | 3.1 | Run E1 | done (2026-11-11; cluster array 3077382) |
-| 3.2 | Run E2 | not started |
+| 3.2 | Run E2 | running (2026-11-11; `benchmarks/e2.py`, cluster) |
 | 3.3 | Write up and gate | not started |
 | 4.1 | Null models | not started |
 | 4.2 | Intrinsic dimension | not started |

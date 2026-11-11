@@ -23,6 +23,8 @@ GPU_SETS=(cifar100_dinov2 stl10_clip banking77_mpnet stsb_mpnet)
 CPU_SETS=(glove100 sift128 gist960)
 # Datasets of experiment E1 (one array task each).
 E1_SETS=(pets_resnet50 digits synthetic_anisotropic cifar100_dinov2 stl10_clip banking77_mpnet stsb_mpnet)
+# Datasets of experiment E2 (one array task each; labelled sets only).
+E2_SETS=(cifar100_dinov2 pets_resnet50 banking77_mpnet synthetic_anisotropic)
 
 check_clean() {
   # Results must match the commit recorded in each result file.

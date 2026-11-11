@@ -10,6 +10,8 @@ split, score held-out data.
 | `experiments.py` | Method grids per experiment (`e1`: training-free baselines and `EmbedKit`). |
 | `run.py` | Runs an experiment; one JSON file per dataset and method; resumable. |
 | `report.py` | Turns the JSON files into Markdown tables, with selection on validation. |
+| `e2.py` | Experiment E2: trains ~30 refiner configurations per dataset and logs every monitor next to test kNN and probe accuracy every 5 epochs; resumable. |
+| `report_e2.py` | E2 tables: within-run and across-run Spearman correlations of each monitor with test accuracy, and the regret of stopping or selecting by it. |
 | `extract_features.py` | Downloads a large set and caches its embeddings. **Cluster only.** |
 | `cluster/` | Slurm jobs for the OCCIDATA cluster (see "On the cluster" below). |
 | `review_2026_11/` | Scripts behind `docs/CRITICAL_REVIEW.md` (pilot, defect reproductions). |

@@ -45,7 +45,8 @@ import embedkit  # noqa: E402
 from embedkit.evaluation import evaluate_transform  # noqa: E402
 
 
-def git_state() -> dict:
+def git_state(extra: tuple[str, ...] = ()) -> dict:
+    """HEAD and whether the code behind a result (plus the ``extra`` paths) has local changes."""
     def run(*args):
         try:
             return subprocess.run(["git", "-C", str(REPO), *args], capture_output=True,
@@ -54,7 +55,7 @@ def git_state() -> dict:
             return None
 
     dirty = run("status", "--porcelain", "--", "embedkit", "benchmarks/run.py",
-                "benchmarks/experiments.py", "benchmarks/bench_datasets.py")
+                "benchmarks/experiments.py", "benchmarks/bench_datasets.py", *extra)
     return dict(commit=run("rev-parse", "HEAD"), dirty=bool(dirty) if dirty is not None else None)
 
 
