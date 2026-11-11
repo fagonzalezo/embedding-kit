@@ -12,6 +12,11 @@ export PIP_CACHE_DIR=$BASE/cache/pip
 export PYTHONNOUSERSITE=1 TQDM_DISABLE=1 PYTHONUNBUFFERED=1 MPLBACKEND=Agg
 export TMPDIR=$BASE/tmp/embedkit_${SLURM_ARRAY_JOB_ID:-$SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID:-0}
 mkdir -p "$TMPDIR" "$DATA" && chmod 700 "$TMPDIR"
+# OpenBLAS (numpy/scipy) with as many threads as the job has CPUs makes the many small
+# logistic-regression fits of the linear probe 10-20x slower (E1 raw on synthetic, 8 CPUs:
+# 276 s with 8 BLAS threads, 24 s with 1, 15 s with 4; same results). Use half the CPUs.
+CPUS=${SLURM_CPUS_PER_TASK:-2}
+export OPENBLAS_NUM_THREADS=$(( CPUS > 1 ? CPUS / 2 : 1 ))
 
 # Feature-extraction sets: GPU ones (images, text) and CPU ones (ANN-Benchmarks downloads).
 GPU_SETS=(cifar100_dinov2 stl10_clip banking77_mpnet stsb_mpnet)
