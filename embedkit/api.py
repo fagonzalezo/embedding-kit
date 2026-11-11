@@ -38,9 +38,9 @@ class EmbedKit:
         weight_decay: float = 1e-4,
         scheduler: str | None = "cosine",
         eval_every: int = 5,
-        early_stopping_patience: int | None = 10,
+        early_stopping_patience: int | None = None,
         monitor: str = "k_skewness",
-        val_split: float = 0.1,
+        val_split: float | None = None,
         device: str | torch.device | None = None,
         id_methods: list[str] | None = None,
         random_state: int | None = 42,
@@ -124,12 +124,19 @@ class EmbedKit:
             eval_metrics=[self.monitor],
             early_stopping_patience=self.early_stopping_patience,
             monitor=self.monitor,
-            val_split=self.val_split,
+            val_split=self._resolve_val_split(),
             device=self.device,
             random_state=self.random_state,
         )
         self._trainer.fit(X_np, y)
         return self
+
+    def _resolve_val_split(self) -> float:
+        # Early stopping is off by default: in E2 (docs/BENCHMARK_E1_E2.md) no label-free monitor
+        # tracked test accuracy within a run. Hold rows out only when a monitor decides something.
+        if self.val_split is not None:
+            return self.val_split
+        return 0.1 if self.early_stopping_patience is not None else 0.0
 
     def transform(self, X) -> np.ndarray | torch.Tensor:
         if self._trainer is None:

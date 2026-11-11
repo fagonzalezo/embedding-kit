@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+Phase 3 of `docs/IMPLEMENTATION_PLAN.md`: benchmarks E1 and E2 and the decision gate
+(`docs/BENCHMARK_E1_E2.md`).
+
+### Changed
+- **`EmbedKit` no longer stops early by default** (`early_stopping_patience=None`, was 10): it trains
+  for the fixed `epochs` budget. In E2 no label-free monitor tracked test accuracy within a run, and
+  the validation contrastive loss moved against it. `val_split` now defaults to `None`: 0.1 of the
+  rows are held out only when early stopping is enabled, so by default the refiner trains on every row.
+  Pass `early_stopping_patience=10` to restore the 0.2.0 behaviour.
+
+### Benchmarks
+- `benchmarks/e2.py` and `benchmarks/report_e2.py`: experiment E2, every trainer monitor logged
+  next to test kNN and probe accuracy over 30 refiner configurations per dataset.
+- `benchmarks/report_gate.py`: the phase 3 gate on E1 results.
+- Results in `benchmarks/results/e1/` and `benchmarks/results/e2/`.
+
 ## 0.2.0 (unreleased)
 
 Phase 2 of `docs/IMPLEMENTATION_PLAN.md`: any transform, trained or not, can be scored with one call on

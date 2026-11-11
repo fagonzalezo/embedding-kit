@@ -628,18 +628,18 @@ Release as 0.5.0.
 | 2.5 | Benchmark harness | done (2026-11-10; cluster features extracted 2026-11-11) |
 | 3.1 | Run E1 | done (2026-11-11; cluster array 3077382) |
 | 3.2 | Run E2 | done (2026-11-11; cluster array 3077451) |
-| 3.3 | Write up and gate | not started |
+| 3.3 | Write up and gate | done (2026-11-11; `docs/BENCHMARK_E1_E2.md`; gate outcome C plus WP 5.3) |
 | 4.1 | Null models | not started |
 | 4.2 | Intrinsic dimension | not started |
 | 4.3 | Isotropy and spectrum | not started |
 | 4.4 | Metric consistency, kernel spectrum | not started |
 | 4.5 | Run E3 and E5 | not started |
-| 5.1 | Residual adapter | waits for gate |
-| 5.2 | Positives and negatives | waits for gate |
-| 5.3 | Matryoshka output | waits for gate |
-| 5.4 | Structure preservation, VICReg | waits for gate |
+| 5.1 | Residual adapter | not started (in scope, gate C) |
+| 5.2 | Positives and negatives | not started (gate C: one two-day attempt) |
+| 5.3 | Matryoshka output | not started (added by the user to gate C) |
+| 5.4 | Structure preservation, VICReg | dropped (gate C) |
 | 5.5 | Hubness reduction | not started |
-| 5.6 | Run E6 and E7 | waits for gate |
+| 5.6 | Run E6 and E7 | not started (restricted to the WPs above) |
 | 6.1 | Supervised defaults | not started |
 | 6.2 | Class collapse | not started |
 | 6.3 | Run E8 | not started |
@@ -750,11 +750,25 @@ Release as 0.5.0.
   validation kNN accuracy reaches +0.87 to +0.95 everywhere.
 - The best of the 30 configurations at the last epoch is below raw on Banking77 (0.921 vs 0.931) and
   CIFAR-100 (0.847 vs 0.859), and above it on Pets (0.908 vs 0.901) and synthetic (0.803 vs 0.746).
+- **Gate decision (confirmed by the user, 2026-11-11): outcome C, with WP 5.3 added.** E1 has no
+  wins (3 ties, 3 losses, STS-B -0.036 without an interval); trustworthiness is below PCA's at the
+  same d on 6 of 7 datasets, and a lower-d PCA or PCA-whitening matches the refiner on 5 of 7, so
+  outcome B does not hold. The user kept WP 5.3 (Matryoshka output) because nested prefixes are
+  useful downstream. Phase 5 scope: WP 5.1; one two-day attempt at WP 5.2; WP 5.3; WP 5.5 as
+  before; E6/E7 on these. WP 5.4 is dropped. If WP 5.2 gives no wins, `EmbedKit(mode="self_supervised")`
+  returns the best training-free baseline and effort moves to phases 4, 6 and 7. The WP 5.3 line
+  "target_dim='auto' means train at min(256, d) with nested prefixes" still needs E6 to accept it.
+- **Monitor default (WP 3.3).** `EmbedKit` now defaults to `early_stopping_patience=None` and
+  `val_split=None` (0.1 only when early stopping is on), so it trains on every row for `epochs`.
+  `Trainer`'s own defaults were already no early stopping and `val_split=0`. The `monitor` default
+  (k-skewness) is kept for users who enable early stopping; E2 gives no better label-free choice.
+  For selection between configurations (WP 7.2), `knn_overlap` is the label-free candidate.
+- `benchmarks/report_gate.py` writes the gate tables (`benchmarks/results/e1/GATE.md`).
 
 ## Open points for the next session
 
 All design decisions in this plan are confirmed. Two practical points remain:
 
-1. **WP 3.3** (write-up) is next; E1 and E2 are done (see phase 3 notes).
-2. **The phase 3 gate.** The outcome is the user's call. Present the E1 and E2 tables with a recommendation and
-   wait for confirmation before starting phase 5.
+1. **Phase 3 is done.** The gate outcome is C, plus WP 5.3 (confirmed by the user, 2026-11-11; see the phase 3
+   notes). Phase 5 (WP 5.1, a two-day attempt at WP 5.2, WP 5.3, then E6/E7) and phase 4 are both open; the
+   user chooses which comes next.

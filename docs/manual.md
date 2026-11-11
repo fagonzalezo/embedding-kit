@@ -614,7 +614,13 @@ print(trainer.history)             # {"loss": [...], "uniformity": [...], ...}
 | `k_skewness > 5` | Adds `AlignUniformLoss` (weight 0.5) via `CombinedLoss` |
 | `target_dim == "auto"` | Uses `report.suggested_target_dim` = `clip(1.5 × ID, ID, D)` |
 
-**Class:** `EmbedKit(mode, augmentation, loss, target_dim, hidden_dim, n_layers, epochs, batch_size, optimizer, lr, scheduler, eval_every, early_stopping_patience, device, id_methods, random_state)`
+**Class:** `EmbedKit(mode, augmentation, loss, target_dim, hidden_dim, n_layers, epochs, batch_size, optimizer, lr, scheduler, eval_every, early_stopping_patience, monitor, val_split, device, id_methods, random_state)`
+
+`EmbedKit` trains for a fixed budget of `epochs` (default 100) and does not stop early: in the E2
+benchmark (`docs/BENCHMARK_E1_E2.md`) no label-free statistic tracked downstream accuracy within a run.
+To stop early, pass `early_stopping_patience` (counted in evaluations, every `eval_every` epochs) and
+a `monitor`; `val_split` then defaults to 0.1 of the rows, held out from training. Without early
+stopping it defaults to 0 and every row is used for training.
 
 ```python
 from embedkit import EmbedKit

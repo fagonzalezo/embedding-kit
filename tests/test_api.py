@@ -38,6 +38,22 @@ class TestEmbedKit:
         Z = ek2.transform(small_X)
         assert Z.shape == (small_X.shape[0], 8)
 
+    def test_no_early_stopping_by_default(self, small_X):
+        # E2: no label-free monitor tracks test accuracy, so the default is a fixed epoch budget
+        # trained on every row.
+        from embedkit import EmbedKit
+        ek = EmbedKit(target_dim=4, epochs=4, eval_every=1, device="cpu").fit(small_X)
+        assert ek._trainer.early_stopping_patience is None
+        assert ek._trainer.val_split == 0.0
+        assert ek._trainer.stopped_epoch_ == 4
+
+    def test_early_stopping_holds_out_validation(self, small_X):
+        from embedkit import EmbedKit
+        ek = EmbedKit(target_dim=4, epochs=2, eval_every=1, early_stopping_patience=5,
+                      device="cpu").fit(small_X)
+        assert ek._trainer.val_split == 0.1
+        assert EmbedKit(early_stopping_patience=5, val_split=0.2)._resolve_val_split() == 0.2
+
     def test_transform_before_fit_raises(self, small_X):
         from embedkit import EmbedKit
         ek = EmbedKit()
