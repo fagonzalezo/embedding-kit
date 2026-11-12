@@ -17,7 +17,7 @@ def _data(n=128, d=16, seed=0):
 def _trainer(**kw):
     torch.manual_seed(0)
     defaults = dict(
-        model=EmbeddingRefiner(16, 4, hidden_dim=32, n_layers=1),
+        model=EmbeddingRefiner(16, 4, hidden_dim=32, n_layers=1, architecture="mlp"),
         augmentation=GaussianNoise(0.1, relative=False),
         loss=NTXentLoss(0.5),
         epochs=5,
@@ -300,7 +300,7 @@ def test_val_loss_matches_training_loss_definition():
     from embedkit.improvement.augmentation import FeatureDropout
 
     torch.manual_seed(0)
-    model = EmbeddingRefiner(16, 4, hidden_dim=32, n_layers=1, dropout=0.0)
+    model = EmbeddingRefiner(16, 4, hidden_dim=32, n_layers=1, dropout=0.0, architecture="mlp")
     t = Trainer(model, FeatureDropout(p=0.0), NTXentLoss(0.5), epochs=1, batch_size=64,
                 eval_every=1, val_split=0.25, eval_metrics=["val_loss"], device="cpu",
                 random_state=0)

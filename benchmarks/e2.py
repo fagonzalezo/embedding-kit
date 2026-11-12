@@ -149,7 +149,7 @@ def run_config(cfg, ds, downstream, args, seed=0) -> dict:
     with torch.random.fork_rng(devices=[]):
         torch.default_generator.manual_seed(seed)
         model = EmbeddingRefiner(input_dim=d_in, target_dim=target_dim, hidden_dim=256,
-                                 n_layers=2)
+                                 n_layers=2, architecture="mlp")  # the model E2 measured
     trainer = TrackingTrainer(
         model=model, augmentation=_augmentation(cfg["augmentation"]), loss=_loss(cfg),
         epochs=args.epochs, batch_size=256, optimizer="adam", lr=cfg["lr"], weight_decay=1e-4,

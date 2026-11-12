@@ -255,6 +255,7 @@ class TestEmbeddingRefiner:
         from embedkit.improvement.model import EmbeddingRefiner
         model = EmbeddingRefiner(input_dim=16, target_dim=8)
         x = torch.randn(32, 16)
+        model.initialize_from_data(x.numpy())
         z = model(x)
         assert z.shape == (32, 8)
 
@@ -262,6 +263,7 @@ class TestEmbeddingRefiner:
         from embedkit.improvement.model import EmbeddingRefiner
         model = EmbeddingRefiner(input_dim=16, target_dim=8, normalize_output=True)
         x = torch.randn(32, 16)
+        model.initialize_from_data(x.numpy())
         z = model(x)
         norms = z.norm(dim=1)
         assert torch.allclose(norms, torch.ones(32), atol=1e-5)
@@ -270,6 +272,7 @@ class TestEmbeddingRefiner:
         from embedkit.improvement.model import EmbeddingRefiner
         model = EmbeddingRefiner(input_dim=16, target_dim=8, normalize_output=False)
         x = torch.randn(32, 16)
+        model.initialize_from_data(x.numpy())
         z = model(x)
         assert z.shape == (32, 8)
 

@@ -86,7 +86,7 @@ def test_constant_feature_is_not_divided_by_zero():
 
 def test_mlp_is_unchanged_by_initialize():
     torch.manual_seed(0)
-    model = EmbeddingRefiner(48, 8)
+    model = EmbeddingRefiner(48, 8, architecture="mlp")
     before = {k: v.clone() for k, v in model.state_dict().items()}
     model.initialize_from_data(_anisotropic())
     for k, v in model.state_dict().items():
@@ -109,3 +109,47 @@ def test_save_load_round_trip(tmp_path):
     ek2 = EmbedKit.load(tmp_path / "bundle")
     assert ek2._trainer.model.architecture == "residual"
     np.testing.assert_allclose(ek2.transform(X), ek.transform(X), atol=1e-6)
+
+
+def test_default_architecture_is_linear():
+    model = EmbeddingRefiner(16, 4)
+    assert model.architecture == "linear" and model.net is None
+
+
+def test_warns_when_trained_uninitialised():
+    import warnings
+
+    X = torch.randn(32, 16)
+    model = EmbeddingRefiner(16, 4)
+    model.eval()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        model(X)  # inference on an uninitialised model: no warning
+    model.train()
+    with pytest.warns(UserWarning, match="initialize_from_data"):
+        model(X)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        model(X)  # once per model
+
+        init = EmbeddingRefiner(16, 4, architecture="residual")
+        init.initialize_from_data(X.numpy())
+        init(X)
+        loaded = EmbeddingRefiner(16, 4)
+        loaded.load_state_dict(EmbeddingRefiner(16, 4).state_dict())
+        loaded(X)
+        EmbeddingRefiner(16, 4, architecture="mlp")(X)
+
+
+def test_trainer_initialises_without_warning():
+    import warnings
+
+    from embedkit.improvement.augmentation import GaussianNoise
+    from embedkit.improvement.losses import NTXentLoss
+    from embedkit.improvement.trainer import Trainer
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        Trainer(EmbeddingRefiner(16, 4), GaussianNoise(0.1, relative=False), NTXentLoss(0.5),
+                epochs=1, batch_size=32, eval_every=100, device="cpu",
+                random_state=0).fit(np.random.default_rng(0).normal(size=(64, 16)))

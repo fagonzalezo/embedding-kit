@@ -1,7 +1,8 @@
-"""EmbeddingRefiner: MLP projector head, optionally as a residual adapter on PCA."""
+"""EmbeddingRefiner: a PCA-initialised linear map (default), a residual adapter, or an MLP."""
 
 from __future__ import annotations
 
+import warnings
 from typing import Literal
 
 import numpy as np
@@ -17,18 +18,24 @@ class EmbeddingRefiner(nn.Module):
     Parameters
     ----------
     architecture:
-        - ``"mlp"`` (default): ``z = g(x)``, an MLP with ``n_layers`` hidden layers of
-          ``hidden_dim`` units (Linear, BatchNorm, ReLU, Dropout) and a linear output layer.
-        - ``"residual"``: ``z = W x̃ + g(x̃)`` (review 4.5, WP 5.1). ``x̃`` is the input
-          standardised by fixed (non-trainable) statistics, ``W`` a linear map and ``g`` the MLP
-          above with its output layer initialised to zero.
-        - ``"linear"``: ``z = W x̃``, the residual architecture without ``g``.
+        - ``"linear"`` (default): ``z = W x̃``. ``x̃`` is the input standardised by fixed
+          (non-trainable) statistics and ``W`` a linear map (with bias).
+        - ``"residual"``: ``z = W x̃ + g(x̃)`` (review 4.5, WP 5.1), with ``g`` the MLP below and
+          its output layer initialised to zero.
+        - ``"mlp"``: ``z = g(x)``, an MLP with ``n_layers`` hidden layers of ``hidden_dim`` units
+          (Linear, BatchNorm, ReLU, Dropout) and a linear output layer. The default before E6.
 
-        For ``"residual"`` and ``"linear"``, :meth:`initialize_from_data` (called by
+        ``hidden_dim``, ``n_layers`` and ``dropout`` configure ``g``; ``"linear"`` ignores them.
+
+        For ``"linear"`` and ``"residual"``, :meth:`initialize_from_data` (called by
         ``Trainer.fit``) sets the standardisation statistics and initialises ``W`` from the top
         ``target_dim`` principal directions of the training data, so that before any training
         step the output equals ``PCAReduce(target_dim)`` followed by L2 normalisation. Training
-        starts from PCA.
+        starts from PCA. A custom training loop must call it first; training without it (a
+        forward pass in training mode) warns once, because ``W`` is then a random map.
+
+        E6 (``docs/BENCHMARK_E1_E2.md``): ``"linear"`` and ``"residual"`` beat ``"mlp"`` on 5 of 6
+        datasets and lost on none; ``"linear"`` was at least as good as ``"residual"`` on 5 of 6.
     """
 
     def __init__(
@@ -39,7 +46,7 @@ class EmbeddingRefiner(nn.Module):
         n_layers: int = 2,
         dropout: float = 0.1,
         normalize_output: bool = True,
-        architecture: Literal["mlp", "residual", "linear"] = "mlp",
+        architecture: Literal["mlp", "residual", "linear"] = "linear",
     ):
         super().__init__()
         if architecture not in ARCHITECTURES:
@@ -64,6 +71,8 @@ class EmbeddingRefiner(nn.Module):
             layers.append(nn.Linear(in_d, target_dim))
             self.net = nn.Sequential(*layers)
 
+        self._data_initialized = False
+        self._warned_uninitialized = False
         self.linear: nn.Linear | None = None
         if architecture in ("residual", "linear"):
             self.linear = nn.Linear(input_dim, target_dim)
@@ -103,11 +112,26 @@ class EmbeddingRefiner(nn.Module):
         if self.net is not None:
             self.net[-1].weight.zero_()
             self.net[-1].bias.zero_()
+        self._data_initialized = True
+
+    def load_state_dict(self, state_dict, *args, **kwargs):
+        out = super().load_state_dict(state_dict, *args, **kwargs)
+        if "input_mean" in state_dict:  # a saved, initialised model
+            self._data_initialized = True
+        return out
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.linear is None:
             z = self.net(x)
         else:
+            if self.training and not self._data_initialized and not self._warned_uninitialized:
+                self._warned_uninitialized = True
+                warnings.warn(
+                    f"EmbeddingRefiner(architecture={self.architecture!r}) is being trained "
+                    "without initialize_from_data(X_train), so it starts from a random linear map "
+                    "instead of PCA. Trainer.fit calls it; call it yourself in a custom loop.",
+                    UserWarning, stacklevel=2,
+                )
             x = (x - self.input_mean) / self.input_scale
             z = self.linear(x)
             if self.net is not None:

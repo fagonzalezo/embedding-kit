@@ -15,6 +15,9 @@ Phase 3 of `docs/IMPLEMENTATION_PLAN.md`: benchmarks E1 and E2 and the decision 
   and trained with the contrastive loss. In E6 (`benchmarks/results/e6/REPORT.md`) it beat the MLP on
   5 of 6 datasets with an interval and lost on none; the residual variant did as well against the MLP
   but lost to `"linear"` on 3 datasets and won on 1. Pass `architecture="mlp"` for the 0.2.0 model.
+  `EmbeddingRefiner` has the same default. A linear or residual refiner trained without
+  `initialize_from_data` (a custom loop; `Trainer.fit` calls it) warns once, as it then starts from a
+  random map instead of PCA.
 
 ### Added
 - `EmbeddingRefiner(architecture="residual")` (WP 5.1): `z = normalize(W x̃ + g(x̃))`, with `x̃` the

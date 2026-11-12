@@ -63,7 +63,7 @@ AUGMENTATIONS = {
 
 def _trainer_run(make_aug):
     torch.manual_seed(123)  # the model is built under the same seed in both runs
-    model = EmbeddingRefiner(16, 4, hidden_dim=32, n_layers=1)
+    model = EmbeddingRefiner(16, 4, hidden_dim=32, n_layers=1, architecture="mlp")
     t = Trainer(
         model, make_aug(), NTXentLoss(0.5), epochs=3, batch_size=32, eval_every=1,
         device="cpu", random_state=7,
@@ -84,7 +84,7 @@ def test_trainer_is_reproducible(name):
 @pytest.mark.parametrize("name", list(AUGMENTATIONS))
 def test_trainer_leaves_global_state_alone(name):
     torch.manual_seed(0)
-    model = EmbeddingRefiner(16, 4, hidden_dim=32, n_layers=1)
+    model = EmbeddingRefiner(16, 4, hidden_dim=32, n_layers=1, architecture="mlp")
     t = Trainer(
         model, AUGMENTATIONS[name](), NTXentLoss(0.5), epochs=2, batch_size=32,
         eval_every=1, device="cpu", random_state=7,
