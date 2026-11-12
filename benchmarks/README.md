@@ -64,5 +64,6 @@ GPU jobs use `singularity exec --nv`; at most 2 GPUs at a time. Code reaches the
 
 From `benchmarks/cluster/` in the cluster clone: `sbatch setup.slurm.sh` (once),
 `sbatch extract.slurm.sh` and `sbatch extract_cpu.slurm.sh` (features), `sbatch test.slurm.sh`
-(test suite on CUDA), then `sbatch run.slurm.sh` (E1, one array task per dataset). Copy
+(test suite on CUDA), then `sbatch run.slurm.sh` (E1, one array task per dataset), `sbatch e1_hub.slurm.sh` (the E1
+hubness-reduction methods, on CPU nodes) and `sbatch e6.slurm.sh` (E6). Copy
 `benchmarks/results/` back with rsync and commit the JSON files.

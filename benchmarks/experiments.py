@@ -23,6 +23,8 @@ class Method:
     fit_with_labels: bool = False
     family: str = ""  # for grouping in reports, e.g. "pca", "embedkit"
     params: dict = field(default_factory=dict)
+    hubness_reduction: object = None  # neighbour search for the kNN-based metrics (WP 5.5)
+    metrics: tuple | None = None  # metrics for this method (default: the run's --metrics)
 
 
 def _dims_for(d: int) -> list[int]:
@@ -72,6 +74,17 @@ def e1_methods(dataset) -> list[Method]:
                 lambda s, ds, dev, k=k: EmbedKit(target_dim=k, random_state=s, device=dev),
                 deterministic=False, family="embedkit_fixed_d", params=dict(target_dim=k),
             ))
+    # WP 5.5: hubness reduction on the raw embedding, a retrieval-time method. It changes the
+    # neighbour search, not the coordinates, so only the kNN-based metrics are scored.
+    from embedkit.hubness_reduction import CSLS, DisSimLocal, LocalScaling, MutualProximity
+
+    hub_metrics = (("knn_accuracy", "knn_accuracy_euclidean", "recall_at_10", "k_skewness")
+                   if labelled else ("k_skewness",))
+    for short, red in [("ls", LocalScaling()), ("mp", MutualProximity()), ("csls", CSLS()),
+                       ("dsl", DisSimLocal())]:
+        m.append(Method(f"raw+{short}", lambda s, ds, dev: B.Identity(), family=f"hub_{short}",
+                        params=dict(hubness_reduction=repr(red)), hubness_reduction=red,
+                        metrics=hub_metrics))
     if labelled:
         m.append(Method(
             "embedkit_supervised",
@@ -83,6 +96,82 @@ def e1_methods(dataset) -> list[Method]:
 
 E6_DIMS = (32, 64, 128)
 E6_ARCHITECTURES = ("mlp", "residual", "linear")
+MATRYOSHKA_MAX_DIM = 256
+
+
+class _Prefix:
+    """A fitted ``EmbedKit`` read at the prefix ``dim`` of its output (WP 5.3)."""
+
+    def __init__(self, ek, dim: int):
+        self.ek, self.dim = ek, dim
+
+    def fit(self, X, y=None):
+        self.ek.fit(X)
+        return self
+
+    def transform(self, X):
+        return self.ek.transform(X, dim=self.dim)
+
+    def get_params(self) -> dict:
+        return dict(dim=self.dim, target_dim=self.ek.target_dim,
+                    architecture=self.ek.architecture)
+
+
+def _default_loss():
+    from embedkit.improvement.losses import AlignUniformLoss, CombinedLoss, NTXentLoss
+
+    return CombinedLoss([(NTXentLoss(temperature=0.07), 1.0), (AlignUniformLoss(), 0.5)])
+
+
+def _e6_stage2(dims, d) -> list[Method]:
+    """WP 5.2 and 5.3 arms: one factor changed from the accepted WP 5.1 default (``linear``).
+
+    Fixed d only: no family selected the auto d in stage 1. The dropout-positive arm needs
+    dropout inside the refiner, which ``linear`` does not have, so it runs on ``residual`` and
+    is compared with ``e6_residual``.
+    """
+    from embedkit import EmbedKit
+    from embedkit.improvement.augmentation import IdentityPair, KNNPairs
+    from embedkit.improvement.losses import (
+        AlignUniformLoss,
+        CombinedLoss,
+        MatryoshkaLoss,
+        NTXentLoss,
+    )
+
+    def loss_with(**nt):
+        return CombinedLoss([(NTXentLoss(temperature=0.07, **nt), 1.0),
+                             (AlignUniformLoss(), 0.5)])
+
+    arms = {
+        "mutual": ("linear", lambda: dict(augmentation=KNNPairs(k=5, mode="mutual"))),
+        "nbrmask": ("linear", lambda: dict(loss=loss_with(neighbor_mask=5))),
+        "decoupled": ("linear", lambda: dict(loss=loss_with(decoupled=True))),
+        "dropout": ("residual", lambda: dict(augmentation=IdentityPair())),
+    }
+    m: list[Method] = []
+    for arm, (arch, kwargs) in arms.items():
+        for k in dims:
+            m.append(Method(
+                f"{arm}-d{k}",
+                lambda s, ds, dev, k=k, arch=arch, kwargs=kwargs: EmbedKit(
+                    target_dim=k, architecture=arch, random_state=s, device=dev, **kwargs()),
+                deterministic=False, family=f"e6_{arm}",
+                params=dict(architecture=arch, target_dim=k, arm=arm),
+            ))
+    # WP 5.3: one model trained at min(256, d) with nested prefixes, read at each d.
+    top = min(MATRYOSHKA_MAX_DIM, d)
+    nested = tuple(k for k in dims if k < top)
+    for k in dims:
+        m.append(Method(
+            f"matryoshka-d{k}",
+            lambda s, ds, dev, k=k: _Prefix(EmbedKit(
+                target_dim=top, architecture="linear", random_state=s, device=dev,
+                loss=MatryoshkaLoss(_default_loss(), dims=nested)), k),
+            deterministic=False, family="e6_matryoshka",
+            params=dict(architecture="linear", target_dim=top, dim=k, nested=list(nested)),
+        ))
+    return m
 
 
 def e6_methods(dataset) -> list[Method]:
@@ -92,6 +181,7 @@ def e6_methods(dataset) -> list[Method]:
     one factor changed, at the default (auto) d and at fixed d in ``E6_DIMS``; each family is
     selected on validation as in E1. Stage WP 5.1: the architecture (``mlp`` is the previous
     default). Raw, PCA and PCA-whitening at the same d are the reference for the gate.
+    Stage WP 5.2/5.3: see :func:`_e6_stage2`.
     """
     from embedkit import EmbedKit
 
@@ -115,7 +205,7 @@ def e6_methods(dataset) -> list[Method]:
                 deterministic=False, family=f"e6_{arch}",
                 params=dict(architecture=arch, target_dim=k),
             ))
-    return m
+    return m + _e6_stage2(dims, d)
 
 
 EXPERIMENTS: dict[str, Callable] = {"e1": e1_methods, "e6": e6_methods}

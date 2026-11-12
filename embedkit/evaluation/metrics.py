@@ -100,6 +100,16 @@ def _check_same_dim(A, B, names=("train", "test")):
         )
 
 
+def _reduced_neighbors(reduction, metric, Z_ref, Z_query, k):
+    """Indices of the ``k`` neighbours under a hubness reduction built on ``metric``.
+
+    ``Z_query=None`` searches the reference rows among themselves.
+    """
+    r = reduction.clone(metric=metric).fit(Z_ref)
+    k = int(min(k, len(Z_ref) - (1 if Z_query is None else 0)))
+    return r.kneighbors(Z_query, n_neighbors=k, return_distance=False)
+
+
 # ----------------------------------------------------------------------------- held-out
 def knn_accuracy(
     Z_train,
@@ -109,6 +119,7 @@ def knn_accuracy(
     k: int = 5,
     metric: str = "cosine",
     return_per_point: bool = False,
+    hubness_reduction=None,
 ):
     """Test accuracy of a ``k``-nearest-neighbour majority vote.
 
@@ -121,6 +132,10 @@ def knn_accuracy(
     With ``return_per_point=True`` the result is ``(accuracy, correct)`` where ``correct`` is a
     float array of shape ``(n_test,)`` holding 1.0 for a correct prediction and 0.0 otherwise
     (its mean is the accuracy), e.g. for bootstrapping paired differences over test points.
+
+    ``hubness_reduction`` is an object from :mod:`embedkit.hubness_reduction`, e.g.
+    ``MutualProximity()``. The neighbours are then those under its secondary distance, built
+    on ``metric`` (a copy with that metric is fitted on the training points).
     """
     from sklearn.neighbors import KNeighborsClassifier
 
@@ -131,9 +146,16 @@ def knn_accuracy(
         raise ValueError("knn_accuracy needs class labels, got continuous labels")
     _check_rows(Ztr, ytr, "train")
     _check_rows(Zte, yte, "test")
-    clf = KNeighborsClassifier(n_neighbors=k, metric=metric, algorithm="brute")
-    clf.fit(Ztr, ytr)
-    correct = (clf.predict(Zte) == yte).astype(np.float64)
+    if hubness_reduction is not None:
+        idx = _reduced_neighbors(hubness_reduction, metric, Ztr, Zte, k)
+        votes = np.zeros((len(Zte), int(ytr.max()) + 1))
+        np.add.at(votes, (np.arange(len(Zte))[:, None], ytr[idx]), 1.0)
+        pred = votes.argmax(axis=1)  # ties: the smallest class code, as in scikit-learn
+        correct = (pred == yte).astype(np.float64)
+    else:
+        clf = KNeighborsClassifier(n_neighbors=k, metric=metric, algorithm="brute")
+        clf.fit(Ztr, ytr)
+        correct = (clf.predict(Zte) == yte).astype(np.float64)
     value = float(correct.mean())
     return (value, correct) if return_per_point else value
 
@@ -279,6 +301,7 @@ def recall_at_k(
     metric: str = "cosine",
     exclude_self: bool = False,
     return_per_point: bool = False,
+    hubness_reduction=None,
 ):
     """Recall@k as used in metric learning: the hit rate of the top ``k`` gallery items.
 
@@ -301,6 +324,9 @@ def recall_at_k(
     With ``return_per_point=True`` the result is ``(recall, hits)``, where ``hits`` is the float
     array of 0/1 hits of the queries that are counted (those with at least one relevant item, in
     query order); its mean is the recall.
+
+    ``hubness_reduction``: rank the gallery under that object's secondary distance (see
+    :func:`knn_accuracy`).
     """
     Q, G = _to_numpy(Z_query), _to_numpy(Z_gallery)
     _check_same_dim(Q, G, ("query", "gallery"))
@@ -330,6 +356,26 @@ def recall_at_k(
     k = int(min(k, n_candidates))
     if k < 1:
         raise ValueError("k must be at least 1")
+
+    if hubness_reduction is not None:
+        top = _reduced_neighbors(hubness_reduction, metric, G, None if exclude_self else Q, k)
+        if rel_full is None:
+            hit = (yg[top] == yq[:, None]).any(axis=1)
+            if exclude_self:
+                has_rel = np.bincount(yg)[yq] > 1
+            else:
+                has_rel = np.isin(yq, yg)
+        else:
+            rel = rel_full.copy()
+            if exclude_self:
+                np.fill_diagonal(rel, False)
+            hit = np.take_along_axis(rel, top, axis=1).any(axis=1)
+            has_rel = rel.any(axis=1)
+        hit_all = hit[has_rel].astype(np.float64)
+        if hit_all.size == 0:
+            raise ValueError("No query has a relevant gallery item")
+        value = float(hit_all.mean())
+        return (value, hit_all) if return_per_point else value
 
     if metric == "cosine":
         norm = np.linalg.norm
@@ -505,18 +551,24 @@ def effective_rank(Z, center: bool = False) -> float:
     return float(np.exp(-np.sum(p * np.log(p))))
 
 
-def k_skewness(Z, k: int = 10, metric: str = "cosine") -> float:
+def k_skewness(Z, k: int = 10, metric: str = "cosine", hubness_reduction=None) -> float:
     """Skewness of the ``k``-occurrence distribution of ``Z`` (hubness; larger is hubbier).
 
     Same computation as ``HubnessAnalyzer(k=k, metric=metric).fit(Z).k_skewness`` (they share
     :func:`embedkit.analysis.hubness.k_occurrence_skewness`), with exact neighbours on all rows;
     ``HubnessAnalyzer`` subsamples above 20,000 rows by default, this function does not.
+
+    ``hubness_reduction``: the neighbours under that object's secondary distance (see
+    :func:`knn_accuracy`), i.e. the hubness that remains after the reduction.
     """
     from embedkit.analysis.hubness import k_occurrence, k_occurrence_skewness
     from embedkit.utils.neighbors import knn
 
     Z = _to_numpy(Z)
-    _, indices = knn(Z, k, metric=metric)
+    if hubness_reduction is not None:
+        indices = _reduced_neighbors(hubness_reduction, metric, Z, None, k)
+    else:
+        _, indices = knn(Z, k, metric=metric)
     return k_occurrence_skewness(k_occurrence(indices, Z.shape[0]))
 
 

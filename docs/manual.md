@@ -281,7 +281,7 @@ df = report.to_dataframe()
 
 **Architecture:** `n_layers` repetitions of `Linear → BatchNorm → ReLU → Dropout`, followed by a final `Linear(hidden_dim, target_dim)`. When `normalize_output=True` (default), the output is L2-normalized to the unit sphere, which is required by cosine-similarity-based losses.
 
-**Residual and linear variants** (`architecture="residual"` or `"linear"`): `z = W x̃ + g(x̃)` (or `z = W x̃`), where `x̃` is the input standardised with fixed per-feature statistics and `g` is the MLP above with its output layer initialised to zero. `Trainer.fit` calls `model.initialize_from_data(X_train)`, which sets the statistics and initialises `W` from the top `target_dim` principal directions, so that before training the output equals `PCAReduce(target_dim)` followed by L2 normalisation. Training starts from PCA instead of a random map. The default stays `"mlp"` until benchmark E6 accepts the change (`docs/IMPLEMENTATION_PLAN.md`, WP 5.1).
+**Residual and linear variants** (`architecture="residual"` or `"linear"`): `z = W x̃ + g(x̃)` (or `z = W x̃`), where `x̃` is the input standardised with fixed per-feature statistics and `g` is the MLP above with its output layer initialised to zero. `Trainer.fit` calls `model.initialize_from_data(X_train)`, which sets the statistics and initialises `W` from the top `target_dim` principal directions, so that before training the output equals `PCAReduce(target_dim)` followed by L2 normalisation. Training starts from PCA instead of a random map. `EmbedKit` uses `"linear"` by default since benchmark E6 (`docs/BENCHMARK_E1_E2.md`): both variants beat `"mlp"` on 5 of the 6 datasets with an interval and lost on none, and `"linear"` was at least as good as `"residual"` on 5 of 6. The `EmbeddingRefiner` class keeps `"mlp"` as its own default; bundles saved without an `architecture` entry load as `"mlp"`.
 
 **Class:** `EmbeddingRefiner(input_dim, target_dim, hidden_dim=256, n_layers=2, dropout=0.1, normalize_output=True, architecture="mlp")`
 
@@ -673,6 +673,31 @@ ek2 = EmbedKit.load("my_model/")
 X_new_refined = ek2.transform(X_new)
 ```
 
+### 2.6 Hubness Reduction
+
+`embedkit.hubness_reduction` holds four secondary distances for k-nearest-neighbour search (Feldbauer & Flexer, 2019). They change the distances between points, not their coordinates, so they are not transforms: each is fitted on a reference set (a gallery, or the training split of a kNN classifier) and answers neighbour queries against it.
+
+```python
+from embedkit.hubness_reduction import CSLS, DisSimLocal, LocalScaling, MutualProximity
+
+mp = MutualProximity(metric="cosine").fit(Z_train)
+dist, idx = mp.kneighbors(Z_test, n_neighbors=10)  # neighbours among the Z_train rows
+dist, idx = mp.kneighbors(n_neighbors=10)          # reference rows among each other, self excluded
+```
+
+All four start from a base distance `d` (`metric="euclidean"`, or `"cosine"` for `1 - cos`):
+
+| Class | Secondary distance | Statistic |
+|---|---|---|
+| `LocalScaling(k=5)` (Schnitzer et al., 2012) | `1 - exp(-d² / (s_x s_y))` | `s_x`: distance to the `k`-th nearest reference point |
+| `MutualProximity(sample_size=2000)` (Schnitzer et al., 2012; Gaussian variant) | `1 - P(D_x > d) P(D_y > d)` | `D_x`: a normal fitted to the distances from `x` to a sample of the reference set |
+| `CSLS(k=10)` (Conneau et al., 2018) | `2d - r_x - r_y` | `r_x`: mean distance to the `k` nearest reference points; with the cosine metric this ranks as the original `2 cos - r_x - r_y` |
+| `DisSimLocal(k=5)` (Hara et al., 2016) | `‖x - y‖² - ‖x - c_x‖² - ‖y - c_y‖²` | `c_x`: centroid of the `k` nearest reference points; with the cosine metric it runs on unit vectors |
+
+The search is exact and chunked to bound memory. A reference row is never its own neighbour when the reference set is queried; a query is a new point, so a duplicate of a reference row is returned.
+
+The kNN-based evaluation metrics take a `hubness_reduction` argument: `knn_accuracy`, `recall_at_k` and `k_skewness` in `embedkit.evaluation.metrics`, and `evaluate_transform(..., hubness_reduction=CSLS())`, which applies it to `knn_accuracy`, `knn_accuracy_euclidean`, `recall_at_10` and `k_skewness` (each with its own base metric) and leaves the other metrics unchanged.
+
 ---
 
 ## Part 3 — Visualization
@@ -721,15 +746,25 @@ Ceruti, C., Bassis, S., Rozza, A., Lombardi, G., Casiraghi, E., & Campadelli, P.
 
 Chen, T., Kornblith, S., Norouzi, M., & Hinton, G. (2020). A simple framework for contrastive learning of visual representations. In *Proceedings of the 37th International Conference on Machine Learning (ICML 2020)*, PMLR 119.
 
+Conneau, A., Lample, G., Ranzato, M., Denoyer, L., & Jégou, H. (2018). Word translation without parallel data. In *International Conference on Learning Representations (ICLR 2018)*.
+
 Cristianini, N., Shawe-Taylor, J., Elisseeff, A., & Kandola, J. S. (2001). On kernel-target alignment. In *Advances in Neural Information Processing Systems* (Vol. 14, pp. 367–373). MIT Press.
 
 DeVries, T., & Taylor, G. W. (2017). Improved regularization of convolutional neural networks with Cutout. *arXiv preprint arXiv:1708.04552*.
 
+Feldbauer, R., & Flexer, A. (2019). A comprehensive empirical comparison of hubness reduction in high-dimensional spaces. *Knowledge and Information Systems*, 59, 137–166.
+
 Facco, E., d'Errico, M., Rodriguez, A., & Laio, A. (2017). Estimating the intrinsic dimension of datasets by a minimal neighborhood information. *Scientific Reports*, 7, 12140.
+
+Gao, T., Yao, X., & Chen, D. (2021). SimCSE: Simple contrastive learning of sentence embeddings. In *Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing (EMNLP 2021)* (pp. 6894–6910).
 
 Grassberger, P., & Procaccia, I. (1983). Measuring the strangeness of strange attractors. *Physica D: Nonlinear Phenomena*, 9(1–2), 189–208.
 
+Hara, K., Suzuki, I., Kobayashi, K., Fukumizu, K., & Radovanović, M. (2016). Flattening the density gradient for eliminating spatial centrality to reduce hubness. In *Proceedings of the 30th AAAI Conference on Artificial Intelligence (AAAI 2016)* (pp. 1659–1665).
+
 Khosla, P., Tian, Y., Wang, X., Liu, C., Isola, P., & others (2020). Supervised contrastive learning. In *Advances in Neural Information Processing Systems* (Vol. 33, pp. 18661–18673). Curran Associates.
+
+Kusupati, A., Bhatt, G., Rege, A., Wallingford, M., Sinha, A., Ramanujan, V., Howard-Snyder, W., Chen, K., Kakade, S., Jain, P., & Farhadi, A. (2022). Matryoshka representation learning. In *Advances in Neural Information Processing Systems* (Vol. 35, pp. 30233–30249).
 
 Levina, E., & Bickel, P. J. (2005). Maximum likelihood estimation of intrinsic dimension. In *Advances in Neural Information Processing Systems* (Vol. 17, pp. 777–784). MIT Press.
 
@@ -737,11 +772,15 @@ Mu, J., Bhat, S., & Viswanath, P. (2018). All-but-the-top: Simple and effective 
 
 Radovanović, M., Nanopoulos, A., & Ivanovic, M. (2010). Hubs in space: Popular nearest neighbors in high-dimensional data. *Journal of Machine Learning Research*, 11, 2487–2531.
 
+Schnitzer, D., Flexer, A., Schedl, M., & Widmer, G. (2012). Local and global scaling reduce hubs in space. *Journal of Machine Learning Research*, 13, 2871–2902.
+
 Schroff, F., Kalenichenko, D., & Philbin, J. (2015). FaceNet: A unified embedding for face recognition and clustering. In *Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR 2015)* (pp. 815–823). IEEE.
 
 van den Oord, A., Li, Y., & Vinyals, O. (2018). Representation learning with contrastive predictive coding. *arXiv preprint arXiv:1807.03748*.
 
 Wang, T., & Isola, P. (2020). Understanding contrastive representation learning through alignment and uniformity on the hypersphere. In *Proceedings of the 37th International Conference on Machine Learning (ICML 2020)*, PMLR 119.
+
+Yeh, C.-H., Hong, C.-Y., Hsu, Y.-C., Liu, T.-L., Chen, Y., & LeCun, Y. (2022). Decoupled contrastive learning. In *European Conference on Computer Vision (ECCV 2022)* (pp. 668–684). Springer.
 
 Zha, K., Cao, P., Son, J., Yang, Y., & Katabi, D. (2023). Rank-N-Contrast: Learning continuous representations for regression. In *Advances in Neural Information Processing Systems* (Vol. 36). Curran Associates.
 

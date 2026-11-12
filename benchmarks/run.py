@@ -117,8 +117,10 @@ def run_method(method, ds, args, splits) -> dict:
             warnings.simplefilter("always")
             df = evaluate_transform(
                 lambda s: method.make(s, ds, args.device), X_tr, X_te, y_tr, y_te,
-                seeds=seeds, metrics=args.metrics, fit_with_labels=method.fit_with_labels,
-                method=method.name, test_pairs=pairs,
+                seeds=seeds, metrics=args.metrics or method.metrics,
+                fit_with_labels=method.fit_with_labels, method=method.name,
+                test_pairs=pairs,
+                hubness_reduction=method.hubness_reduction,
             )
         out["stages"][stage] = rows_to_records(df)
         out.setdefault("warnings", {})[stage] = sorted(

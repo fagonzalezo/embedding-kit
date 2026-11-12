@@ -225,8 +225,8 @@ def _assess_severity_and_recommendations(
     # Hubness checks
     if hub_result.k_skewness > 5:
         recs.append(
-            "High hubness (k_skewness > 5): consider dimensionality reduction or "
-            "hubness-aware distance weighting."
+            "High hubness (k_skewness > 5): consider dimensionality reduction, or a "
+            "hubness-reducing neighbour search (embedkit.hubness_reduction)."
         )
         score += 2
     elif hub_result.k_skewness > 2:

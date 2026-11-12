@@ -11,6 +11,10 @@ Phase 3 of `docs/IMPLEMENTATION_PLAN.md`: benchmarks E1 and E2 and the decision 
   the validation contrastive loss moved against it. `val_split` now defaults to `None`: 0.1 of the
   rows are held out only when early stopping is enabled, so by default the refiner trains on every row.
   Pass `early_stopping_patience=10` to restore the 0.2.0 behaviour.
+- **`EmbedKit` uses `architecture="linear"` by default** (was the MLP): a linear map initialised at PCA
+  and trained with the contrastive loss. In E6 (`benchmarks/results/e6/REPORT.md`) it beat the MLP on
+  5 of 6 datasets with an interval and lost on none; the residual variant did as well against the MLP
+  but lost to `"linear"` on 3 datasets and won on 1. Pass `architecture="mlp"` for the 0.2.0 model.
 
 ### Added
 - `EmbeddingRefiner(architecture="residual")` (WP 5.1): `z = normalize(W x̃ + g(x̃))`, with `x̃` the
@@ -18,7 +22,7 @@ Phase 3 of `docs/IMPLEMENTATION_PLAN.md`: benchmarks E1 and E2 and the decision 
   MLP `g` with a zero-initialised output layer, so training starts exactly at PCA + L2 normalisation.
   `architecture="linear"` keeps only `W`. `Trainer.fit` calls `model.initialize_from_data` on the
   training rows when the model defines it. `EmbedKit(architecture=...)` passes it through and stores it
-  in `config.json`; `EmbedKit.load` restores it. The default stays `"mlp"` until E6 accepts the change.
+  in `config.json`; `EmbedKit.load` restores it (bundles without the entry load as `"mlp"`).
 - WP 5.2 options:
   - `KNNPairs(mode="mutual")` draws positives only among mutual neighbours, with the nearest neighbour
     as a fallback.
@@ -28,6 +32,10 @@ Phase 3 of `docs/IMPLEMENTATION_PLAN.md`: benchmarks E1 and E2 and the decision 
 - `MatryoshkaLoss(base_loss, dims)` (WP 5.3): the base loss summed over nested prefixes of the output.
   `EmbedKit.transform(X, dim=m)` and `fit_transform(..., dim=m)` keep the first `m` coordinates and
   renormalise.
+- `embedkit.hubness_reduction` (WP 5.5): `LocalScaling`, `MutualProximity` (Gaussian), `CSLS` and
+  `DisSimLocal` as secondary distances for exact kNN search, with `fit(X_reference)` and
+  `kneighbors(X=None, n_neighbors=5)`. `knn_accuracy`, `recall_at_k`, `k_skewness` and
+  `evaluate_transform` take a `hubness_reduction` argument.
 - Losses have optional `precompute(X)` and `uses_indices` hooks, mirroring the augmentations.
   `Trainer` and `CombinedLoss` call `precompute` with the training rows, and pass the batch's global
   row indices to losses that declare `uses_indices`.
@@ -36,7 +44,13 @@ Phase 3 of `docs/IMPLEMENTATION_PLAN.md`: benchmarks E1 and E2 and the decision 
 ### Benchmarks
 - `benchmarks/run.py --experiment e6`: the phase 5 ablation grid (architecture arms at auto and fixed
   d, with raw, PCA and PCA-whitening as references); `benchmarks/report_e6.py` applies the phase 5
-  acceptance rule; `--shard I/N` splits a dataset's grid between jobs.
+  acceptance rule; `--shard I/N` splits a dataset's grid between jobs. Stage WP 5.1 results are in
+  `benchmarks/results/e6/`. Stage WP 5.2/5.3 adds the arms `mutual`, `nbrmask`, `decoupled`,
+  `dropout` (on `residual`, which has dropout) and `matryoshka` (one model at min(256, d) read at each
+  prefix), at fixed d.
+- E1 gains the hubness-reduction methods `raw+ls`, `raw+mp`, `raw+csls` and `raw+dsl`, scored on the
+  kNN-based metrics only (`Method.hubness_reduction`, `Method.metrics`);
+  `benchmarks/cluster/e1_hub.slurm.sh` runs them on CPU nodes.
 - `benchmarks/e2.py` and `benchmarks/report_e2.py`: experiment E2, every trainer monitor logged
   next to test kNN and probe accuracy over 30 refiner configurations per dataset.
 - `benchmarks/report_gate.py`: the phase 3 gate on E1 results.

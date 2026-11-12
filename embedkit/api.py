@@ -31,7 +31,7 @@ class EmbedKit:
         target_dim: int | Literal["auto"] = "auto",
         hidden_dim: int = 256,
         n_layers: int = 2,
-        architecture: Literal["mlp", "residual", "linear"] = "mlp",
+        architecture: Literal["mlp", "residual", "linear"] = "linear",
         epochs: int = 100,
         batch_size: int = 256,
         optimizer: str = "adam",

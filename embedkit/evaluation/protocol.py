@@ -37,6 +37,7 @@ class _Context:
     y_test: np.ndarray | None
     label_kind: str | None  # "class", "continuous" or None
     test_pairs: tuple | None = None  # (idx_a, idx_b, gold scores) into the test rows
+    hubness_reduction: Any = None  # neighbour search for the kNN-based metrics
 
 
 @dataclass(frozen=True)
@@ -55,7 +56,8 @@ def _m():
 def _knn(metric: str, k: int = 5):
     def fn(c: _Context):
         return _m().knn_accuracy(
-            c.Z_train, c.y_train, c.Z_test, c.y_test, k=k, metric=metric, return_per_point=True
+            c.Z_train, c.y_train, c.Z_test, c.y_test, k=k, metric=metric, return_per_point=True,
+            hubness_reduction=c.hubness_reduction,
         )
 
     return MetricSpec(fn, needs_labels=True, needs_class_labels=True)
@@ -79,7 +81,7 @@ def _recall(k: int):
     def fn(c: _Context):
         return _m().recall_at_k(
             c.Z_test, c.Z_train, (c.y_test, c.y_train), k=k, metric="cosine",
-            return_per_point=True,
+            return_per_point=True, hubness_reduction=c.hubness_reduction,
         )
 
     return MetricSpec(fn, needs_labels=True, needs_class_labels=True)
@@ -114,7 +116,8 @@ METRICS: dict[str, MetricSpec] = {
     "linear_cka": MetricSpec(lambda c: _m().linear_cka(c.X_test, c.Z_test)),
     # ... and geometry of the output.
     "effective_rank": MetricSpec(lambda c: _m().effective_rank(c.Z_test)),
-    "k_skewness": MetricSpec(lambda c: _m().k_skewness(c.Z_test, k=10, metric="cosine")),
+    "k_skewness": MetricSpec(lambda c: _m().k_skewness(
+        c.Z_test, k=10, metric="cosine", hubness_reduction=c.hubness_reduction)),
 }
 
 DEFAULT_LABELLED = (
@@ -172,6 +175,7 @@ def evaluate_transform(
     method: str | None = None,
     keep_per_point: bool = True,
     test_pairs: tuple | None = None,
+    hubness_reduction=None,
 ) -> pd.DataFrame:
     """Fit a transform on the training split and score it on the test split, once per seed.
 
@@ -199,6 +203,12 @@ def evaluate_transform(
     test_pairs:
         ``(idx_a, idx_b, scores)``: pairs of test rows with gold similarity scores, for
         ``sts_spearman`` (added to the default metrics when given).
+    hubness_reduction:
+        An object from :mod:`embedkit.hubness_reduction` (e.g. ``CSLS()``). The kNN-based
+        metrics (``knn_accuracy``, ``knn_accuracy_euclidean``, ``recall_at_10``,
+        ``k_skewness``) then search neighbours under its secondary distance, built on each
+        metric's own base distance; the other metrics do not use neighbour search and are
+        unchanged. Recorded in ``params`` as ``hubness_reduction``.
     keep_per_point:
         Keep the per-test-point outcomes (``per_point`` column) that :func:`compare` uses for
         its paired bootstrap.
@@ -249,8 +259,10 @@ def evaluate_transform(
             raise FloatingPointError(
                 f"{method or type(transform).__name__} (seed {seed}) produced NaN or inf"
             )
-        ctx = _Context(X_tr, X_te, Z_tr, Z_te, y_tr, y_te, kind, test_pairs)
+        ctx = _Context(X_tr, X_te, Z_tr, Z_te, y_tr, y_te, kind, test_pairs, hubness_reduction)
         params = _params_of(transform)
+        if hubness_reduction is not None:
+            params = {**params, "hubness_reduction": repr(hubness_reduction)}
         for name in names:
             out = METRICS[name].fn(ctx)
             value, per_point = out if isinstance(out, tuple) else (out, None)

@@ -634,12 +634,12 @@ Release as 0.5.0.
 | 4.3 | Isotropy and spectrum | not started |
 | 4.4 | Metric consistency, kernel spectrum | not started |
 | 4.5 | Run E3 and E5 | not started |
-| 5.1 | Residual adapter | implemented (2026-11-11); E6 acceptance run on the cluster |
-| 5.2 | Positives and negatives | implemented (2026-11-11, two-day attempt started); waits for E6 |
-| 5.3 | Matryoshka output | implemented (2026-11-11; added by the user to gate C); waits for E6 |
+| 5.1 | Residual adapter | done (2026-11-12): accepted in E6; `EmbedKit` default is now `architecture="linear"` |
+| 5.2 | Positives and negatives | implemented (2026-11-11, two-day attempt started); E6 stage 2 on the cluster |
+| 5.3 | Matryoshka output | implemented (2026-11-11; added by the user to gate C); E6 stage 2 on the cluster |
 | 5.4 | Structure preservation, VICReg | dropped (gate C) |
-| 5.5 | Hubness reduction | not started |
-| 5.6 | Run E6 and E7 | not started (restricted to the WPs above) |
+| 5.5 | Hubness reduction | implemented (2026-11-12); E1 hubness methods on the cluster |
+| 5.6 | Run E6 and E7 | E6 stage 1 (WP 5.1) done; stage 2 (WP 5.2, 5.3) running; E7 not started |
 | 6.1 | Supervised defaults | not started |
 | 6.2 | Class collapse | not started |
 | 6.3 | Run E8 | not started |
@@ -784,10 +784,35 @@ Release as 0.5.0.
 - Local smoke run (digits, 2 seeds): the PCA-initialised arms barely move from PCA on this small set
   (`linear-d32` gives the same per-point outcomes for both seeds).
 
+### Phase 5 notes (2026-11-12)
+
+- **E6 stage 1 (WP 5.1) result** (`benchmarks/results/e6/REPORT.md`, job 3077519 at `16789d3`, about 16
+  GPU-hours). Against `mlp`: `linear` 5 wins / 1 tie / 0 losses, `residual` 5 / 1 / 0 (STS-B has no
+  interval). Both pass the rule. Head to head, `residual` against `linear`: 1 win, 2 ties, 3 losses.
+  **Decision: `EmbedKit` defaults to `architecture="linear"`**; the MLP branch `g` does not pay for
+  itself. Against the best PCA at the same d, `linear` has 1 win, 4 ties, 1 loss (synthetic,
+  -0.073), where `mlp` had 0 / 3 / 3: the refiner no longer loses to PCA on real data, but still does
+  not beat it, so gate outcome C stands. No family selected the auto d on any dataset.
+- **E6 stage 2 (WP 5.2, 5.3)**: arms changed one factor from the new default, at fixed d only
+  (32, 64, 128 below d): `mutual` (`KNNPairs(k=5, mode="mutual")`), `nbrmask`
+  (`NTXentLoss(neighbor_mask=5)`), `decoupled`, `matryoshka` (one `linear` model trained at
+  min(256, d) with nested prefixes at the smaller dims, read at each d) and `dropout`
+  (`IdentityPair`). `linear` has no dropout, so `dropout` runs on `residual` and is compared with
+  `e6_residual`. WP 5.2 arms are judged against `e6_linear` with this phase's rule. WP 5.3 is judged
+  for non-inferiority: its value is one model for every d, so it is accepted when the prefix does not
+  lose against a model trained at that d on more than one dataset.
+- **WP 5.5 implemented**: `embedkit/hubness_reduction.py` as specified, with the query method named
+  `kneighbors(X=None, n_neighbors=5)` as in scikit-learn (the constructor's `k` is the
+  neighbourhood size of the statistics). Exact, chunked search; the tests check every method against
+  its formula on small data for both metrics. The kNN metrics and `evaluate_transform` take
+  `hubness_reduction=`; E1 gains `raw+ls`, `raw+mp`, `raw+csls`, `raw+dsl`, scored on kNN accuracy,
+  recall@10 and k-skewness, run on CPU nodes. Smoke run (digits, synthetic): k-skewness drops for all
+  four on digits and for three of four on synthetic; kNN accuracy moves by under 0.03.
+
 ## Open points for the next session
 
 All design decisions in this plan are confirmed. Two practical points remain:
 
 1. **Phase 5 is in progress** (the user chose it before phase 4, 2026-11-11). Gate outcome C plus WP 5.3 (see the
-   phase 3 notes). WP 5.1 is implemented and waits for its E6 run; then the two-day attempt at WP 5.2, then
-   WP 5.3.
+   phase 3 notes). WP 5.1 is done (default `linear`). WP 5.2 (two-day attempt, from 2026-11-11), WP 5.3
+   and the E1 hubness methods (WP 5.5) are implemented and run on the cluster. Then E7 and the 0.4.0 release.
