@@ -558,6 +558,23 @@ loss = loss_fn(z_i, z_j)
 
 ---
 
+#### MatryoshkaLoss
+
+The sum of a base loss over nested prefixes of the output, `z[:, :m]` for each `m` in `dims` (Kusupati et al. 2022). The full output is always included. Every prefix is trained to be an embedding on its own, so one model serves several output dimensions: `EmbedKit.transform(X, dim=m)` keeps the first `m` coordinates and renormalises. Labels, batch indices and `precompute` are forwarded to the base loss.
+
+**Parameters:** `base_loss`, `dims=(16, 32, 64, 128)`, `weights=None` (1 for every prefix)
+
+```python
+from embedkit import EmbedKit
+from embedkit.improvement.losses import MatryoshkaLoss, NTXentLoss
+
+ek = EmbedKit(target_dim=128, loss=MatryoshkaLoss(NTXentLoss(), dims=(16, 32, 64)))
+ek.fit(X)
+Z32 = ek.transform(X, dim=32)   # first 32 coordinates, renormalised
+```
+
+---
+
 ### 2.4 Trainer
 
 `Trainer` orchestrates the full contrastive training loop. It handles batching, optimization, learning rate scheduling, periodic evaluation against analysis metrics, early stopping, and loss history tracking.

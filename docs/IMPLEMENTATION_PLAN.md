@@ -635,8 +635,8 @@ Release as 0.5.0.
 | 4.4 | Metric consistency, kernel spectrum | not started |
 | 4.5 | Run E3 and E5 | not started |
 | 5.1 | Residual adapter | implemented (2026-11-11); E6 acceptance run on the cluster |
-| 5.2 | Positives and negatives | not started (gate C: one two-day attempt) |
-| 5.3 | Matryoshka output | not started (added by the user to gate C) |
+| 5.2 | Positives and negatives | implemented (2026-11-11, two-day attempt started); waits for E6 |
+| 5.3 | Matryoshka output | implemented (2026-11-11; added by the user to gate C); waits for E6 |
 | 5.4 | Structure preservation, VICReg | dropped (gate C) |
 | 5.5 | Hubness reduction | not started |
 | 5.6 | Run E6 and E7 | not started (restricted to the WPs above) |

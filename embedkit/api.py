@@ -142,14 +142,32 @@ class EmbedKit:
             return self.val_split
         return 0.1 if self.early_stopping_patience is not None else 0.0
 
-    def transform(self, X) -> np.ndarray | torch.Tensor:
+    def transform(self, X, dim: int | None = None) -> np.ndarray | torch.Tensor:
+        """Refine ``X``. With ``dim``, keep the first ``dim`` output coordinates and renormalise.
+
+        Truncation is meant for models trained with
+        :class:`~embedkit.improvement.losses.MatryoshkaLoss`, whose prefixes are trained to be
+        embeddings on their own (WP 5.3); for other models a prefix is just a projection.
+        """
         if self._trainer is None:
             raise RuntimeError("Call fit() before transform()")
-        return self._trainer.transform(X)
+        Z = self._trainer.transform(X)
+        if dim is None:
+            return Z
+        d = Z.shape[1]
+        if not 1 <= dim <= d:
+            raise ValueError(f"dim must be between 1 and the output dimension {d}, got {dim}")
+        Z = Z[:, :dim]
+        if getattr(self._trainer.model, "normalize_output", True):
+            if isinstance(Z, torch.Tensor):
+                Z = torch.nn.functional.normalize(Z, dim=1)
+            else:
+                Z = Z / np.maximum(np.linalg.norm(Z, axis=1, keepdims=True), 1e-12)
+        return Z
 
-    def fit_transform(self, X, y=None) -> np.ndarray | torch.Tensor:
+    def fit_transform(self, X, y=None, dim: int | None = None) -> np.ndarray | torch.Tensor:
         self.fit(X, y)
-        return self.transform(X)
+        return self.transform(X, dim=dim)
 
     def save(self, directory: str | Path) -> None:
         if self._trainer is None:

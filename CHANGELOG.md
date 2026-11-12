@@ -25,6 +25,9 @@ Phase 3 of `docs/IMPLEMENTATION_PLAN.md`: benchmarks E1 and E2 and the decision 
   - `NTXentLoss(neighbor_mask=k)` stops input-space neighbours from acting as negatives for each other.
   - `NTXentLoss(decoupled=True)` is the decoupled contrastive loss.
   - `IdentityPair` gives dropout-only positives.
+- `MatryoshkaLoss(base_loss, dims)` (WP 5.3): the base loss summed over nested prefixes of the output.
+  `EmbedKit.transform(X, dim=m)` and `fit_transform(..., dim=m)` keep the first `m` coordinates and
+  renormalise.
 - Losses have optional `precompute(X)` and `uses_indices` hooks, mirroring the augmentations.
   `Trainer` and `CombinedLoss` call `precompute` with the training rows, and pass the batch's global
   row indices to losses that declare `uses_indices`.
