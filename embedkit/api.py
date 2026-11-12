@@ -31,6 +31,7 @@ class EmbedKit:
         target_dim: int | Literal["auto"] = "auto",
         hidden_dim: int = 256,
         n_layers: int = 2,
+        architecture: Literal["mlp", "residual", "linear"] = "mlp",
         epochs: int = 100,
         batch_size: int = 256,
         optimizer: str = "adam",
@@ -51,6 +52,7 @@ class EmbedKit:
         self.target_dim = target_dim
         self.hidden_dim = hidden_dim
         self.n_layers = n_layers
+        self.architecture = architecture
         self.epochs = epochs
         self.batch_size = batch_size
         self.optimizer = optimizer
@@ -91,6 +93,7 @@ class EmbedKit:
             "target_dim": target_dim,
             "hidden_dim": self.hidden_dim,
             "n_layers": self.n_layers,
+            "architecture": self.architecture,
             "epochs": self.epochs,
             "batch_size": self.batch_size,
             "optimizer": self.optimizer,
@@ -109,6 +112,7 @@ class EmbedKit:
                 target_dim=target_dim,
                 hidden_dim=self.hidden_dim,
                 n_layers=self.n_layers,
+                architecture=self.architecture,
             )
         self._trainer = Trainer(
             model=model,
@@ -161,12 +165,14 @@ class EmbedKit:
             target_dim=cfg.get("target_dim", 64),
             hidden_dim=cfg.get("hidden_dim", 256),
             n_layers=cfg.get("n_layers", 2),
+            architecture=cfg.get("architecture", "mlp"),
         )
         model = EmbeddingRefiner(
             input_dim=cfg["input_dim"],
             target_dim=cfg["target_dim"],
             hidden_dim=cfg["hidden_dim"],
             n_layers=cfg["n_layers"],
+            architecture=cfg.get("architecture", "mlp"),
         )
         model.load_state_dict(bundle["state_dict"])
         # minimal trainer wrapper just for transform

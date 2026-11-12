@@ -281,7 +281,9 @@ df = report.to_dataframe()
 
 **Architecture:** `n_layers` repetitions of `Linear → BatchNorm → ReLU → Dropout`, followed by a final `Linear(hidden_dim, target_dim)`. When `normalize_output=True` (default), the output is L2-normalized to the unit sphere, which is required by cosine-similarity-based losses.
 
-**Class:** `EmbeddingRefiner(input_dim, target_dim, hidden_dim=256, n_layers=2, dropout=0.1, normalize_output=True)`
+**Residual and linear variants** (`architecture="residual"` or `"linear"`): `z = W x̃ + g(x̃)` (or `z = W x̃`), where `x̃` is the input standardised with fixed per-feature statistics and `g` is the MLP above with its output layer initialised to zero. `Trainer.fit` calls `model.initialize_from_data(X_train)`, which sets the statistics and initialises `W` from the top `target_dim` principal directions, so that before training the output equals `PCAReduce(target_dim)` followed by L2 normalisation. Training starts from PCA instead of a random map. The default stays `"mlp"` until benchmark E6 accepts the change (`docs/IMPLEMENTATION_PLAN.md`, WP 5.1).
+
+**Class:** `EmbeddingRefiner(input_dim, target_dim, hidden_dim=256, n_layers=2, dropout=0.1, normalize_output=True, architecture="mlp")`
 
 ```python
 from embedkit.improvement.model import EmbeddingRefiner
@@ -614,7 +616,7 @@ print(trainer.history)             # {"loss": [...], "uniformity": [...], ...}
 | `k_skewness > 5` | Adds `AlignUniformLoss` (weight 0.5) via `CombinedLoss` |
 | `target_dim == "auto"` | Uses `report.suggested_target_dim` = `clip(1.5 × ID, ID, D)` |
 
-**Class:** `EmbedKit(mode, augmentation, loss, target_dim, hidden_dim, n_layers, epochs, batch_size, optimizer, lr, scheduler, eval_every, early_stopping_patience, monitor, val_split, device, id_methods, random_state)`
+**Class:** `EmbedKit(mode, augmentation, loss, target_dim, hidden_dim, n_layers, architecture, epochs, batch_size, optimizer, lr, scheduler, eval_every, early_stopping_patience, monitor, val_split, device, id_methods, random_state)`
 
 `EmbedKit` trains for a fixed budget of `epochs` (default 100) and does not stop early: in the E2
 benchmark (`docs/BENCHMARK_E1_E2.md`) no label-free statistic tracked downstream accuracy within a run.

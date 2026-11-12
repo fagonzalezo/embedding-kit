@@ -141,6 +141,9 @@ def main(argv=None):
     p.add_argument("--val-fraction", type=float, default=0.2)
     p.add_argument("--metrics", nargs="*", default=None,
                    help="Metric names (default: the protocol's defaults for the labels given)")
+    p.add_argument("--shard", default=None, metavar="I/N",
+                   help="Run only methods i, i + N, i + 2N, ... of the grid (0-based), so that "
+                        "N jobs can share one dataset")
     p.add_argument("--list", action="store_true", help="List the method grid and exit")
     p.add_argument("--overwrite", action="store_true")
     args = p.parse_args(argv)
@@ -161,6 +164,11 @@ def main(argv=None):
             if unknown:
                 raise SystemExit(f"Unknown methods for {name}: {sorted(unknown)}")
             methods = [m for m in methods if m.name in args.methods]
+        if args.shard:
+            i, n_shards = (int(v) for v in args.shard.split("/"))
+            if not 0 <= i < n_shards:
+                raise SystemExit(f"--shard {args.shard}: need 0 <= I < N")
+            methods = methods[i::n_shards]
         if args.list:
             print(name, [m.name for m in methods])
             continue

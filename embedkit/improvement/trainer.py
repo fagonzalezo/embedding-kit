@@ -314,6 +314,11 @@ class Trainer:
                 + "."
             )
 
+        # Data-dependent initialisation (e.g. the residual refiner starts at PCA), on the
+        # training rows only.
+        if hasattr(self.model, "initialize_from_data"):
+            self.model.initialize_from_data(X_np)
+
         self._select_device(X_np, y_t)
 
         # Precompute neighbor structures for augmentations that support it

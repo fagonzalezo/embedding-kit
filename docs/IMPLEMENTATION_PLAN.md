@@ -634,7 +634,7 @@ Release as 0.5.0.
 | 4.3 | Isotropy and spectrum | not started |
 | 4.4 | Metric consistency, kernel spectrum | not started |
 | 4.5 | Run E3 and E5 | not started |
-| 5.1 | Residual adapter | not started (in scope, gate C) |
+| 5.1 | Residual adapter | implemented (2026-11-11); E6 acceptance run on the cluster |
 | 5.2 | Positives and negatives | not started (gate C: one two-day attempt) |
 | 5.3 | Matryoshka output | not started (added by the user to gate C) |
 | 5.4 | Structure preservation, VICReg | dropped (gate C) |
@@ -765,10 +765,29 @@ Release as 0.5.0.
   For selection between configurations (WP 7.2), `knn_overlap` is the label-free candidate.
 - `benchmarks/report_gate.py` writes the gate tables (`benchmarks/results/e1/GATE.md`).
 
+### Phase 5 notes (2026-11-11)
+
+- **WP 5.1 implemented.** `EmbeddingRefiner(architecture="residual")` as specified. `W` is set to
+  `C diag(s)` (`C` the principal directions of the centred data, `s` the feature standard
+  deviations), so `W x̃` is exactly the PCA projection while `g` sees standardised input. Constant
+  features get `s = 1`; directions beyond the data's rank get zero rows. The acceptance test (PCA +
+  L2 to 1e-4 before training) passes for d = 4, 16, 47 of 48 (`tests/test_residual_refiner.py`).
+- **Addition:** `architecture="linear"` (`W` alone), the "linear only" arm of the review's E6
+  ablation. It tells whether `g` adds anything beyond a PCA-initialised linear map.
+- **E6 design (WP 5.6, run per WP).** `benchmarks/run.py --experiment e6` on the seven E1 datasets,
+  five seeds, the E1 protocol (selection on validation). Arms: `mlp` (previous default, now without
+  early stopping), `residual`, `linear`, each at auto d and d in {32, 64, 128}; raw, PCA and
+  PCA-whitening at the same d as references. `benchmarks/report_e6.py` applies this phase's rule
+  (wins against the previous default on at least half the datasets) and repeats the gate against PCA.
+  Later WPs add arms to the same grid under new names, so finished files are reused. CIFAR-100 is split
+  into three shards (`run.py --shard`) so that each array task fits in 12 h.
+- Local smoke run (digits, 2 seeds): the PCA-initialised arms barely move from PCA on this small set
+  (`linear-d32` gives the same per-point outcomes for both seeds).
+
 ## Open points for the next session
 
 All design decisions in this plan are confirmed. Two practical points remain:
 
-1. **Phase 3 is done.** The gate outcome is C, plus WP 5.3 (confirmed by the user, 2026-11-11; see the phase 3
-   notes). Phase 5 (WP 5.1, a two-day attempt at WP 5.2, WP 5.3, then E6/E7) and phase 4 are both open; the
-   user chooses which comes next.
+1. **Phase 5 is in progress** (the user chose it before phase 4, 2026-11-11). Gate outcome C plus WP 5.3 (see the
+   phase 3 notes). WP 5.1 is implemented and waits for its E6 run; then the two-day attempt at WP 5.2, then
+   WP 5.3.

@@ -25,6 +25,9 @@ CPU_SETS=(glove100 sift128 gist960)
 E1_SETS=(pets_resnet50 digits synthetic_anisotropic cifar100_dinov2 stl10_clip banking77_mpnet stsb_mpnet)
 # Datasets of experiment E2 (one array task each; labelled sets only).
 E2_SETS=(cifar100_dinov2 pets_resnet50 banking77_mpnet synthetic_anisotropic)
+# Tasks of experiment E6: a dataset, or dataset:I/N for shard I of N of its grid. Longest first.
+E6_TASKS=(cifar100_dinov2:0/3 cifar100_dinov2:1/3 cifar100_dinov2:2/3 banking77_mpnet stsb_mpnet
+          pets_resnet50 synthetic_anisotropic stl10_clip digits)
 
 check_clean() {
   # Results must match the commit recorded in each result file.

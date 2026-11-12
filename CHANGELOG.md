@@ -12,7 +12,18 @@ Phase 3 of `docs/IMPLEMENTATION_PLAN.md`: benchmarks E1 and E2 and the decision 
   rows are held out only when early stopping is enabled, so by default the refiner trains on every row.
   Pass `early_stopping_patience=10` to restore the 0.2.0 behaviour.
 
+### Added
+- `EmbeddingRefiner(architecture="residual")` (WP 5.1): `z = normalize(W x̃ + g(x̃))`, with `x̃` the
+  input standardised by fixed statistics, `W` initialised from the top principal directions and the
+  MLP `g` with a zero-initialised output layer, so training starts exactly at PCA + L2 normalisation.
+  `architecture="linear"` keeps only `W`. `Trainer.fit` calls `model.initialize_from_data` on the
+  training rows when the model defines it. `EmbedKit(architecture=...)` passes it through and stores it
+  in `config.json`; `EmbedKit.load` restores it. The default stays `"mlp"` until E6 accepts the change.
+
 ### Benchmarks
+- `benchmarks/run.py --experiment e6`: the phase 5 ablation grid (architecture arms at auto and fixed
+  d, with raw, PCA and PCA-whitening as references); `benchmarks/report_e6.py` applies the phase 5
+  acceptance rule; `--shard I/N` splits a dataset's grid between jobs.
 - `benchmarks/e2.py` and `benchmarks/report_e2.py`: experiment E2, every trainer monitor logged
   next to test kNN and probe accuracy over 30 refiner configurations per dataset.
 - `benchmarks/report_gate.py`: the phase 3 gate on E1 results.
