@@ -119,6 +119,7 @@ def run_method(method, ds, args, splits) -> dict:
                 lambda s: method.make(s, ds, args.device), X_tr, X_te, y_tr, y_te,
                 seeds=seeds, metrics=args.metrics or method.metrics,
                 fit_with_labels=method.fit_with_labels, method=method.name,
+                transductive=method.transductive,
                 test_pairs=pairs,
                 hubness_reduction=method.hubness_reduction,
             )

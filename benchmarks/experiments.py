@@ -10,6 +10,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+import numpy as np
+
 from embedkit import baselines as B
 
 DIMS = (16, 32, 64, 128, 256)
@@ -25,6 +27,7 @@ class Method:
     params: dict = field(default_factory=dict)
     hubness_reduction: object = None  # neighbour search for the kNN-based metrics (WP 5.5)
     metrics: tuple | None = None  # metrics for this method (default: the run's --metrics)
+    transductive: bool = False  # fit on train + test rows, without labels (E7)
 
 
 def _dims_for(d: int) -> list[int]:
@@ -208,4 +211,69 @@ def e6_methods(dataset) -> list[Method]:
     return m + _e6_stage2(dims, d)
 
 
-EXPERIMENTS: dict[str, Callable] = {"e1": e1_methods, "e6": e6_methods}
+E7_SIZES = (200, 500, 1000, 5000, 20000, 100000)
+# The d selected on validation for the default refiner (e6_linear) in E6 stage 1.
+E7_DIM = {"banking77_mpnet": 64, "cifar100_dinov2": 128, "digits": 32, "pets_resnet50": 64,
+          "stl10_clip": 128, "stsb_mpnet": 128, "synthetic_anisotropic": 128}
+
+
+class _Subsample:
+    """Fit ``transform`` on ``n`` training rows drawn with ``seed``; transform every row (E7).
+
+    The kNN gallery and the probe's training set stay the whole (transformed) training split; only
+    the data the transform is fitted on shrink.
+    """
+
+    def __init__(self, transform, n: int, seed: int):
+        self.transform_, self.n, self.seed = transform, n, seed
+
+    def fit(self, X, y=None):
+        rows = np.random.default_rng(self.seed).choice(len(X), size=min(self.n, len(X)),
+                                                       replace=False)
+        self.transform_.fit(X[np.sort(rows)])
+        return self
+
+    def transform(self, X):
+        return self.transform_.transform(X)
+
+    def get_params(self) -> dict:
+        get = getattr(self.transform_, "get_params", None)
+        return {**(get() if callable(get) else {}), "n_fit": self.n}
+
+
+def e7_methods(dataset) -> list[Method]:
+    """E7: learning curves over the number of rows the transform is fitted on, and inductive
+    against transductive fitting (review section 5).
+
+    The current ``EmbedKit`` default and PCA / PCA-whitening, all at the d that ``e6_linear``
+    selected on validation (:data:`E7_DIM`). Sizes from :data:`E7_SIZES` below the training size,
+    plus the whole training split (``-all``); the ``-transductive`` methods are fitted on train +
+    test rows without labels.
+    """
+    from embedkit import EmbedKit
+
+    n_train, d_in = dataset.X_train.shape
+    k = min(E7_DIM.get(dataset.name, 64), d_in)
+    makers = {
+        "embedkit": (lambda s, dev: EmbedKit(target_dim=k, random_state=s, device=dev), False),
+        "pca": (lambda s, dev: B.PCAReduce(k), True),
+        "pca_whiten": (lambda s, dev: B.PCAReduce(k, whiten=True), True),
+    }
+    m: list[Method] = [Method("raw", lambda s, ds, dev: B.Identity(), family="raw")]
+    for name, (make, deterministic) in makers.items():
+        for n in [n for n in E7_SIZES if n < n_train]:
+            m.append(Method(
+                f"{name}-n{n}",
+                lambda s, ds, dev, make=make, n=n: _Subsample(make(s, dev), n, s),
+                deterministic=False, family=f"e7_{name}", params=dict(target_dim=k, n_fit=n),
+            ))
+        m.append(Method(f"{name}-all", lambda s, ds, dev, make=make: make(s, dev),
+                        deterministic=deterministic, family=f"e7_{name}",
+                        params=dict(target_dim=k, n_fit=n_train)))
+        m.append(Method(f"{name}-transductive", lambda s, ds, dev, make=make: make(s, dev),
+                        deterministic=deterministic, family=f"e7_{name}_transductive",
+                        params=dict(target_dim=k), transductive=True))
+    return m
+
+
+EXPERIMENTS: dict[str, Callable] = {"e1": e1_methods, "e6": e6_methods, "e7": e7_methods}

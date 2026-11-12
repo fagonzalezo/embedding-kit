@@ -51,6 +51,9 @@ Phase 3 of `docs/IMPLEMENTATION_PLAN.md`: benchmarks E1 and E2 and the decision 
 - E1 gains the hubness-reduction methods `raw+ls`, `raw+mp`, `raw+csls` and `raw+dsl`, scored on the
   kNN-based metrics only (`Method.hubness_reduction`, `Method.metrics`);
   `benchmarks/cluster/e1_hub.slurm.sh` runs them on CPU nodes.
+- `benchmarks/run.py --experiment e7` and `benchmarks/report_e7.py`: learning curves of the default
+  refiner, PCA and PCA-whitening over the number of rows fitted (200 to 100k, capped at the training
+  size), and inductive against transductive fitting (`Method.transductive`).
 - `benchmarks/e2.py` and `benchmarks/report_e2.py`: experiment E2, every trainer monitor logged
   next to test kNN and probe accuracy over 30 refiner configurations per dataset.
 - `benchmarks/report_gate.py`: the phase 3 gate on E1 results.

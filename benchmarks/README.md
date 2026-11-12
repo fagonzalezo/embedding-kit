@@ -14,6 +14,7 @@ split, score held-out data.
 | `report_e2.py` | E2 tables: within-run and across-run Spearman correlations of each monitor with test accuracy, and the regret of stopping or selecting by it. |
 | `report_gate.py` | The phase 3 gate on E1: self-supervised `EmbedKit` against the best training-free baseline at the same d, with paired intervals. |
 | `report_e6.py` | E6 tables: each refiner arm, selected on validation, against the previous default and against PCA at the same d; applies the phase 5 acceptance rule. |
+| `report_e7.py` | E7 tables: learning curves of the default refiner against PCA and PCA-whitening over the number of rows fitted, and inductive against transductive fitting. |
 | `extract_features.py` | Downloads a large set and caches its embeddings. **Cluster only.** |
 | `cluster/` | Slurm jobs for the OCCIDATA cluster (see "On the cluster" below). |
 | `review_2026_11/` | Scripts behind `docs/CRITICAL_REVIEW.md` (pilot, defect reproductions). |
@@ -65,5 +66,5 @@ GPU jobs use `singularity exec --nv`; at most 2 GPUs at a time. Code reaches the
 From `benchmarks/cluster/` in the cluster clone: `sbatch setup.slurm.sh` (once),
 `sbatch extract.slurm.sh` and `sbatch extract_cpu.slurm.sh` (features), `sbatch test.slurm.sh`
 (test suite on CUDA), then `sbatch run.slurm.sh` (E1, one array task per dataset), `sbatch e1_hub.slurm.sh` (the E1
-hubness-reduction methods, on CPU nodes) and `sbatch e6.slurm.sh` (E6). Copy
+hubness-reduction methods, on CPU nodes), `sbatch e6.slurm.sh` (E6) and `sbatch e7.slurm.sh` (E7). Copy
 `benchmarks/results/` back with rsync and commit the JSON files.

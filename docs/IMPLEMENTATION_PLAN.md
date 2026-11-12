@@ -808,6 +808,13 @@ Release as 0.5.0.
   `hubness_reduction=`; E1 gains `raw+ls`, `raw+mp`, `raw+csls`, `raw+dsl`, scored on kNN accuracy,
   recall@10 and k-skewness, run on CPU nodes. Smoke run (digits, synthetic): k-skewness drops for all
   four on digits and for three of four on synthetic; kNN accuracy moves by under 0.03.
+- **E7 harness** (`run.py --experiment e7`, `report_e7.py`): the default `EmbedKit`, PCA and
+  PCA-whitening at the d that `e6_linear` selected per dataset, fitted on n in {200, 500, 1k, 5k,
+  20k, 100k} training rows (below the training size) and on all of them; the kNN gallery and the
+  probe always use the whole transformed training split. Plus each transform fitted transductively
+  (train + test, no labels). It runs after E6 stage 2, so that it uses the final default. The
+  review's third E7 item, distribution shift, needs paired domains that the benchmark sets do not
+  have, and is not run.
 
 ## Open points for the next session
 

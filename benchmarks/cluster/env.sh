@@ -29,6 +29,9 @@ E2_SETS=(cifar100_dinov2 pets_resnet50 banking77_mpnet synthetic_anisotropic)
 E6_TASKS=(cifar100_dinov2:0/3 cifar100_dinov2:1/3 cifar100_dinov2:2/3 banking77_mpnet stsb_mpnet
           pets_resnet50 synthetic_anisotropic stl10_clip digits)
 
+# Datasets of experiment E7 (one array task each). Longest first.
+E7_SETS=(cifar100_dinov2 banking77_mpnet stsb_mpnet pets_resnet50 synthetic_anisotropic stl10_clip digits)
+
 check_clean() {
   # Results must match the commit recorded in each result file.
   if [ -n "$(git -C "$REPO" status --porcelain -- embedkit benchmarks pyproject.toml | grep -v 'benchmarks/results/')" ]; then
