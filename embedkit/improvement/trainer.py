@@ -325,6 +325,9 @@ class Trainer:
         # (e.g. KNNPairs), so global dataset-level positives can be used.
         if hasattr(self.augmentation, "precompute"):
             self.augmentation.precompute(X_np)
+        if hasattr(self.loss, "precompute"):
+            self.loss.precompute(X_np)  # e.g. input-space neighbours for NTXentLoss(neighbor_mask)
+        pass_indices = getattr(self.loss, "uses_indices", False)
 
         # Keep data on CPU; pin_memory lets CUDA transfers overlap with compute.
         # Global row indices (position 1) let index-aware augmentations look up
@@ -394,7 +397,10 @@ class Trainer:
                 x_i, x_j = self.augmentation(x_batch, idx_batch)
                 z_i = self.model(x_i)
                 z_j = self.model(x_j)
-                loss_value = self.loss(z_i, z_j, lbl_batch)
+                if pass_indices:
+                    loss_value = self.loss(z_i, z_j, lbl_batch, indices=idx_batch)
+                else:
+                    loss_value = self.loss(z_i, z_j, lbl_batch)
                 opt.zero_grad()
                 loss_value.backward()
                 opt.step()

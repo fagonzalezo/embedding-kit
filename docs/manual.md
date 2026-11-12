@@ -364,7 +364,9 @@ Instead of perturbing `x` to create a view, `KNNPairs` uses an actual nearest ne
 
 `KNNPairs` is a *pair* augmentation (`kind = "pair"`). In a sequential `CompositeAugmentation` it must come first, and at most one pair augmentation is allowed; view augmentations placed after it perturb both the anchor and the neighbor.
 
-**Parameters:** `k=10`, `neighbor_index=None`, `metric="euclidean"`
+**Parameters:** `k=10`, `neighbor_index=None`, `metric="euclidean"`, `mode="all"`
+
+With `mode="mutual"` only mutual neighbours are used (`j` is among the `k` neighbours of `i` and `i` among those of `j`). This removes most of the cross-cluster pairs that hubs create. A point with no mutual neighbour is paired with its nearest neighbour.
 
 ```python
 from embedkit.improvement.augmentation import KNNPairs
@@ -372,6 +374,12 @@ from embedkit.improvement.augmentation import KNNPairs
 aug = KNNPairs(k=10)
 anchor, positive = aug(x_batch)
 ```
+
+---
+
+#### IdentityPair
+
+Returns `(x, x)`. Because the two views pass through the refiner separately in training mode, they differ only by its dropout masks: the SimCSE positives of Gao et al. (2021). It is a *pair* augmentation, and view augmentations may follow it in a `CompositeAugmentation`.
 
 ---
 
@@ -427,7 +435,10 @@ The SimCLR / InfoNCE objective (van den Oord et al., 2018; Chen et al., 2020). G
 
 Lower τ concentrates the gradient on hard negatives; higher τ produces a softer distribution.
 
-**Parameters:** `temperature=0.07`
+**Parameters:** `temperature=0.07`, `chunk_size=None`, `neighbor_mask=None`, `neighbor_metric="euclidean"`, `decoupled=False`
+
+- `neighbor_mask=k` (or a precomputed `(n_train, k)` neighbour-index array) removes likely false negatives. Two rows of a batch are not negatives for each other when one is among the `k` nearest input-space neighbours of the other. The trainer computes the neighbours (`precompute`) and passes the batch's global row indices (`forward(..., indices=...)`). Without indices, no mask is applied.
+- `decoupled=True` leaves the positive out of the denominator (Yeh et al. 2022).
 
 **Use when:** self-supervised learning with no labels available.
 

@@ -13,7 +13,8 @@ class CombinedLoss(BaseLoss):
     ``labels`` are forwarded only to members whose ``uses_labels`` attribute is
     ``True``; the others are called as ``loss(z_i, z_j)``. Exceptions raised by a
     member (for example a label shape error) propagate unchanged. The combined loss
-    has ``uses_labels = True`` if any member does.
+    has ``uses_labels = True`` if any member does; the same holds for ``uses_indices`` and the
+    ``indices`` argument. :meth:`precompute` is forwarded to every member.
     """
 
     def __init__(self, losses: list[tuple[BaseLoss, float]]):
@@ -21,17 +22,25 @@ class CombinedLoss(BaseLoss):
         self.loss_fns = torch.nn.ModuleList([fn for fn, _ in losses])
         self.weights = [w for _, w in losses]
         self.uses_labels = any(getattr(fn, "uses_labels", False) for fn, _ in losses)
+        self.uses_indices = any(getattr(fn, "uses_indices", False) for fn, _ in losses)
+
+    def precompute(self, X) -> None:
+        for fn in self.loss_fns:
+            if hasattr(fn, "precompute"):
+                fn.precompute(X)
 
     def forward(
         self,
         z_i: torch.Tensor,
         z_j: torch.Tensor,
         labels: torch.Tensor | None = None,
+        indices: torch.Tensor | None = None,
     ) -> torch.Tensor:
         terms = []
         for loss_fn, w in zip(self.loss_fns, self.weights):
+            kwargs = {"indices": indices} if getattr(loss_fn, "uses_indices", False) else {}
             if getattr(loss_fn, "uses_labels", False):
-                terms.append(w * loss_fn(z_i, z_j, labels))
+                terms.append(w * loss_fn(z_i, z_j, labels, **kwargs))
             else:
-                terms.append(w * loss_fn(z_i, z_j))
+                terms.append(w * loss_fn(z_i, z_j, **kwargs))
         return sum(terms, torch.zeros((), device=z_i.device, dtype=z_i.dtype))

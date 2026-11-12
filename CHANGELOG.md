@@ -19,6 +19,16 @@ Phase 3 of `docs/IMPLEMENTATION_PLAN.md`: benchmarks E1 and E2 and the decision 
   `architecture="linear"` keeps only `W`. `Trainer.fit` calls `model.initialize_from_data` on the
   training rows when the model defines it. `EmbedKit(architecture=...)` passes it through and stores it
   in `config.json`; `EmbedKit.load` restores it. The default stays `"mlp"` until E6 accepts the change.
+- WP 5.2 options:
+  - `KNNPairs(mode="mutual")` draws positives only among mutual neighbours, with the nearest neighbour
+    as a fallback.
+  - `NTXentLoss(neighbor_mask=k)` stops input-space neighbours from acting as negatives for each other.
+  - `NTXentLoss(decoupled=True)` is the decoupled contrastive loss.
+  - `IdentityPair` gives dropout-only positives.
+- Losses have optional `precompute(X)` and `uses_indices` hooks, mirroring the augmentations.
+  `Trainer` and `CombinedLoss` call `precompute` with the training rows, and pass the batch's global
+  row indices to losses that declare `uses_indices`.
+- `NTXentLoss` computes its full and chunked forms in one code path (same values).
 
 ### Benchmarks
 - `benchmarks/run.py --experiment e6`: the phase 5 ablation grid (architecture arms at auto and fixed

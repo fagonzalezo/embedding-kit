@@ -8,6 +8,7 @@ import torch
 
 from embedkit.improvement.augmentation.base import BaseAugmentation
 from embedkit.improvement.augmentation.cutout import FeatureMasking
+from embedkit.improvement.augmentation.identity import IdentityPair
 from embedkit.improvement.augmentation.knn import KNNPairs
 from embedkit.improvement.augmentation.mixup import EmbeddingMixup
 from embedkit.improvement.augmentation.noise import FeatureDropout, GaussianNoise
@@ -99,5 +100,6 @@ __all__ = [
     "FeatureMasking",
     "EmbeddingMixup",
     "KNNPairs",
+    "IdentityPair",
     "CompositeAugmentation",
 ]
