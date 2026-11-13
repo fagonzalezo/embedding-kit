@@ -1,6 +1,6 @@
 """E6 report: does a refiner change beat the previous default? (phase 5 of the plan)
 
-    python benchmarks/report_e6.py --reference e6_mlp --out benchmarks/results/e6/REPORT.md
+    python benchmarks/report_e6.py --reference e6_linear --out benchmarks/results/e6/REPORT.md
 
 Every family (``e6_<arm>``) is reduced to its configuration best on validation (auto d or a
 fixed d), as in E1. Each candidate family is then compared, per dataset, with:
@@ -10,6 +10,10 @@ fixed d), as in E1. Each candidate family is then compared, per dataset, with:
   excluding 0) on at least half the datasets.
 - the **best training-free baseline at the same d** (PCA or PCA-whitening, best on validation):
   the phase 3 gate, repeated for the new arm.
+
+Nested prefixes (WP 5.3), when ``matryoshka-d<k>`` methods exist: every prefix of the one nested
+model against ``linear-d<k>`` trained at that d, at each fixed d with no selection. The WP 5.3 rule
+is non-inferiority: accept unless the prefix loses at some d on more than one dataset.
 """
 
 from __future__ import annotations
@@ -63,7 +67,14 @@ def analyse(exp_dir: Path, dataset: str, reference: str):
             row["vs_base"] = paired(test, primary, m, b)
         rows[f] = row
     raw = _fmt(*_stats(test, "raw", primary)) if "raw" in v.index else "n/a"
-    return dict(primary=primary, rows=rows, raw=raw, failed=failed)
+    prefixes = []
+    for m in sorted(v.index, key=lambda m: dims[m]):
+        own = m.replace("matryoshka-", "linear-")
+        if m.startswith("matryoshka-d") and own in v.index:
+            prefixes.append(dict(d=int(dims[m]), prefix=_fmt(*_stats(test, m, primary)),
+                                 own=_fmt(*_stats(test, own, primary)),
+                                 vs=paired(test, primary, m, own)))
+    return dict(primary=primary, rows=rows, raw=raw, failed=failed, prefixes=prefixes)
 
 
 def render(results, reference) -> str:
@@ -86,6 +97,21 @@ def render(results, reference) -> str:
         out.append(f"| {f} | {text} | {count('vs_base')[1]} | {accepted} |")
     out += ["", f"A family is accepted when it wins against `{reference}` on at least half of the "
             f"{n} datasets.", ""]
+    if any(r["prefixes"] for r in results.values()):
+        out += ["## Nested prefixes against a model trained at each d (WP 5.3)", "",
+                "| Dataset | d | prefix | trained at d | prefix - trained [95% CI] |",
+                "|---|---|---|---|---|"]
+        losing = set()
+        for name, r in results.items():
+            for x in r["prefixes"]:
+                out.append(f"| {name} | {x['d']} | {x['prefix']} | {x['own']} | "
+                           f"{x['vs'][1]} {x['vs'][0]} |")
+                if x["vs"][0] == "loss":
+                    losing.add(name)
+        accepted = "yes" if len(losing) <= 1 else "no"
+        out += ["", f"Datasets with a loss at some d: {len(losing)} "
+                f"({', '.join(sorted(losing)) or 'none'}). Accepted (at most one): {accepted}.",
+                ""]
     for name, r in results.items():
         out += [f"## {name} ({r['primary']}; raw {r['raw']})", "",
                 "| Family | selected | d | test | vs reference [95% CI] | best baseline at d | "
@@ -106,7 +132,7 @@ def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("--results", default=str(HERE / "results"))
     p.add_argument("--datasets", nargs="*", default=None)
-    p.add_argument("--reference", default="e6_mlp", help="Family of the previous default")
+    p.add_argument("--reference", default="e6_linear", help="Family of the previous default")
     p.add_argument("--out", default=None, help="Write Markdown here instead of stdout")
     args = p.parse_args(argv)
     exp_dir = Path(args.results) / "e6"

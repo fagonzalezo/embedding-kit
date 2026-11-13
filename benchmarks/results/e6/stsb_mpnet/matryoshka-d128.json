@@ -1,0 +1,1182 @@
+{
+ "experiment": "e6",
+ "dataset": "stsb_mpnet",
+ "method": "matryoshka-d128",
+ "family": "e6_matryoshka",
+ "params": {
+  "architecture": "linear",
+  "target_dim": 256,
+  "dim": 128,
+  "nested": [
+   32,
+   64,
+   128
+  ]
+ },
+ "deterministic": false,
+ "fit_with_labels": false,
+ "seeds": 5,
+ "device": "cuda",
+ "val_fraction": 0.2,
+ "git": {
+  "commit": "77bc902f3c9bb454e18605434854dac6a6b2cefd",
+  "dirty": false
+ },
+ "embedkit_version": "0.2.0",
+ "python": "3.12.3",
+ "host": "r9ng-8000-1",
+ "created": "2026-11-12T21:39:47+00:00",
+ "dataset_meta": {
+  "model": "sentence-transformers/all-mpnet-base-v2",
+  "hf_dataset": "sentence-transformers/stsb",
+  "normalized": false,
+  "pooling": "mean, Normalize module removed",
+  "n_test_pairs": 1379,
+  "n_val_pairs": 1500,
+  "dataset": "stsb_mpnet",
+  "created": "2026-11-11T10:23:00+00:00",
+  "model_revision": "e8c3b32edf5434bc2275fc9bab85f82640a19130",
+  "device": "cuda",
+  "seconds": 26.5,
+  "source": "/projects/iris/fabio.gonzalezosorio/data/embedkit-bench/features/stsb_mpnet.npz",
+  "task": "sts"
+ },
+ "stages": {
+  "val": [
+   {
+    "method": "matryoshka-d128",
+    "seed": 0,
+    "metric": "sts_spearman",
+    "value": 0.8645261307034633,
+    "fit_time": 64.21655691973865,
+    "transform_time": 0.025384699925780296,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 0,
+    "metric": "trustworthiness",
+    "value": 0.9896148104088867,
+    "fit_time": 64.21655691973865,
+    "transform_time": 0.025384699925780296,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 0,
+    "metric": "continuity",
+    "value": 0.990158108843707,
+    "fit_time": 64.21655691973865,
+    "transform_time": 0.025384699925780296,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 0,
+    "metric": "knn_overlap",
+    "value": 0.5896563573883162,
+    "fit_time": 64.21655691973865,
+    "transform_time": 0.025384699925780296,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 0,
+    "metric": "linear_cka",
+    "value": 0.7280748791126189,
+    "fit_time": 64.21655691973865,
+    "transform_time": 0.025384699925780296,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 0,
+    "metric": "k_skewness",
+    "value": 1.1741724880562987,
+    "fit_time": 64.21655691973865,
+    "transform_time": 0.025384699925780296,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 0,
+    "metric": "effective_rank",
+    "value": 106.51771805203187,
+    "fit_time": 64.21655691973865,
+    "transform_time": 0.025384699925780296,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 1,
+    "metric": "sts_spearman",
+    "value": 0.8646657119816522,
+    "fit_time": 63.77900862134993,
+    "transform_time": 0.024677636101841927,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 1,
+    "metric": "trustworthiness",
+    "value": 0.9890554488041368,
+    "fit_time": 63.77900862134993,
+    "transform_time": 0.024677636101841927,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 1,
+    "metric": "continuity",
+    "value": 0.9903098482190718,
+    "fit_time": 63.77900862134993,
+    "transform_time": 0.024677636101841927,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 1,
+    "metric": "knn_overlap",
+    "value": 0.5884536082474227,
+    "fit_time": 63.77900862134993,
+    "transform_time": 0.024677636101841927,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 1,
+    "metric": "linear_cka",
+    "value": 0.7288112850514402,
+    "fit_time": 63.77900862134993,
+    "transform_time": 0.024677636101841927,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 1,
+    "metric": "k_skewness",
+    "value": 1.15734518520148,
+    "fit_time": 63.77900862134993,
+    "transform_time": 0.024677636101841927,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 1,
+    "metric": "effective_rank",
+    "value": 106.37148187274721,
+    "fit_time": 63.77900862134993,
+    "transform_time": 0.024677636101841927,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 2,
+    "metric": "sts_spearman",
+    "value": 0.8639982222238394,
+    "fit_time": 64.31649930775166,
+    "transform_time": 0.024356668815016747,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 2,
+    "metric": "trustworthiness",
+    "value": 0.9893519585373136,
+    "fit_time": 64.31649930775166,
+    "transform_time": 0.024356668815016747,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 2,
+    "metric": "continuity",
+    "value": 0.9903542979664597,
+    "fit_time": 64.31649930775166,
+    "transform_time": 0.024356668815016747,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 2,
+    "metric": "knn_overlap",
+    "value": 0.588659793814433,
+    "fit_time": 64.31649930775166,
+    "transform_time": 0.024356668815016747,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 2,
+    "metric": "linear_cka",
+    "value": 0.7278800228705777,
+    "fit_time": 64.31649930775166,
+    "transform_time": 0.024356668815016747,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 2,
+    "metric": "k_skewness",
+    "value": 1.1643058489396116,
+    "fit_time": 64.31649930775166,
+    "transform_time": 0.024356668815016747,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 2,
+    "metric": "effective_rank",
+    "value": 106.27011758160315,
+    "fit_time": 64.31649930775166,
+    "transform_time": 0.024356668815016747,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 3,
+    "metric": "sts_spearman",
+    "value": 0.8644499254181517,
+    "fit_time": 63.78151610866189,
+    "transform_time": 0.02446669526398182,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 3,
+    "metric": "trustworthiness",
+    "value": 0.9894348506677256,
+    "fit_time": 63.78151610866189,
+    "transform_time": 0.02446669526398182,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 3,
+    "metric": "continuity",
+    "value": 0.9903587856813402,
+    "fit_time": 63.78151610866189,
+    "transform_time": 0.02446669526398182,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 3,
+    "metric": "knn_overlap",
+    "value": 0.5887285223367696,
+    "fit_time": 63.78151610866189,
+    "transform_time": 0.02446669526398182,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 3,
+    "metric": "linear_cka",
+    "value": 0.728957562140901,
+    "fit_time": 63.78151610866189,
+    "transform_time": 0.02446669526398182,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 3,
+    "metric": "k_skewness",
+    "value": 1.1617386928634115,
+    "fit_time": 63.78151610866189,
+    "transform_time": 0.02446669526398182,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 3,
+    "metric": "effective_rank",
+    "value": 106.49808201026462,
+    "fit_time": 63.78151610866189,
+    "transform_time": 0.02446669526398182,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 4,
+    "metric": "sts_spearman",
+    "value": 0.8634881964611317,
+    "fit_time": 65.44186048954725,
+    "transform_time": 0.12377467192709446,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 4,
+    "metric": "trustworthiness",
+    "value": 0.9889177305697083,
+    "fit_time": 65.44186048954725,
+    "transform_time": 0.12377467192709446,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 4,
+    "metric": "continuity",
+    "value": 0.9904844179534714,
+    "fit_time": 65.44186048954725,
+    "transform_time": 0.12377467192709446,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 4,
+    "metric": "knn_overlap",
+    "value": 0.5879381443298969,
+    "fit_time": 65.44186048954725,
+    "transform_time": 0.12377467192709446,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 4,
+    "metric": "linear_cka",
+    "value": 0.7276457680051968,
+    "fit_time": 65.44186048954725,
+    "transform_time": 0.12377467192709446,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 4,
+    "metric": "k_skewness",
+    "value": 1.1757497445906309,
+    "fit_time": 65.44186048954725,
+    "transform_time": 0.12377467192709446,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 4,
+    "metric": "effective_rank",
+    "value": 106.58615468303795,
+    "fit_time": 65.44186048954725,
+    "transform_time": 0.12377467192709446,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   }
+  ],
+  "test": [
+   {
+    "method": "matryoshka-d128",
+    "seed": 0,
+    "metric": "sts_spearman",
+    "value": 0.8271783282437054,
+    "fit_time": 64.15927280113101,
+    "transform_time": 0.02437969297170639,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 0,
+    "metric": "trustworthiness",
+    "value": 0.9903287859322852,
+    "fit_time": 64.15927280113101,
+    "transform_time": 0.02437969297170639,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 0,
+    "metric": "continuity",
+    "value": 0.988360284671384,
+    "fit_time": 64.15927280113101,
+    "transform_time": 0.02437969297170639,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 0,
+    "metric": "knn_overlap",
+    "value": 0.6136363636363636,
+    "fit_time": 64.15927280113101,
+    "transform_time": 0.02437969297170639,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 0,
+    "metric": "linear_cka",
+    "value": 0.745113923738721,
+    "fit_time": 64.15927280113101,
+    "transform_time": 0.02437969297170639,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 0,
+    "metric": "k_skewness",
+    "value": 1.1678852314594985,
+    "fit_time": 64.15927280113101,
+    "transform_time": 0.02437969297170639,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 0,
+    "metric": "effective_rank",
+    "value": 105.67659958237039,
+    "fit_time": 64.15927280113101,
+    "transform_time": 0.02437969297170639,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 1,
+    "metric": "sts_spearman",
+    "value": 0.8267555366664264,
+    "fit_time": 63.82490314356983,
+    "transform_time": 0.024315059185028076,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 1,
+    "metric": "trustworthiness",
+    "value": 0.990503399582398,
+    "fit_time": 63.82490314356983,
+    "transform_time": 0.024315059185028076,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 1,
+    "metric": "continuity",
+    "value": 0.988661915346289,
+    "fit_time": 63.82490314356983,
+    "transform_time": 0.024315059185028076,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 1,
+    "metric": "knn_overlap",
+    "value": 0.6151645768025079,
+    "fit_time": 63.82490314356983,
+    "transform_time": 0.024315059185028076,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 1,
+    "metric": "linear_cka",
+    "value": 0.7462203619024201,
+    "fit_time": 63.82490314356983,
+    "transform_time": 0.024315059185028076,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 1,
+    "metric": "k_skewness",
+    "value": 1.0800378314870256,
+    "fit_time": 63.82490314356983,
+    "transform_time": 0.024315059185028076,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 1,
+    "metric": "effective_rank",
+    "value": 105.52071790275738,
+    "fit_time": 63.82490314356983,
+    "transform_time": 0.024315059185028076,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 2,
+    "metric": "sts_spearman",
+    "value": 0.8270191735020332,
+    "fit_time": 63.86993436329067,
+    "transform_time": 0.023583846166729927,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 2,
+    "metric": "trustworthiness",
+    "value": 0.9903086411742787,
+    "fit_time": 63.86993436329067,
+    "transform_time": 0.023583846166729927,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 2,
+    "metric": "continuity",
+    "value": 0.988441466192338,
+    "fit_time": 63.86993436329067,
+    "transform_time": 0.023583846166729927,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 2,
+    "metric": "knn_overlap",
+    "value": 0.6164968652037618,
+    "fit_time": 63.86993436329067,
+    "transform_time": 0.023583846166729927,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 2,
+    "metric": "linear_cka",
+    "value": 0.7445714765671941,
+    "fit_time": 63.86993436329067,
+    "transform_time": 0.023583846166729927,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 2,
+    "metric": "k_skewness",
+    "value": 1.1331952718839908,
+    "fit_time": 63.86993436329067,
+    "transform_time": 0.023583846166729927,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 2,
+    "metric": "effective_rank",
+    "value": 105.41306683054367,
+    "fit_time": 63.86993436329067,
+    "transform_time": 0.023583846166729927,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 3,
+    "metric": "sts_spearman",
+    "value": 0.8270706964078408,
+    "fit_time": 63.85413349606097,
+    "transform_time": 0.02900709956884384,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 3,
+    "metric": "trustworthiness",
+    "value": 0.9902420120782037,
+    "fit_time": 63.85413349606097,
+    "transform_time": 0.02900709956884384,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 3,
+    "metric": "continuity",
+    "value": 0.9885015451523741,
+    "fit_time": 63.85413349606097,
+    "transform_time": 0.02900709956884384,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 3,
+    "metric": "knn_overlap",
+    "value": 0.6123824451410658,
+    "fit_time": 63.85413349606097,
+    "transform_time": 0.02900709956884384,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 3,
+    "metric": "linear_cka",
+    "value": 0.7464428369960087,
+    "fit_time": 63.85413349606097,
+    "transform_time": 0.02900709956884384,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 3,
+    "metric": "k_skewness",
+    "value": 1.080029231084609,
+    "fit_time": 63.85413349606097,
+    "transform_time": 0.02900709956884384,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 3,
+    "metric": "effective_rank",
+    "value": 105.58798065003097,
+    "fit_time": 63.85413349606097,
+    "transform_time": 0.02900709956884384,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 4,
+    "metric": "sts_spearman",
+    "value": 0.8278579119810376,
+    "fit_time": 63.90724735893309,
+    "transform_time": 0.023308204486966133,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 4,
+    "metric": "trustworthiness",
+    "value": 0.9904984097381985,
+    "fit_time": 63.90724735893309,
+    "transform_time": 0.023308204486966133,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 4,
+    "metric": "continuity",
+    "value": 0.988520670313733,
+    "fit_time": 63.90724735893309,
+    "transform_time": 0.023308204486966133,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 4,
+    "metric": "knn_overlap",
+    "value": 0.616026645768025,
+    "fit_time": 63.90724735893309,
+    "transform_time": 0.023308204486966133,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 4,
+    "metric": "linear_cka",
+    "value": 0.745418561709739,
+    "fit_time": 63.90724735893309,
+    "transform_time": 0.023308204486966133,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 4,
+    "metric": "k_skewness",
+    "value": 1.1592771106286146,
+    "fit_time": 63.90724735893309,
+    "transform_time": 0.023308204486966133,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   },
+   {
+    "method": "matryoshka-d128",
+    "seed": 4,
+    "metric": "effective_rank",
+    "value": 105.69865092837395,
+    "fit_time": 63.90724735893309,
+    "transform_time": 0.023308204486966133,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "dim": 128,
+     "target_dim": 256,
+     "architecture": "linear"
+    },
+    "per_point": null
+   }
+  ]
+ },
+ "errors": {},
+ "warnings": {
+  "val": [
+   "DeprecationWarning: The argument 'device' of Tensor.is_pinned() is deprecated. Please do not pass this argument. (Triggered internally at /opt/pytorch/pytorch/aten/src/ATen/native/Memory.cpp:31.)",
+   "DeprecationWarning: The argument 'device' of Tensor.pin_memory() is deprecated. Please do not pass this argument. (Triggered internally at /opt/pytorch/pytorch/aten/src/ATen/native/Memory.cpp:46.)"
+  ],
+  "test": [
+   "DeprecationWarning: The argument 'device' of Tensor.is_pinned() is deprecated. Please do not pass this argument. (Triggered internally at /opt/pytorch/pytorch/aten/src/ATen/native/Memory.cpp:31.)",
+   "DeprecationWarning: The argument 'device' of Tensor.pin_memory() is deprecated. Please do not pass this argument. (Triggered internally at /opt/pytorch/pytorch/aten/src/ATen/native/Memory.cpp:46.)"
+  ]
+ },
+ "elapsed": 650.0216894876212
+}
