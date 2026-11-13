@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+Phase 6 of `docs/IMPLEMENTATION_PLAN.md`: supervised and regression modes.
+
+### Changed
+- **Supervised `EmbedKit` drops the uniformity term**: the default loss is `SupConLoss(0.07)` alone
+  (was SupCon + 0.5 `AlignUniformLoss`), which spread each class against SupCon's pull (review 3.4).
+- **Supervised `EmbedKit` stops on a held-out score**: `monitor="auto"` and
+  `early_stopping_patience="auto"` (new defaults) resolve to `val_knn_accuracy` with patience 10
+  and 10% of the rows held out, restoring the best weights. Self-supervised mode keeps no early
+  stopping. Pass `early_stopping_patience=None` to train on every row for the full budget.
+
+### Added
+- `EmbedKit(mode="regression")`: `RankNContrastLoss`, targets cast to float, and the new monitor
+  `val_ridge_r2` (R^2 of a ridge probe from the training subsample to the validation rows).
+- `SupConLoss(spread_weight=w)`: `(1 - w) * SupCon + w * spread`, the class-conditional InfoNCE term
+  of Chen et al. (2022) that keeps within-class structure (WP 6.2).
+- Trainer monitors `train_nc1` and `val_nc1` (neural-collapse NC1 on the training subsample and the
+  validation rows); supervised `EmbedKit` logs both in `history`. `val_knn_accuracy` now rejects
+  continuous labels with a clear message.
+
 ## 0.4.0 (unreleased)
 
 Phases 3 and 5 of `docs/IMPLEMENTATION_PLAN.md`: benchmarks E1 and E2 and the decision gate

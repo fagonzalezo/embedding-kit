@@ -16,6 +16,7 @@ from embedkit.improvement.losses import (
     CombinedLoss,
     MatryoshkaLoss,
     NTXentLoss,
+    RankNContrastLoss,
     SupConLoss,
 )
 from embedkit.improvement.model import EmbeddingRefiner
@@ -28,19 +29,19 @@ class EmbedKit:
     """Analyse, configure, train and transform in one estimator.
 
     ``method`` chooses what ``fit`` builds. ``"refiner"`` trains an
-    :class:`~embedkit.improvement.model.EmbeddingRefiner` with a contrastive loss. ``"pca"``
-    trains nothing: it is the ``linear`` refiner at its initialisation, the top ``target_dim``
-    principal directions followed by L2 normalisation, with the same ``transform``, ``dim=``,
-    ``save`` and ``load``. ``"auto"`` (the default) is ``"pca"`` for ``mode="self_supervised"``
-    and ``"refiner"`` for ``mode="supervised"``. In E1, E6 and E7 (``docs/BENCHMARK_E1_E2.md``,
-    ``docs/BENCHMARK_E6_E7.md``) the self-supervised refiner never beat the better of PCA and
-    PCA-whitening, lost to them when fitted on fewer than a few thousand rows, and cost about 100
-    times more; the gate rule of ``docs/IMPLEMENTATION_PLAN.md`` then makes PCA the default. The
-    training parameters (``augmentation``, ``loss``, ``architecture``, ``nested_dims``, ``epochs``
-    and the optimiser settings) apply to ``"refiner"`` only; setting ``augmentation``, ``loss``,
-    ``nested_dims`` or a non-linear ``architecture`` with ``"pca"`` raises, so that a training
-    configuration is never silently ignored. PCA prefixes are nested by construction, so
-    ``transform(X, dim=m)`` is PCA at ``m`` (renormalised) without ``nested_dims``.
+    :class:`~embedkit.improvement.model.EmbeddingRefiner` with a contrastive loss. ``"pca"`` trains
+    nothing: it is the ``linear`` refiner at its initialisation, the top ``target_dim`` principal
+    directions followed by L2 normalisation, with the same ``transform``, ``dim=``, ``save`` and
+    ``load``. ``"auto"`` (the default) is ``"pca"`` for ``mode="self_supervised"`` and ``"refiner"``
+    for ``mode="supervised"`` and ``mode="regression"``. In E1, E6 and E7
+    (``docs/BENCHMARK_E1_E2.md``, ``docs/BENCHMARK_E6_E7.md``) the self-supervised refiner never
+    beat the better of PCA and PCA-whitening, lost to them when fitted on fewer than a few thousand
+    rows, and cost about 100 times more; the gate rule of ``docs/IMPLEMENTATION_PLAN.md`` then makes
+    PCA the default. The training parameters (``augmentation``, ``loss``, ``architecture``,
+    ``nested_dims``, ``epochs`` and the optimiser settings) apply to ``"refiner"`` only; setting
+    ``augmentation``, ``loss``, ``nested_dims`` or a non-linear ``architecture`` with ``"pca"``
+    raises, so that a training configuration is never silently ignored. PCA prefixes are nested by
+    construction, so ``transform(X, dim=m)`` is PCA at ``m`` (renormalised) without ``nested_dims``.
 
     ``nested_dims`` (WP 5.3) trains every prefix of the output as an embedding of its own, by
     wrapping the loss in :class:`~embedkit.improvement.losses.MatryoshkaLoss`; read a prefix
@@ -48,11 +49,21 @@ class EmbedKit:
     dimension, as in E6, where prefixes of one model at 256 matched linear models trained at
     32, 64 and 128 (``benchmarks/results/e6/REPORT.md``). A sequence gives the dimensions
     directly. ``None`` (the default) trains the full output only.
+
+    Modes of the refiner (WP 6.1). ``"supervised"`` (class labels): ``SupConLoss`` alone, with
+    ``val_knn_accuracy`` as the monitor. ``"regression"`` (continuous targets, cast to float):
+    ``RankNContrastLoss`` with ``val_ridge_r2`` (a ridge probe) as the monitor.
+    ``"self_supervised"``: NT-Xent plus 0.5 alignment-uniformity, monitored by ``k_skewness``.
+    ``monitor="auto"`` and ``early_stopping_patience="auto"`` resolve per mode: with labels, 10%
+    of the rows are held out, training stops after 10 evaluations without improvement of the
+    monitor and the best weights are restored; without labels there is no early stopping (E2
+    found no label-free signal for it). In supervised mode ``history`` also records NC1 on the
+    training subsample and the validation rows (``train_nc1``, ``val_nc1``).
     """
 
     def __init__(
         self,
-        mode: Literal["self_supervised", "supervised"] = "self_supervised",
+        mode: Literal["self_supervised", "supervised", "regression"] = "self_supervised",
         method: Literal["auto", "pca", "refiner"] = "auto",
         augmentation: Any = "auto",
         loss: Any = "auto",
@@ -67,8 +78,8 @@ class EmbedKit:
         weight_decay: float = 1e-4,
         scheduler: str | None = "cosine",
         eval_every: int = 5,
-        early_stopping_patience: int | None = None,
-        monitor: str = "k_skewness",
+        early_stopping_patience: int | Literal["auto"] | None = "auto",
+        monitor: str = "auto",
         val_split: float | None = None,
         device: str | torch.device | None = None,
         id_methods: list[str] | None = None,
@@ -103,8 +114,15 @@ class EmbedKit:
         self._config: dict = {}
 
     def fit(self, X, y=None) -> EmbedKit:
+        if self.mode not in ("self_supervised", "supervised", "regression"):
+            raise ValueError(f"mode must be 'self_supervised', 'supervised' or 'regression', "
+                             f"got {self.mode!r}")
         X_np = _to_numpy(X)
         n, d = X_np.shape
+        if self.mode != "self_supervised" and y is None:
+            raise ValueError(f"mode={self.mode!r} needs labels: call fit(X, y)")
+        if self.mode == "regression":
+            y = np.asarray(_to_numpy(y) if isinstance(y, torch.Tensor) else y, dtype=np.float32)
 
         # Step 1: analyze
         analyzer = EmbedKitAnalyzer(
@@ -128,6 +146,13 @@ class EmbedKit:
                 raise ValueError("Pass nested_dims or a MatryoshkaLoss, not both")
             loss_fn = MatryoshkaLoss(loss_fn, dims=nested)
         self.nested_dims_ = loss_fn.dims if isinstance(loss_fn, MatryoshkaLoss) else None
+
+        monitor = self._resolve_monitor()
+        patience = self._resolve_patience()
+        eval_metrics = [monitor]
+        if self.mode == "supervised":
+            eval_metrics += ["train_nc1"] + (["val_nc1"] if self._resolve_val_split() > 0 else [])
+        self.monitor_, self.early_stopping_patience_ = monitor, patience
 
         self._config = {
             "mode": self.mode,
@@ -168,9 +193,9 @@ class EmbedKit:
             weight_decay=self.weight_decay,
             scheduler=self.scheduler,
             eval_every=self.eval_every,
-            eval_metrics=[self.monitor],
-            early_stopping_patience=self.early_stopping_patience,
-            monitor=self.monitor,
+            eval_metrics=list(dict.fromkeys(eval_metrics)),
+            early_stopping_patience=patience,
+            monitor=monitor,
             val_split=self._resolve_val_split(),
             device=self.device,
             random_state=self.random_state,
@@ -212,12 +237,24 @@ class EmbedKit:
         self._trainer = _inference_trainer(model, self.device)
         return self
 
+    def _resolve_monitor(self) -> str:
+        if self.monitor != "auto":
+            return self.monitor
+        return {"supervised": "val_knn_accuracy", "regression": "val_ridge_r2"}.get(
+            self.mode, "k_skewness")
+
+    def _resolve_patience(self) -> int | None:
+        # Without labels early stopping is off: in E2 (docs/BENCHMARK_E1_E2.md) no label-free
+        # monitor tracked test accuracy within a run. With labels the monitor is a held-out score.
+        if self.early_stopping_patience != "auto":
+            return self.early_stopping_patience
+        return None if self.mode == "self_supervised" else 10
+
     def _resolve_val_split(self) -> float:
-        # Early stopping is off by default: in E2 (docs/BENCHMARK_E1_E2.md) no label-free monitor
-        # tracked test accuracy within a run. Hold rows out only when a monitor decides something.
+        # Hold rows out only when a monitor decides something.
         if self.val_split is not None:
             return self.val_split
-        return 0.1 if self.early_stopping_patience is not None else 0.0
+        return 0.1 if self._resolve_patience() is not None else 0.0
 
     def transform(self, X, dim: int | None = None) -> np.ndarray | torch.Tensor:
         """Refine ``X``. With ``dim``, keep the first ``dim`` output coordinates and renormalise.
@@ -307,12 +344,13 @@ class EmbedKit:
         if self.loss_cfg != "auto":
             return self.loss_cfg
 
-        if self.mode == "self_supervised":
-            base = NTXentLoss(temperature=0.07)
-        else:
-            base = SupConLoss(temperature=0.07)
-
-        return CombinedLoss([(base, 1.0), (AlignUniformLoss(), 0.5)])
+        if self.mode == "supervised":
+            # No uniformity term: it spreads each class over the sphere against SupCon's pull
+            # (review 3.4, WP 6.1). The 0.2.0 default was SupCon + 0.5 AlignUniform.
+            return SupConLoss(temperature=0.07)
+        if self.mode == "regression":
+            return RankNContrastLoss()
+        return CombinedLoss([(NTXentLoss(temperature=0.07), 1.0), (AlignUniformLoss(), 0.5)])
 
 
 def _inference_trainer(model: EmbeddingRefiner, device=None) -> Trainer:

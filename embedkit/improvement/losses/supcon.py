@@ -9,20 +9,35 @@ from embedkit.improvement.losses.base import BaseLoss
 
 
 class SupConLoss(BaseLoss):
-    """Supervised contrastive loss (Khosla et al., 2020, Eq. 2).
+    """Supervised contrastive loss (Khosla et al., 2020, Eq. 2), optionally with spread.
 
     Positives are the samples with an equal label (plus the other view of the anchor).
     Labels must be class identifiers of shape ``(N,)`` (or ``(N, 1)``); vector-valued labels
     are rejected with a ``ValueError``. With ``labels=None`` the only positive of each row
     is its other view (SimCLR-style).
+
+    ``spread_weight`` (``w`` in [0, 1]) mixes in the class-conditional InfoNCE term of Chen et al.
+    (2022, "Perfectly balanced"): ``(1 - w) * SupCon + w * spread``. In the spread term the only
+    positive of a row is its other view, and the candidates are restricted to the samples of the
+    same class, so it pushes apart the members of a class while SupCon pulls them together; this
+    keeps within-class structure that pure SupCon collapses (review 3.4, WP 6.2). A row whose class
+    has no other member in the batch contributes 0 to it. Without labels the spread term is 0.
     """
 
     uses_labels = True
 
-    def __init__(self, temperature: float = 0.07, chunk_size: int | None = None):
+    def __init__(
+        self,
+        temperature: float = 0.07,
+        chunk_size: int | None = None,
+        spread_weight: float = 0.0,
+    ):
         super().__init__()
+        if not 0.0 <= spread_weight <= 1.0:
+            raise ValueError(f"spread_weight must be in [0, 1], got {spread_weight}")
         self.temperature = temperature
         self.chunk_size = chunk_size
+        self.spread_weight = float(spread_weight)
 
     def forward(
         self,
@@ -33,10 +48,12 @@ class SupConLoss(BaseLoss):
         n = z_i.shape[0]
         z = F.normalize(torch.cat([z_i, z_j], dim=0), dim=1)  # (2N, d)
 
+        same = None
         if labels is not None:
             labels = _check_labels(labels, n)
             lbl = torch.cat([labels, labels], dim=0)
-            pos_mask = (lbl.unsqueeze(0) == lbl.unsqueeze(1)).float()
+            same = lbl.unsqueeze(0) == lbl.unsqueeze(1)
+            pos_mask = same.float()
             pos_mask.fill_diagonal_(0.0)
         else:
             pos_mask = torch.zeros(2 * n, 2 * n, device=z.device)
@@ -44,40 +61,33 @@ class SupConLoss(BaseLoss):
             pos_mask[idx, idx + n] = 1.0
             pos_mask[idx + n, idx] = 1.0
 
-        if self.chunk_size is None or self.chunk_size >= 2 * n:
-            return self._loss_full(z, n, pos_mask)
-        return self._loss_chunked(z, n, pos_mask)
-
-    def _loss_full(self, z, n, pos_mask):
-        two_n = 2 * n
-        sim = torch.mm(z, z.T) / self.temperature
-        eye_mask = torch.eye(two_n, device=z.device, dtype=torch.bool)
-        sim = sim.masked_fill(eye_mask, float("-inf"))
-        # Zero the (−inf) diagonal so 0 * (−inf) = NaN never appears in pos_mask * log_prob.
-        log_prob = F.log_softmax(sim, dim=1).masked_fill(eye_mask, 0.0)
-        n_pos = pos_mask.sum(dim=1).clamp(min=1)
-        loss = -(pos_mask * log_prob).sum(dim=1) / n_pos
-        return loss.mean()
-
-    def _loss_chunked(self, z, n, pos_mask):
-        """Row-block SupCon to avoid materializing full (2N)×(2N) sim."""
-        two_n = 2 * n
-        cs = self.chunk_size
-        losses = []
-        for start in range(0, two_n, cs):
-            end = min(start + cs, two_n)
-            m = end - start
-            rows = z[start:end]
-            logits = torch.mm(rows, z.T) / self.temperature  # (cs, 2N)
-            diag = torch.zeros(m, two_n, dtype=torch.bool, device=z.device)
-            diag[torch.arange(m, device=z.device), torch.arange(start, end, device=z.device)] = True
-            logits = logits.masked_fill(diag, float("-inf"))
-            log_prob = F.log_softmax(logits, dim=1).masked_fill(diag, 0.0)  # (cs, 2N)
-            pm_chunk = pos_mask[start:end]  # (cs, 2N)
-            n_pos = pm_chunk.sum(dim=1).clamp(min=1)
-            losses.append(-(pm_chunk * log_prob).sum(dim=1) / n_pos)  # per-row losses
-        # Mean over all rows (not mean of chunk means, which overweights a short last chunk).
-        return torch.cat(losses).mean()
+        w = self.spread_weight if same is not None else 0.0
+        cs = self.chunk_size if self.chunk_size is not None else 2 * n
+        sup, spread = [], []
+        for start in range(0, 2 * n, cs):
+            end = min(start + cs, 2 * n)
+            rows = torch.arange(start, end, device=z.device)
+            logits = torch.mm(z[start:end], z.T) / self.temperature  # (m, 2N)
+            diag = torch.zeros_like(logits, dtype=torch.bool)
+            diag[torch.arange(end - start, device=z.device), rows] = True
+            if w < 1.0:
+                masked = logits.masked_fill(diag, float("-inf"))
+                # Zero the (-inf) diagonal so 0 * (-inf) = NaN never appears below.
+                log_prob = F.log_softmax(masked, dim=1).masked_fill(diag, 0.0)
+                pm = pos_mask[start:end]
+                sup.append(-(pm * log_prob).sum(dim=1) / pm.sum(dim=1).clamp(min=1))
+            if w > 0.0:
+                # Candidates: same class, not the row itself; the positive is the other view.
+                allowed = same[start:end] & ~diag
+                masked = logits.masked_fill(~allowed, float("-inf"))
+                partner = (rows + n) % (2 * n)
+                pos_logit = logits[torch.arange(end - start, device=z.device), partner]
+                spread.append(torch.logsumexp(masked, dim=1) - pos_logit)
+        # Means over all rows (not means of chunk means, which overweight a short last chunk).
+        loss = (1.0 - w) * torch.cat(sup).mean() if w < 1.0 else 0.0
+        if w > 0.0:
+            loss = loss + w * torch.cat(spread).mean()
+        return loss
 
 
 def _check_labels(labels: torch.Tensor, n: int) -> torch.Tensor:

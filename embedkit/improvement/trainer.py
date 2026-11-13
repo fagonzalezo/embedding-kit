@@ -75,7 +75,36 @@ def _monitor_val_knn_accuracy(Z, *, y, Z_ref, y_ref, metric: str, **_) -> float:
 
     if y is None or Z_ref is None:
         raise ValueError("val_knn_accuracy needs labels and val_split > 0")
+    if not np.issubdtype(np.asarray(y).dtype, np.integer):
+        raise ValueError(
+            "val_knn_accuracy needs class labels; use val_ridge_r2 for continuous ones")
     return float(knn_accuracy(Z_ref, y_ref, Z, y, k=min(5, len(Z_ref)), metric=metric))
+
+
+def _monitor_val_ridge_r2(Z, *, y, Z_ref, y_ref, **_) -> float:
+    from embedkit.evaluation.metrics import linear_probe
+
+    if y is None or Z_ref is None:
+        raise ValueError("val_ridge_r2 needs labels and val_split > 0")
+    if not np.issubdtype(np.asarray(y).dtype, np.floating):
+        raise ValueError("val_ridge_r2 needs continuous labels; use val_knn_accuracy for classes")
+    return float(linear_probe(Z_ref, y_ref, Z, y, task="regression"))
+
+
+def _monitor_val_nc1(Z, *, y, **_) -> float:
+    from embedkit.evaluation.metrics import nc1
+
+    if y is None:
+        raise ValueError("val_nc1 needs labels and val_split > 0")
+    return float(nc1(Z, y))
+
+
+def _monitor_train_nc1(Z, *, Z_ref, y_ref, **_) -> float:
+    from embedkit.evaluation.metrics import nc1
+
+    if Z_ref is None or y_ref is None:
+        raise ValueError("train_nc1 needs labels")
+    return float(nc1(Z_ref, y_ref))
 
 
 MONITORS: dict[str, tuple[MonitorFn, Literal["min", "max"]]] = {
@@ -96,10 +125,20 @@ MONITORS: dict[str, tuple[MonitorFn, Literal["min", "max"]]] = {
     # 5-NN accuracy of the validation rows, neighbours from (a subsample of) the training rows.
     # Needs labels and val_split > 0.
     "val_knn_accuracy": (_monitor_val_knn_accuracy, "max"),
+    # R^2 of a ridge probe fitted on (a subsample of) the training rows, on the validation rows.
+    # Continuous labels and val_split > 0.
+    "val_ridge_r2": (_monitor_val_ridge_r2, "max"),
+    # Neural-collapse NC1 (within-class over between-class variability) of the validation rows
+    # and of the training subsample: lower is more collapsed. Class labels; reported, rarely a
+    # stopping signal (WP 6.2).
+    "val_nc1": (_monitor_val_nc1, "min"),
+    "train_nc1": (_monitor_train_nc1, "min"),
 }
 
-_NEEDS_VAL_SPLIT = {"val_loss", "val_knn_accuracy"}
-_NEEDS_LABELS = {"val_knn_accuracy"}
+_NEEDS_VAL_SPLIT = {"val_loss", "val_knn_accuracy", "val_ridge_r2", "val_nc1"}
+_NEEDS_LABELS = {"val_knn_accuracy", "val_ridge_r2", "val_nc1", "train_nc1"}
+# Monitors that read the refined training subsample (Z_ref) and its labels.
+_NEEDS_REF = {"val_knn_accuracy", "val_ridge_r2", "train_nc1"}
 
 
 def _check_monitor_name(name: str) -> None:
@@ -146,9 +185,11 @@ class Trainer:
         Evaluate the monitors every this many epochs.
     eval_metrics:
         Names from :data:`MONITORS` to log in ``history`` at each evaluation. The ``monitor``
-        is always added. ``val_loss`` and ``val_knn_accuracy`` need ``val_split > 0``, and
-        ``val_knn_accuracy`` needs labels; with ``val_split > 0`` the labels of the validation
-        rows are kept for it.
+        is always added. ``val_loss``, ``val_knn_accuracy``, ``val_ridge_r2`` and ``val_nc1``
+        need ``val_split > 0``; those three and ``train_nc1`` need labels (class labels, except
+        ``val_ridge_r2``, which needs continuous ones). The training subsample (at most
+        ``eval_subsample`` rows) is the reference set of ``val_knn_accuracy`` and ``val_ridge_r2``
+        and the rows of ``train_nc1``.
     eval_k, eval_metric:
         Neighbourhood size and metric used by neighbour-based monitors (``k_skewness``,
         ``knn_overlap``; ``val_knn_accuracy`` uses 5 neighbours and ``eval_metric``). The
@@ -368,8 +409,8 @@ class Trainer:
             X_eval, y_eval = X_np[sub_idx], None
         self._eval_ctx = dict(
             y=y_eval,
-            X_ref=X_np[sub_idx] if y_val is not None else None,
-            y_ref=y_t[torch.from_numpy(sub_idx)].numpy() if y_val is not None else None,
+            X_ref=X_np[sub_idx] if y_t is not None else None,
+            y_ref=y_t[torch.from_numpy(sub_idx)].numpy() if y_t is not None else None,
         )
         self._val_batch_size = batch_size
 
@@ -472,7 +513,7 @@ class Trainer:
 
     def _evaluate(self, X_np: np.ndarray, y=None, X_ref=None, y_ref=None) -> dict[str, float]:
         Z_np = self.transform(X_np)
-        needs_ref = any(name in _NEEDS_LABELS for name in self.eval_metrics)
+        needs_ref = any(name in _NEEDS_REF for name in self.eval_metrics)
         Z_ref = self.transform(X_ref) if X_ref is not None and needs_ref else None
         context = dict(
             X=X_np, y=y, Z_ref=Z_ref, y_ref=y_ref, trainer=self,

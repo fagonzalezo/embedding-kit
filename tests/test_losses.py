@@ -472,3 +472,65 @@ def test_align_uniform_matches_loop_reference():
             for i in range(18) for j in range(i + 1, 18)]
     expected = align + math.log(sum(pots) / len(pots))
     assert AlignUniformLoss()(z1, z2).item() == pytest.approx(expected, abs=1e-9)
+
+
+class TestSupConSpread:
+    """WP 6.2: the class-conditional InfoNCE term of Chen et al. (2022)."""
+
+    @staticmethod
+    def _reference(z1, z2, y, t, w):
+        z = torch.nn.functional.normalize(torch.cat([z1, z2]), dim=1).double()
+        lbl = torch.cat([y, y])
+        n2, n = len(z), len(z1)
+        sim = (z @ z.T) / t
+        sup, spread = [], []
+        for i in range(n2):
+            others = [k for k in range(n2) if k != i]
+            log_den = torch.logsumexp(sim[i, others], dim=0)
+            pos = [k for k in others if lbl[k] == lbl[i]]
+            sup.append(-torch.stack([sim[i, k] - log_den for k in pos]).mean())
+            cls = [k for k in others if lbl[k] == lbl[i]]
+            spread.append(torch.logsumexp(sim[i, cls], dim=0) - sim[i, (i + n) % n2])
+        return float((1 - w) * torch.stack(sup).mean() + w * torch.stack(spread).mean())
+
+    @pytest.mark.parametrize("w", [0.0, 0.3, 1.0])
+    @pytest.mark.parametrize("chunk_size", [None, 5])
+    def test_matches_reference(self, w, chunk_size):
+        g = torch.Generator().manual_seed(0)
+        z1, z2 = torch.randn(12, 6, generator=g), torch.randn(12, 6, generator=g)
+        y = torch.tensor([0, 0, 0, 1, 1, 2, 2, 2, 2, 3, 0, 1])
+        got = SupConLoss(0.2, chunk_size=chunk_size, spread_weight=w)(z1, z2, y)
+        assert float(got) == pytest.approx(self._reference(z1, z2, y, 0.2, w), rel=1e-5)
+
+    def test_zero_weight_is_plain_supcon(self):
+        g = torch.Generator().manual_seed(1)
+        z1, z2 = torch.randn(10, 4, generator=g), torch.randn(10, 4, generator=g)
+        y = torch.arange(10) % 3
+        assert float(SupConLoss(0.1, spread_weight=0.0)(z1, z2, y)) == pytest.approx(
+            float(SupConLoss(0.1)(z1, z2, y)))
+
+    def test_singleton_class_contributes_zero(self):
+        # One sample per class: the only candidate of each row is its other view.
+        g = torch.Generator().manual_seed(2)
+        z1, z2 = torch.randn(4, 3, generator=g), torch.randn(4, 3, generator=g)
+        loss = SupConLoss(0.1, spread_weight=1.0)(z1, z2, torch.arange(4))
+        assert float(loss) == pytest.approx(0.0, abs=1e-6)
+
+    def test_without_labels_spread_is_ignored(self):
+        g = torch.Generator().manual_seed(3)
+        z1, z2 = torch.randn(6, 3, generator=g), torch.randn(6, 3, generator=g)
+        assert float(SupConLoss(0.1, spread_weight=0.5)(z1, z2)) == pytest.approx(
+            float(SupConLoss(0.1)(z1, z2)))
+
+    def test_spread_pushes_class_members_apart(self):
+        # Gradient of the spread term moves same-class embeddings away from each other.
+        z1 = torch.tensor([[1.0, 0.1], [1.0, -0.1]], requires_grad=True)
+        z2 = z1.detach().clone() + 0.01
+        SupConLoss(0.5, spread_weight=1.0)(z1, z2, torch.tensor([0, 0])).backward()
+        step = z1.detach() - 0.1 * z1.grad
+        cos = torch.nn.functional.cosine_similarity(step[0], step[1], dim=0)
+        assert cos < torch.nn.functional.cosine_similarity(z1[0], z1[1], dim=0)
+
+    def test_weight_validated(self):
+        with pytest.raises(ValueError, match="spread_weight"):
+            SupConLoss(spread_weight=1.5)
