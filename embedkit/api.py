@@ -27,6 +27,21 @@ from embedkit.utils.validation import _to_numpy
 class EmbedKit:
     """Analyse, configure, train and transform in one estimator.
 
+    ``method`` chooses what ``fit`` builds. ``"refiner"`` trains an
+    :class:`~embedkit.improvement.model.EmbeddingRefiner` with a contrastive loss. ``"pca"``
+    trains nothing: it is the ``linear`` refiner at its initialisation, the top ``target_dim``
+    principal directions followed by L2 normalisation, with the same ``transform``, ``dim=``,
+    ``save`` and ``load``. ``"auto"`` (the default) is ``"pca"`` for ``mode="self_supervised"``
+    and ``"refiner"`` for ``mode="supervised"``. In E1, E6 and E7 (``docs/BENCHMARK_E1_E2.md``,
+    ``docs/BENCHMARK_E6_E7.md``) the self-supervised refiner never beat the better of PCA and
+    PCA-whitening, lost to them when fitted on fewer than a few thousand rows, and cost about 100
+    times more; the gate rule of ``docs/IMPLEMENTATION_PLAN.md`` then makes PCA the default. The
+    training parameters (``augmentation``, ``loss``, ``architecture``, ``nested_dims``, ``epochs``
+    and the optimiser settings) apply to ``"refiner"`` only; setting ``augmentation``, ``loss``,
+    ``nested_dims`` or a non-linear ``architecture`` with ``"pca"`` raises, so that a training
+    configuration is never silently ignored. PCA prefixes are nested by construction, so
+    ``transform(X, dim=m)`` is PCA at ``m`` (renormalised) without ``nested_dims``.
+
     ``nested_dims`` (WP 5.3) trains every prefix of the output as an embedding of its own, by
     wrapping the loss in :class:`~embedkit.improvement.losses.MatryoshkaLoss`; read a prefix
     with ``transform(X, dim=m)``. ``"auto"`` nests the powers of two from 32 below the output
@@ -38,6 +53,7 @@ class EmbedKit:
     def __init__(
         self,
         mode: Literal["self_supervised", "supervised"] = "self_supervised",
+        method: Literal["auto", "pca", "refiner"] = "auto",
         augmentation: Any = "auto",
         loss: Any = "auto",
         target_dim: int | Literal["auto"] = "auto",
@@ -60,6 +76,7 @@ class EmbedKit:
         nested_dims: Sequence[int] | Literal["auto"] | None = None,
     ):
         self.mode = mode
+        self.method = method
         self.augmentation_cfg = augmentation
         self.loss_cfg = loss
         self.target_dim = target_dim
@@ -99,6 +116,10 @@ class EmbedKit:
 
         # Step 2: auto-configure
         target_dim = self._resolve_target_dim(d, report)
+        method = self._resolve_method()
+        self.method_ = method
+        if method == "pca":
+            return self._fit_pca(X_np, target_dim)
         augmentation = self._resolve_augmentation(report)
         loss_fn = self._resolve_loss(report)
         nested = self._resolve_nested_dims(target_dim)
@@ -110,6 +131,7 @@ class EmbedKit:
 
         self._config = {
             "mode": self.mode,
+            "method": "refiner",
             "target_dim": target_dim,
             "hidden_dim": self.hidden_dim,
             "n_layers": self.n_layers,
@@ -154,6 +176,40 @@ class EmbedKit:
             random_state=self.random_state,
         )
         self._trainer.fit(X_np, y)
+        return self
+
+    def _resolve_method(self) -> str:
+        if self.method not in ("auto", "pca", "refiner"):
+            raise ValueError(f"method must be 'auto', 'pca' or 'refiner', got {self.method!r}")
+        if self.method != "auto":
+            return self.method
+        return "pca" if self.mode == "self_supervised" else "refiner"
+
+    def _fit_pca(self, X_np: np.ndarray, target_dim: int) -> EmbedKit:
+        """``method="pca"``: the linear refiner at its PCA initialisation, not trained."""
+        given = [name for name, value, default in (
+            ("augmentation", self.augmentation_cfg, "auto"), ("loss", self.loss_cfg, "auto"),
+            ("nested_dims", self.nested_dims, None), ("architecture", self.architecture, "linear"),
+        ) if not (value is default or value == default)]
+        if given:
+            raise ValueError(
+                f"{', '.join(given)} configure training, which method='pca' does not do; pass "
+                f"method='refiner' to train (method='auto' is 'pca' in self-supervised mode)")
+        model = EmbeddingRefiner(input_dim=X_np.shape[1], target_dim=target_dim,
+                                 hidden_dim=self.hidden_dim, n_layers=self.n_layers,
+                                 architecture="linear")
+        model.initialize_from_data(X_np)
+        self.nested_dims_ = None
+        self._config = {
+            "mode": self.mode,
+            "method": "pca",
+            "target_dim": target_dim,
+            "hidden_dim": self.hidden_dim,
+            "n_layers": self.n_layers,
+            "architecture": "linear",
+            "input_dim": X_np.shape[1],
+        }
+        self._trainer = _inference_trainer(model, self.device)
         return self
 
     def _resolve_val_split(self) -> float:
@@ -201,6 +257,7 @@ class EmbedKit:
         cfg = bundle["config"]
         obj = cls(
             mode=cfg.get("mode", "self_supervised"),
+            method=cfg.get("method", "refiner"),
             target_dim=cfg.get("target_dim", 64),
             hidden_dim=cfg.get("hidden_dim", 256),
             n_layers=cfg.get("n_layers", 2),
@@ -214,15 +271,8 @@ class EmbedKit:
             architecture=cfg.get("architecture", "mlp"),
         )
         model.load_state_dict(bundle["state_dict"])
-        # minimal trainer wrapper just for transform
-        from embedkit.improvement.losses import NTXentLoss
-        trainer = Trainer(
-            model=model,
-            augmentation=EmbeddingMixup(),
-            loss=NTXentLoss(),
-            epochs=0,
-        )
-        obj._trainer = trainer
+        obj._trainer = _inference_trainer(model)
+        obj.method_ = cfg.get("method", "refiner")
         obj._config = cfg
         return obj
 
@@ -263,3 +313,9 @@ class EmbedKit:
             base = SupConLoss(temperature=0.07)
 
         return CombinedLoss([(base, 1.0), (AlignUniformLoss(), 0.5)])
+
+
+def _inference_trainer(model: EmbeddingRefiner, device=None) -> Trainer:
+    """A trainer that is only used for ``transform`` (loaded bundles and ``method="pca"``)."""
+    return Trainer(model=model, augmentation=EmbeddingMixup(), loss=NTXentLoss(), epochs=0,
+                   device=device)

@@ -639,7 +639,7 @@ Release as 0.5.0.
 | 5.3 | Matryoshka output | done (2026-11-13): non-inferior in E6; opt-in `EmbedKit(nested_dims=...)` |
 | 5.4 | Structure preservation, VICReg | dropped (gate C) |
 | 5.5 | Hubness reduction | done (2026-11-13): implemented; no kNN gain on the E1 sets, no default change |
-| 5.6 | Run E6 and E7 | E6 done (`docs/BENCHMARK_E6_E7.md`); E7 running (job 3078240) |
+| 5.6 | Run E6 and E7 | done (2026-11-13; `docs/BENCHMARK_E6_E7.md`); self-supervised default is PCA |
 | 6.1 | Supervised defaults | not started |
 | 6.2 | Class collapse | not started |
 | 6.3 | Run E8 | not started |
@@ -832,6 +832,15 @@ Release as 0.5.0.
   needs labels; and at d = 32 the refiner beats plain PCA by 0.015 to 0.09 on four datasets. E7 (job
   3078240) compares the refiner with both over the number of fitted rows and transductively; the
   decision follows it.
+- **E7 result and the decision (the user, 2026-11-13): the self-supervised default is PCA.** Fitted
+  on 200 to 1000 rows the refiner loses to the best PCA on Banking77 (-0.052 at 200), CIFAR-100,
+  STS-B and the synthetic set; with all rows it is level (1 / 4 / 1). `EmbedKit(method="auto")` is
+  now `"pca"` without labels (top principal directions + L2 normalisation, the `linear` refiner
+  untrained) and `"refiner"` with labels; plain PCA rather than whitening because the choice between
+  them needs labels and plain PCA was never more than 0.004 behind on real data. The trained refiner
+  stays as `method="refiner"`, with `nested_dims` for WP 5.3. Effort moves to phases 4, 6 and 7
+  after the 0.4.0 release. Not yet benchmarked: supervised mode with the `linear` architecture (E6
+  is self-supervised only); phase 6 (E8) covers it.
 
 ## Open points for the next session
 
@@ -840,6 +849,6 @@ All design decisions in this plan are confirmed. Two practical points remain:
 1. **Phase 5 is in progress** (the user chose it before phase 4, 2026-11-11). Gate outcome C plus WP 5.3 (see the
    phase 3 notes). WP 5.1 is done (default `linear`). WP 5.2 (two-day attempt, from 2026-11-11), WP 5.3
    and the E1 hubness methods (WP 5.5) are implemented and run on the cluster. Then E7 and the 0.4.0 release.
-   Update 2026-11-13: E6 and WP 5.5 are done (WP 5.2 rejected, WP 5.3 accepted as an opt-in); E7 is
-   running, and the self-supervised default (refiner or training-free fallback) is decided on its
-   results.
+   Update 2026-11-13: phase 5 is done. WP 5.2 rejected, WP 5.3 accepted as an opt-in, WP 5.5 done,
+   E6 and E7 run; the self-supervised default is PCA (see the phase 5 notes). Next: the 0.4.0
+   release, then phases 4, 6 and 7.

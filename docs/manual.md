@@ -281,7 +281,7 @@ df = report.to_dataframe()
 
 **Architecture:** `n_layers` repetitions of `Linear → BatchNorm → ReLU → Dropout`, followed by a final `Linear(hidden_dim, target_dim)`. When `normalize_output=True` (default), the output is L2-normalized to the unit sphere, which is required by cosine-similarity-based losses.
 
-**Residual and linear variants** (`architecture="residual"` or `"linear"`): `z = W x̃ + g(x̃)` (or `z = W x̃`), where `x̃` is the input standardised with fixed per-feature statistics and `g` is the MLP above with its output layer initialised to zero. `Trainer.fit` calls `model.initialize_from_data(X_train)`, which sets the statistics and initialises `W` from the top `target_dim` principal directions, so that before training the output equals `PCAReduce(target_dim)` followed by L2 normalisation. Training starts from PCA instead of a random map. `EmbedKit` uses `"linear"` by default since benchmark E6 (`docs/BENCHMARK_E1_E2.md`): both variants beat `"mlp"` on 5 of the 6 datasets with an interval and lost on none, and `"linear"` was at least as good as `"residual"` on 5 of 6. `EmbeddingRefiner` has the same default; bundles saved without an `architecture` entry load as `"mlp"`.
+**Residual and linear variants** (`architecture="residual"` or `"linear"`): `z = W x̃ + g(x̃)` (or `z = W x̃`), where `x̃` is the input standardised with fixed per-feature statistics and `g` is the MLP above with its output layer initialised to zero. `Trainer.fit` calls `model.initialize_from_data(X_train)`, which sets the statistics and initialises `W` from the top `target_dim` principal directions, so that before training the output equals `PCAReduce(target_dim)` followed by L2 normalisation. Training starts from PCA instead of a random map. `EmbedKit(method="refiner")` uses `"linear"` by default since benchmark E6 (`docs/BENCHMARK_E6_E7.md`): both variants beat `"mlp"` on 5 of the 6 datasets with an interval and lost on none, and `"linear"` was at least as good as `"residual"` on 5 of 6. `EmbeddingRefiner` has the same default; bundles saved without an `architecture` entry load as `"mlp"`.
 
 **Class:** `EmbeddingRefiner(input_dim, target_dim, hidden_dim=256, n_layers=2, dropout=0.1, normalize_output=True, architecture="linear")`
 
@@ -643,19 +643,31 @@ print(trainer.history)             # {"loss": [...], "uniformity": [...], ...}
 
 ### 2.5 High-Level EmbedKit API
 
-`EmbedKit` is the one-stop end-to-end pipeline: it analyzes the input embeddings, auto-configures the augmentation, loss function, and `target_dim` based on the analysis report, builds the model, and trains it — all in a single `fit()` call.
+`EmbedKit` is the one-stop end-to-end pipeline: it analyzes the input embeddings, chooses `target_dim` from the analysis report, and builds the transform in a single `fit()` call.
 
-**Auto-configuration logic:**
+**What `fit` builds** (`method`):
+
+| `method` | Builds |
+|-----------|--------|
+| `"auto"` (default) | `"pca"` when `mode="self_supervised"`, `"refiner"` when `mode="supervised"` |
+| `"pca"` | The top `target_dim` principal directions followed by L2 normalisation; nothing is trained. It is the `linear` refiner at its initialisation, so `transform`, `dim=`, `save` and `load` behave as for a trained model. |
+| `"refiner"` | A trained `EmbeddingRefiner` (below) |
+
+Why PCA without labels: in benchmarks E1, E6 and E7 (`docs/BENCHMARK_E1_E2.md`, `docs/BENCHMARK_E6_E7.md`) the self-supervised refiner never beat the better of PCA and PCA-whitening chosen on validation (with all training rows: 1 win, 4 ties, 1 loss over 6 datasets), lost to them when fitted on fewer than a few thousand rows (by up to 0.05 kNN accuracy on real data), and cost about 100 times more. Plain PCA rather than PCA-whitening because choosing between the two needs labels, and on real data plain PCA was never more than 0.004 behind whitening, while whitening fell up to 0.020 behind PCA. PCA prefixes are nested by construction, so `transform(X, dim=m)` is PCA at `m`. Setting `augmentation`, `loss`, `nested_dims` or a non-linear `architecture` with `method="pca"` raises a `ValueError`; pass `method="refiner"` to train.
+
+**Refiner configuration** (`method="refiner"`):
 
 | Condition | Effect |
 |-----------|--------|
-| `augmentation == "auto"` | Uses `EmbeddingMixup(k=report.suggested_k, alpha=0.4)` regardless of severity |
-| `mode == "self_supervised"` | Base loss is `NTXentLoss` |
-| `mode == "supervised"` | Base loss is `SupConLoss` |
-| `k_skewness > 5` | Adds `AlignUniformLoss` (weight 0.5) via `CombinedLoss` |
-| `target_dim == "auto"` | Uses `report.suggested_target_dim` = `clip(1.5 × ID, ID, D)` |
+| `augmentation == "auto"` | `KNNPairs(k=5)` |
+| `mode == "self_supervised"` | Base loss is `NTXentLoss(temperature=0.07)` |
+| `mode == "supervised"` | Base loss is `SupConLoss(temperature=0.07)` |
+| `loss == "auto"` | The base loss plus `AlignUniformLoss` (weight 0.5) via `CombinedLoss` |
+| `target_dim == "auto"` | Uses `report.suggested_target_dim` = `clip(1.5 × ID, ID, D)` (both methods) |
 
-**Class:** `EmbedKit(mode, augmentation, loss, target_dim, hidden_dim, n_layers, architecture, epochs, batch_size, optimizer, lr, scheduler, eval_every, early_stopping_patience, monitor, val_split, device, id_methods, random_state, nested_dims)`
+**Class:** `EmbedKit(mode, method, augmentation, loss, target_dim, hidden_dim, n_layers, architecture, epochs, batch_size, optimizer, lr, scheduler, eval_every, early_stopping_patience, monitor, val_split, device, id_methods, random_state, nested_dims)`
+
+After `fit`, `method_` holds the method used.
 
 `nested_dims=None` (default), `"auto"` or a sequence trains nested prefixes readable with `transform(X, dim=m)`; see `MatryoshkaLoss` above.
 
@@ -668,8 +680,13 @@ stopping it defaults to 0 and every row is used for training.
 ```python
 from embedkit import EmbedKit
 
-# self-supervised (no labels needed)
-ek = EmbedKit(mode="self_supervised", epochs=100, target_dim="auto")
+# self-supervised (no labels needed): PCA + L2 normalisation, no training
+ek = EmbedKit(mode="self_supervised", target_dim="auto")
+X_reduced = ek.fit_transform(X)
+X_small = ek.transform(X, dim=16)   # PCA at 16, renormalised
+
+# self-supervised contrastive refiner (opt-in)
+ek = EmbedKit(mode="self_supervised", method="refiner", epochs=100, target_dim="auto")
 X_refined = ek.fit_transform(X)
 
 # supervised

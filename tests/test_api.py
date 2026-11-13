@@ -6,7 +6,7 @@ import pytest
 class TestEmbedKit:
     def test_self_supervised_fit_transform(self, small_X):
         from embedkit import EmbedKit
-        ek = EmbedKit(mode="self_supervised", epochs=3, eval_every=100)
+        ek = EmbedKit(mode="self_supervised", method="refiner", epochs=3, eval_every=100)
         X_refined = ek.fit_transform(small_X)
         assert X_refined.shape[0] == small_X.shape[0]
         assert X_refined.shape[1] > 0
@@ -26,12 +26,13 @@ class TestEmbedKit:
 
     def test_explicit_target_dim(self, small_X):
         from embedkit import EmbedKit
-        X_refined = EmbedKit(target_dim=4, epochs=2, eval_every=100).fit_transform(small_X)
+        ek = EmbedKit(method="refiner", target_dim=4, epochs=2, eval_every=100)
+        X_refined = ek.fit_transform(small_X)
         assert X_refined.shape[1] == 4
 
     def test_save_load(self, small_X, tmp_path):
         from embedkit import EmbedKit
-        ek = EmbedKit(target_dim=8, epochs=2, eval_every=100)
+        ek = EmbedKit(method="refiner", target_dim=8, epochs=2, eval_every=100)
         ek.fit(small_X)
         ek.save(tmp_path / "bundle")
         ek2 = EmbedKit.load(tmp_path / "bundle")
@@ -42,14 +43,16 @@ class TestEmbedKit:
         # E2: no label-free monitor tracks test accuracy, so the default is a fixed epoch budget
         # trained on every row.
         from embedkit import EmbedKit
-        ek = EmbedKit(target_dim=4, epochs=4, eval_every=1, device="cpu").fit(small_X)
+        ek = EmbedKit(method="refiner", target_dim=4, epochs=4, eval_every=1,
+                      device="cpu").fit(small_X)
         assert ek._trainer.early_stopping_patience is None
         assert ek._trainer.val_split == 0.0
         assert ek._trainer.stopped_epoch_ == 4
 
     def test_early_stopping_holds_out_validation(self, small_X):
         from embedkit import EmbedKit
-        ek = EmbedKit(target_dim=4, epochs=2, eval_every=1, early_stopping_patience=5,
+        ek = EmbedKit(method="refiner", target_dim=4, epochs=2, eval_every=1,
+                      early_stopping_patience=5,
                       device="cpu").fit(small_X)
         assert ek._trainer.val_split == 0.1
         assert EmbedKit(early_stopping_patience=5, val_split=0.2)._resolve_val_split() == 0.2

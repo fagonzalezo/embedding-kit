@@ -68,13 +68,15 @@ def e1_methods(dataset) -> list[Method]:
 
     from embedkit import EmbedKit
 
-    m.append(Method("embedkit", lambda s, ds, dev: EmbedKit(random_state=s, device=dev),
+    m.append(Method("embedkit",
+                    lambda s, ds, dev: EmbedKit(method="refiner", random_state=s, device=dev),
                     deterministic=False, family="embedkit"))
     for k in (32, 64, 128):
         if k < d:
             m.append(Method(
                 f"embedkit-d{k}",
-                lambda s, ds, dev, k=k: EmbedKit(target_dim=k, random_state=s, device=dev),
+                lambda s, ds, dev, k=k: EmbedKit(method="refiner", target_dim=k, random_state=s,
+                                            device=dev),
                 deterministic=False, family="embedkit_fixed_d", params=dict(target_dim=k),
             ))
     # WP 5.5: hubness reduction on the raw embedding, a retrieval-time method. It changes the
@@ -158,7 +160,8 @@ def _e6_stage2(dims, d) -> list[Method]:
             m.append(Method(
                 f"{arm}-d{k}",
                 lambda s, ds, dev, k=k, arch=arch, kwargs=kwargs: EmbedKit(
-                    target_dim=k, architecture=arch, random_state=s, device=dev, **kwargs()),
+                    method="refiner", target_dim=k, architecture=arch, random_state=s,
+                    device=dev, **kwargs()),
                 deterministic=False, family=f"e6_{arm}",
                 params=dict(architecture=arch, target_dim=k, arm=arm),
             ))
@@ -169,7 +172,7 @@ def _e6_stage2(dims, d) -> list[Method]:
         m.append(Method(
             f"matryoshka-d{k}",
             lambda s, ds, dev, k=k: _Prefix(EmbedKit(
-                target_dim=top, architecture="linear", random_state=s, device=dev,
+                method="refiner", target_dim=top, architecture="linear", random_state=s, device=dev,
                 loss=MatryoshkaLoss(_default_loss(), dims=nested)), k),
             deterministic=False, family="e6_matryoshka",
             params=dict(architecture="linear", target_dim=top, dim=k, nested=list(nested)),
@@ -204,7 +207,8 @@ def e6_methods(dataset) -> list[Method]:
             m.append(Method(
                 name,
                 lambda s, ds, dev, k=k, arch=arch: EmbedKit(
-                    target_dim=k, architecture=arch, random_state=s, device=dev),
+                    method="refiner", target_dim=k, architecture=arch, random_state=s,
+                    device=dev),
                 deterministic=False, family=f"e6_{arch}",
                 params=dict(architecture=arch, target_dim=k),
             ))
@@ -255,7 +259,8 @@ def e7_methods(dataset) -> list[Method]:
     n_train, d_in = dataset.X_train.shape
     k = min(E7_DIM.get(dataset.name, 64), d_in)
     makers = {
-        "embedkit": (lambda s, dev: EmbedKit(target_dim=k, random_state=s, device=dev), False),
+        "embedkit": (lambda s, dev: EmbedKit(method="refiner", target_dim=k, random_state=s,
+                                            device=dev), False),
         "pca": (lambda s, dev: B.PCAReduce(k), True),
         "pca_whiten": (lambda s, dev: B.PCAReduce(k, whiten=True), True),
     }

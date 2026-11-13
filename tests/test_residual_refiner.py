@@ -103,7 +103,7 @@ def test_save_load_round_trip(tmp_path):
     from embedkit import EmbedKit
 
     X = _anisotropic()
-    ek = EmbedKit(target_dim=8, architecture="residual", epochs=2, eval_every=100,
+    ek = EmbedKit(method="refiner", target_dim=8, architecture="residual", epochs=2, eval_every=100,
                   device="cpu", random_state=0, id_methods=["TwoNN"]).fit(X)
     ek.save(tmp_path / "bundle")
     ek2 = EmbedKit.load(tmp_path / "bundle")

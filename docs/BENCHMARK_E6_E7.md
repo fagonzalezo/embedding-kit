@@ -30,9 +30,13 @@ of E1 (`docs/BENCHMARK_E1_E2.md`, sections Datasets and Protocol).
   training row the refiner has 1 win, 4 ties and 1 loss, as in E6.
 - **E7, transduction:** fitting on train + test rows (no labels) gains +0.006 (Banking77) and +0.020
   (synthetic) for the refiner and ties elsewhere; no transform loses from it.
-- **Decision on the self-supervised default: pending**, now that E7 is in (the user deferred it to
-  E7 on 2026-11-13). The plan's rule for gate C says that `EmbedKit(mode="self_supervised")` returns
-  the best training-free baseline when WP 5.2 fails.
+- **Decision (confirmed by the user, 2026-11-13): `EmbedKit(mode="self_supervised")` returns PCA**,
+  as the plan's rule for gate C prescribes when WP 5.2 fails: the top principal directions followed by
+  L2 normalisation, with nothing trained. Plain PCA rather than PCA-whitening, because choosing
+  between them needs labels: with all rows on the real datasets, plain PCA is at most 0.004 behind
+  whitening (STS-B), while whitening is up to 0.020 behind PCA (Pets). PCA prefixes are nested, so
+  WP 5.3's use case is served without training. The trained refiner stays available as
+  `EmbedKit(method="refiner")`, with `nested_dims` for nested training.
 
 ## E6: one-factor ablation of the refiner
 

@@ -27,6 +27,7 @@ def _data(n=160, d=16, seed=0):
 
 def _ek():
     return EmbedKit(
+        method="refiner",
         target_dim=4, hidden_dim=32, epochs=6, batch_size=32, eval_every=2,
         early_stopping_patience=2, id_methods=["TwoNN"], device="cpu", random_state=0,
     )

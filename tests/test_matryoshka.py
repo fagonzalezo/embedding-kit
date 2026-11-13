@@ -61,7 +61,8 @@ def test_dims_validated(dims):
 def test_embedkit_truncated_transform(small_X):
     from embedkit import EmbedKit
 
-    ek = EmbedKit(target_dim=8, loss=MatryoshkaLoss(NTXentLoss(), dims=(2, 4)), epochs=2,
+    ek = EmbedKit(method="refiner", target_dim=8, loss=MatryoshkaLoss(NTXentLoss(), dims=(2, 4)),
+                  epochs=2,
                   eval_every=100, device="cpu", id_methods=["TwoNN"]).fit(small_X)
     Z = ek.transform(small_X)
     Z4 = ek.transform(small_X, dim=4)
@@ -80,7 +81,7 @@ def test_embedkit_truncated_transform(small_X):
 def test_embedkit_nested_dims_auto(small_X):
     from embedkit import EmbedKit
 
-    kw = dict(epochs=1, eval_every=100, device="cpu", id_methods=["TwoNN"])
+    kw = dict(method="refiner", epochs=1, eval_every=100, device="cpu", id_methods=["TwoNN"])
     ek = EmbedKit(target_dim=200, nested_dims="auto", **kw)
     assert ek._resolve_nested_dims(200) == (32, 64, 128)
     assert ek._resolve_nested_dims(32) == (32,)
@@ -96,7 +97,7 @@ def test_embedkit_nested_dims_auto(small_X):
 def test_embedkit_nested_dims_validation(small_X):
     from embedkit import EmbedKit
 
-    kw = dict(epochs=1, eval_every=100, device="cpu", id_methods=["TwoNN"])
+    kw = dict(method="refiner", epochs=1, eval_every=100, device="cpu", id_methods=["TwoNN"])
     with pytest.raises(ValueError, match="exceed"):
         EmbedKit(target_dim=8, nested_dims=(4, 16), **kw).fit(small_X)
     with pytest.raises(ValueError, match="'auto'"):

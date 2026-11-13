@@ -3,7 +3,7 @@
 A Python library for analyzing and improving ML embedding spaces. Embedding Kit has two pillars:
 
 - **Analysis** — a suite of geometry-aware metrics that diagnose problems in an embedding space (hubness, distance collapse, anisotropy, intrinsic dimensionality mismatch, etc.) and produce actionable recommendations.
-- **Improvement** — a contrastive learning pipeline that trains a small MLP projector to produce geometrically healthier embeddings, guided by the analysis report.
+- **Improvement** — dimension reduction and refinement. Without labels, `EmbedKit` defaults to PCA with L2 normalisation, which a trained contrastive refiner did not beat in our benchmarks ([`docs/BENCHMARK_E6_E7.md`](docs/BENCHMARK_E6_E7.md)); the refiner stays available. With labels, a supervised contrastive refiner (SupCon), which did beat the baselines in E1.
 
 ## Features
 
@@ -19,11 +19,12 @@ A Python library for analyzing and improving ML embedding spaces. Embedding Kit 
 All estimators follow the sklearn `fit` / `transform` API and accept `np.ndarray` or `torch.Tensor`.
 
 ### Improvement
-- **`EmbeddingRefiner`** — a PyTorch `nn.Module` (MLP projector with optional L2 normalization)
+- **`EmbeddingRefiner`** — a PyTorch `nn.Module`: a linear map initialised at PCA (default), a residual adapter or an MLP, with optional L2 normalization
 - **Augmentations**: `GaussianNoise`, `FeatureDropout`, `EmbeddingMixup`, `KNNPairs`, `FeatureMasking`, `CompositeAugmentation`
-- **Losses**: `NTXentLoss`, `AlignUniformLoss`, `SupConLoss`, `TripletLoss`, `RankNContrastLoss`, `CombinedLoss`
+- **Losses**: `NTXentLoss`, `AlignUniformLoss`, `SupConLoss`, `TripletLoss`, `RankNContrastLoss`, `MatryoshkaLoss` (nested prefixes), `CombinedLoss`
 - **Diagnostics-driven auto-config** — `EmbedKit` reads the analysis report and automatically selects the best loss function, augmentation strategy, and target dimension
-- **Self-supervised and supervised** training modes
+- **Self-supervised and supervised** modes: `EmbedKit(method="auto")` is PCA without labels and the trained refiner with them; `method="refiner"` trains in either mode
+- **Hubness reduction** — `LocalScaling`, `MutualProximity`, `CSLS`, `DisSimLocal` for kNN search
 
 ### Visualization
 - `AnalysisPlotter` — eigenvalue spectrum, distance histogram, k-occurrence distribution, kernel spectrum
@@ -79,8 +80,12 @@ report = EmbedKitAnalyzer(k=10).fit(X)
 report.print_summary()
 df = report.to_dataframe()      # pandas DataFrame for logging / CSV export
 
-# Self-supervised refinement (auto-configured from analysis report)
-X_refined = EmbedKit(mode="self_supervised", epochs=200).fit_transform(X)
+# Self-supervised: PCA at the suggested dimension, L2-normalised (the benchmarked default)
+X_reduced = EmbedKit(mode="self_supervised").fit_transform(X)
+X_32 = EmbedKit(target_dim=128).fit(X).transform(X, dim=32)   # nested prefixes
+
+# Self-supervised contrastive refiner (opt-in; see docs/BENCHMARK_E6_E7.md)
+X_refined = EmbedKit(mode="self_supervised", method="refiner", epochs=100).fit_transform(X)
 
 # Supervised refinement with class labels
 y = np.load("labels.npy")

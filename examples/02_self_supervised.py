@@ -15,8 +15,14 @@ print("=== Before refinement ===")
 report_before = EmbedKitAnalyzer(id_methods=["TwoNN"]).fit(X)
 report_before.print_summary()
 
-print("\nRefining embedding (self-supervised) ...")
-ek = EmbedKit(mode="self_supervised", epochs=50, eval_every=10, target_dim="auto")
+# The self-supervised default is PCA at the suggested dimension plus L2 normalisation: in the
+# E1, E6 and E7 benchmarks the trained refiner never beat it (docs/BENCHMARK_E6_E7.md).
+X_pca = EmbedKit(mode="self_supervised", target_dim="auto").fit_transform(X)
+print(f"PCA default shape: {X_pca.shape}")
+
+print("\nRefining embedding (self-supervised, trained refiner) ...")
+ek = EmbedKit(mode="self_supervised", method="refiner", epochs=50, eval_every=10,
+              target_dim="auto")
 X_refined = ek.fit_transform(X)
 print(f"Refined shape: {X_refined.shape}")
 

@@ -2,10 +2,20 @@
 
 ## Unreleased
 
-Phase 3 of `docs/IMPLEMENTATION_PLAN.md`: benchmarks E1 and E2 and the decision gate
-(`docs/BENCHMARK_E1_E2.md`).
+Phases 3 and 5 of `docs/IMPLEMENTATION_PLAN.md`: benchmarks E1 and E2 and the decision gate
+(`docs/BENCHMARK_E1_E2.md`), then the refiner ablation E6 and the learning curves E7
+(`docs/BENCHMARK_E6_E7.md`).
 
 ### Changed
+- **`EmbedKit(mode="self_supervised")` now returns PCA, not a trained refiner** (gate outcome C of the
+  plan). New parameter `method="auto" | "pca" | "refiner"`: `"auto"` is `"pca"` without labels and
+  `"refiner"` in supervised mode. `"pca"` is the top `target_dim` principal directions followed by L2
+  normalisation, built as the `linear` refiner at its initialisation (no training), so `transform`,
+  `dim=`, `save` and `load` are unchanged. In E1, E6 and E7 the self-supervised refiner never beat
+  the better of PCA and PCA-whitening, lost to them when fitted on fewer than a few thousand rows,
+  and cost about 100 times more. Pass `method="refiner"` for the trained refiner; setting
+  `augmentation`, `loss`, `nested_dims` or a non-linear `architecture` with `"pca"` raises.
+  `config.json` records the method; bundles without it load as `"refiner"`.
 - **`EmbedKit` no longer stops early by default** (`early_stopping_patience=None`, was 10): it trains
   for the fixed `epochs` budget. In E2 no label-free monitor tracked test accuracy within a run, and
   the validation contrastive loss moved against it. `val_split` now defaults to `None`: 0.1 of the
