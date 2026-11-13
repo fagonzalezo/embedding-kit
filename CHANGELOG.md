@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (unreleased)
 
 Phases 3 and 5 of `docs/IMPLEMENTATION_PLAN.md`: benchmarks E1 and E2 and the decision gate
 (`docs/BENCHMARK_E1_E2.md`), then the refiner ablation E6 and the learning curves E7

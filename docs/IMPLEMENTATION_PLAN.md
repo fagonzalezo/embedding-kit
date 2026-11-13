@@ -851,4 +851,5 @@ All design decisions in this plan are confirmed. Two practical points remain:
    and the E1 hubness methods (WP 5.5) are implemented and run on the cluster. Then E7 and the 0.4.0 release.
    Update 2026-11-13: phase 5 is done. WP 5.2 rejected, WP 5.3 accepted as an opt-in, WP 5.5 done,
    E6 and E7 run; the self-supervised default is PCA (see the phase 5 notes). Next: the 0.4.0
-   release, then phases 4, 6 and 7.
+   release (tagged locally as `v0.4.0`, 2026-11-13; there is no 0.3.0, as phase 4 comes after), then
+   phases 4, 6 and 7.
