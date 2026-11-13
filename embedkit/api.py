@@ -291,7 +291,13 @@ class EmbedKit:
         save_bundle(directory, self._trainer.model, self._config, self.analysis_report)
 
     @classmethod
-    def load(cls, directory: str | Path) -> EmbedKit:
+    def load(cls, directory: str | Path, device: str | torch.device | None = None) -> EmbedKit:
+        """Load a bundle written by :meth:`save`, for ``transform``.
+
+        ``device`` is where ``transform`` runs; ``None`` picks CUDA, then Apple MPS, then CPU.
+        Pass the device the model was fitted on to reproduce its outputs to float precision:
+        different backends round differently (about 1e-4 between CPU and MPS).
+        """
         bundle = load_bundle(directory)
         cfg = bundle["config"]
         obj = cls(
@@ -310,7 +316,8 @@ class EmbedKit:
             architecture=cfg.get("architecture", "mlp"),
         )
         model.load_state_dict(bundle["state_dict"])
-        obj._trainer = _inference_trainer(model)
+        obj._trainer = _inference_trainer(model, device)
+        obj.device = device
         obj.method_ = cfg.get("method", "refiner")
         obj._config = cfg
         return obj

@@ -106,7 +106,7 @@ def test_save_load_round_trip(tmp_path):
     ek = EmbedKit(method="refiner", target_dim=8, architecture="residual", epochs=2, eval_every=100,
                   device="cpu", random_state=0, id_methods=["TwoNN"]).fit(X)
     ek.save(tmp_path / "bundle")
-    ek2 = EmbedKit.load(tmp_path / "bundle")
+    ek2 = EmbedKit.load(tmp_path / "bundle", device="cpu")
     assert ek2._trainer.model.architecture == "residual"
     np.testing.assert_allclose(ek2.transform(X), ek.transform(X), atol=1e-6)
 

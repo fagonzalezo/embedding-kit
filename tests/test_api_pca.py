@@ -51,8 +51,9 @@ def test_pca_rejects_training_configuration(small_X):
 def test_pca_save_load_roundtrip(small_X, tmp_path):
     ek = EmbedKit(target_dim=6, **KW).fit(small_X)
     ek.save(tmp_path / "b")
-    ek2 = EmbedKit.load(tmp_path / "b")
+    ek2 = EmbedKit.load(tmp_path / "b", device="cpu")
     assert ek2.method_ == "pca" and ek2.method == "pca"
+    assert ek2._trainer.device.type == "cpu"
     np.testing.assert_allclose(ek2.transform(small_X), ek.transform(small_X), atol=1e-6)
 
 

@@ -28,6 +28,10 @@ Phase 6 of `docs/IMPLEMENTATION_PLAN.md`: supervised and regression modes.
   `synthetic_regression[_ties]`, `yelp_mpnet` and `fluorescence_esm2`.
 
 ### Fixed
+- `EmbedKit.load(directory, device=None)`: the device for `transform` can be given. A bundle fitted
+  on CPU and reloaded on Apple MPS (the default device where available) gave outputs about 1e-4
+  apart, which failed the save/load round-trip test on the macOS CI runner with Python 3.10 since
+  WP 5.1.
 - Early stopping with ties: of evaluations with the same best monitor value, the latest one's
   weights are restored (was the first). On a small validation split kNN accuracy often plateaus, and
   restoring the first plateau epoch kept the refiner near its initialisation. Ties still do not
