@@ -34,7 +34,9 @@ Phase 3 of `docs/IMPLEMENTATION_PLAN.md`: benchmarks E1 and E2 and the decision 
   - `IdentityPair` gives dropout-only positives.
 - `MatryoshkaLoss(base_loss, dims)` (WP 5.3): the base loss summed over nested prefixes of the output.
   `EmbedKit.transform(X, dim=m)` and `fit_transform(..., dim=m)` keep the first `m` coordinates and
-  renormalise.
+  renormalise. `EmbedKit(nested_dims="auto" | dims)` wraps the loss in it (`"auto"`: powers of two
+  from 32 below the output dimension) and records the dims in `config.json`. In E6 the prefixes of one
+  model at d = 256 matched `linear` models trained at 32, 64 and 128 (one loss in 16 comparisons).
 - `embedkit.hubness_reduction` (WP 5.5): `LocalScaling`, `MutualProximity` (Gaussian), `CSLS` and
   `DisSimLocal` as secondary distances for exact kNN search, with `fit(X_reference)` and
   `kneighbors(X=None, n_neighbors=5)`. `knn_accuracy`, `recall_at_k`, `k_skewness` and
@@ -50,10 +52,12 @@ Phase 3 of `docs/IMPLEMENTATION_PLAN.md`: benchmarks E1 and E2 and the decision 
   acceptance rule; `--shard I/N` splits a dataset's grid between jobs. Stage WP 5.1 results are in
   `benchmarks/results/e6/`. Stage WP 5.2/5.3 adds the arms `mutual`, `nbrmask`, `decoupled`,
   `dropout` (on `residual`, which has dropout) and `matryoshka` (one model at min(256, d) read at each
-  prefix), at fixed d.
+  prefix), at fixed d. Results in `docs/BENCHMARK_E6_E7.md`: no WP 5.2 arm is accepted, WP 5.3 is
+  non-inferior. `report_e6.py` adds the per-d prefix table and defaults to `--reference e6_linear`.
 - E1 gains the hubness-reduction methods `raw+ls`, `raw+mp`, `raw+csls` and `raw+dsl`, scored on the
   kNN-based metrics only (`Method.hubness_reduction`, `Method.metrics`);
-  `benchmarks/cluster/e1_hub.slurm.sh` runs them on CPU nodes.
+  `benchmarks/cluster/e1_hub.slurm.sh` runs them on CPU nodes. They leave kNN accuracy unchanged on the
+  E1 sets (-0.028 to +0.005 against raw).
 - `benchmarks/run.py --experiment e7` and `benchmarks/report_e7.py`: learning curves of the default
   refiner, PCA and PCA-whitening over the number of rows fitted (200 to 100k, capped at the training
   size), and inductive against transductive fitting (`Method.transductive`).

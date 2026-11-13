@@ -577,6 +577,13 @@ ek.fit(X)
 Z32 = ek.transform(X, dim=32)   # first 32 coordinates, renormalised
 ```
 
+`EmbedKit(nested_dims=...)` does the wrapping for the default loss: `"auto"` nests the powers of two from 32 below `target_dim`, a sequence gives the dims. In E6 (`docs/BENCHMARK_E6_E7.md`) the prefixes of one model at 256 matched `linear` models trained separately at 32, 64 and 128, at about 1.5 times the training cost of one of them.
+
+```python
+ek = EmbedKit(target_dim=256, nested_dims="auto").fit(X)   # trains prefixes 32, 64, 128 and 256
+Z64 = ek.transform(X, dim=64)
+```
+
 ---
 
 ### 2.4 Trainer
@@ -648,7 +655,9 @@ print(trainer.history)             # {"loss": [...], "uniformity": [...], ...}
 | `k_skewness > 5` | Adds `AlignUniformLoss` (weight 0.5) via `CombinedLoss` |
 | `target_dim == "auto"` | Uses `report.suggested_target_dim` = `clip(1.5 × ID, ID, D)` |
 
-**Class:** `EmbedKit(mode, augmentation, loss, target_dim, hidden_dim, n_layers, architecture, epochs, batch_size, optimizer, lr, scheduler, eval_every, early_stopping_patience, monitor, val_split, device, id_methods, random_state)`
+**Class:** `EmbedKit(mode, augmentation, loss, target_dim, hidden_dim, n_layers, architecture, epochs, batch_size, optimizer, lr, scheduler, eval_every, early_stopping_patience, monitor, val_split, device, id_methods, random_state, nested_dims)`
+
+`nested_dims=None` (default), `"auto"` or a sequence trains nested prefixes readable with `transform(X, dim=m)`; see `MatryoshkaLoss` above.
 
 `EmbedKit` trains for a fixed budget of `epochs` (default 100) and does not stop early: in the E2
 benchmark (`docs/BENCHMARK_E1_E2.md`) no label-free statistic tracked downstream accuracy within a run.

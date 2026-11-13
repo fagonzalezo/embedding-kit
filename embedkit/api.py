@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Literal
 
@@ -13,6 +14,7 @@ from embedkit.improvement.augmentation import EmbeddingMixup, KNNPairs
 from embedkit.improvement.losses import (
     AlignUniformLoss,
     CombinedLoss,
+    MatryoshkaLoss,
     NTXentLoss,
     SupConLoss,
 )
@@ -23,6 +25,16 @@ from embedkit.utils.validation import _to_numpy
 
 
 class EmbedKit:
+    """Analyse, configure, train and transform in one estimator.
+
+    ``nested_dims`` (WP 5.3) trains every prefix of the output as an embedding of its own, by
+    wrapping the loss in :class:`~embedkit.improvement.losses.MatryoshkaLoss`; read a prefix
+    with ``transform(X, dim=m)``. ``"auto"`` nests the powers of two from 32 below the output
+    dimension, as in E6, where prefixes of one model at 256 matched linear models trained at
+    32, 64 and 128 (``benchmarks/results/e6/REPORT.md``). A sequence gives the dimensions
+    directly. ``None`` (the default) trains the full output only.
+    """
+
     def __init__(
         self,
         mode: Literal["self_supervised", "supervised"] = "self_supervised",
@@ -45,6 +57,7 @@ class EmbedKit:
         device: str | torch.device | None = None,
         id_methods: list[str] | None = None,
         random_state: int | None = 42,
+        nested_dims: Sequence[int] | Literal["auto"] | None = None,
     ):
         self.mode = mode
         self.augmentation_cfg = augmentation
@@ -66,6 +79,7 @@ class EmbedKit:
         self.device = device
         self.id_methods = id_methods
         self.random_state = random_state
+        self.nested_dims = nested_dims
 
         self.analysis_report: EmbedKitReport | None = None
         self._trainer: Trainer | None = None
@@ -87,6 +101,12 @@ class EmbedKit:
         target_dim = self._resolve_target_dim(d, report)
         augmentation = self._resolve_augmentation(report)
         loss_fn = self._resolve_loss(report)
+        nested = self._resolve_nested_dims(target_dim)
+        if nested is not None:
+            if isinstance(loss_fn, MatryoshkaLoss):
+                raise ValueError("Pass nested_dims or a MatryoshkaLoss, not both")
+            loss_fn = MatryoshkaLoss(loss_fn, dims=nested)
+        self.nested_dims_ = loss_fn.dims if isinstance(loss_fn, MatryoshkaLoss) else None
 
         self._config = {
             "mode": self.mode,
@@ -100,6 +120,7 @@ class EmbedKit:
             "lr": self.lr,
             "weight_decay": self.weight_decay,
             "input_dim": d,
+            "nested_dims": list(self.nested_dims_) if self.nested_dims_ else None,
         }
 
         # Step 3: build model + trainer
@@ -209,6 +230,23 @@ class EmbedKit:
         if self.target_dim != "auto":
             return int(self.target_dim)
         return report.suggested_target_dim
+
+    def _resolve_nested_dims(self, target_dim: int) -> tuple[int, ...] | None:
+        if self.nested_dims is None:
+            return None
+        if isinstance(self.nested_dims, str):
+            if self.nested_dims != "auto":
+                raise ValueError(f"nested_dims must be 'auto', a sequence or None, "
+                                 f"got {self.nested_dims!r}")
+            dims, m = [], 32
+            while m < target_dim:
+                dims.append(m)
+                m *= 2
+            return tuple(dims) or (target_dim,)
+        dims = tuple(int(m) for m in self.nested_dims)
+        if any(m > target_dim for m in dims):
+            raise ValueError(f"nested_dims {dims} exceed the output dimension {target_dim}")
+        return dims
 
     def _resolve_augmentation(self, report: EmbedKitReport):
         if self.augmentation_cfg != "auto":

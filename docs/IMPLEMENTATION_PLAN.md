@@ -635,11 +635,11 @@ Release as 0.5.0.
 | 4.4 | Metric consistency, kernel spectrum | not started |
 | 4.5 | Run E3 and E5 | not started |
 | 5.1 | Residual adapter | done (2026-11-12): accepted in E6; `EmbedKit` default is now `architecture="linear"` |
-| 5.2 | Positives and negatives | implemented (2026-11-11, two-day attempt started); E6 stage 2 on the cluster |
-| 5.3 | Matryoshka output | implemented (2026-11-11; added by the user to gate C); E6 stage 2 on the cluster |
+| 5.2 | Positives and negatives | rejected (2026-11-13): no arm wins against `linear` on half the datasets in E6; options stay in the library |
+| 5.3 | Matryoshka output | done (2026-11-13): non-inferior in E6; opt-in `EmbedKit(nested_dims=...)` |
 | 5.4 | Structure preservation, VICReg | dropped (gate C) |
-| 5.5 | Hubness reduction | implemented (2026-11-12); E1 hubness methods on the cluster |
-| 5.6 | Run E6 and E7 | E6 stage 1 (WP 5.1) done; stage 2 (WP 5.2, 5.3) running; E7 not started |
+| 5.5 | Hubness reduction | done (2026-11-13): implemented; no kNN gain on the E1 sets, no default change |
+| 5.6 | Run E6 and E7 | E6 done (`docs/BENCHMARK_E6_E7.md`); E7 running (job 3078240) |
 | 6.1 | Supervised defaults | not started |
 | 6.2 | Class collapse | not started |
 | 6.3 | Run E8 | not started |
@@ -816,6 +816,23 @@ Release as 0.5.0.
   review's third E7 item, distribution shift, needs paired domains that the benchmark sets do not
   have, and is not run.
 
+### Phase 5 notes (2026-11-13)
+
+- **E6 stage 2 result** (`docs/BENCHMARK_E6_E7.md`, job 3077755 at `77bc902`, 18 GPU-hours).
+  **WP 5.2 is rejected**: `mutual`, `nbrmask` and `decoupled` each have 1 win, 3 ties, 2 losses
+  against `e6_linear`; `dropout` has 1 / 0 / 5 against `e6_residual`. The two-day attempt ends here;
+  the options stay in the library, off by default. **WP 5.3 is accepted**: nested prefixes lose
+  against a model trained at that d on one dataset (CIFAR-100, d = 32, -0.003). It is an opt-in,
+  `EmbedKit(nested_dims="auto" | sequence)`, not the default, until the decision below.
+- **WP 5.5 result** (job 3077756): hubness reduction moves raw kNN accuracy by -0.028 to +0.005;
+  one win (MP, CIFAR-100), three losses. No default changes.
+- **Gate C fallback, deferred to E7 (the user, 2026-11-13).** The rule says that with no WP 5.2 win
+  `EmbedKit(mode="self_supervised")` returns the best training-free baseline. Against it: the `linear`
+  refiner is level with the best of PCA and PCA-whitening (1 / 4 / 1); choosing between those two
+  needs labels; and at d = 32 the refiner beats plain PCA by 0.015 to 0.09 on four datasets. E7 (job
+  3078240) compares the refiner with both over the number of fitted rows and transductively; the
+  decision follows it.
+
 ## Open points for the next session
 
 All design decisions in this plan are confirmed. Two practical points remain:
@@ -823,3 +840,6 @@ All design decisions in this plan are confirmed. Two practical points remain:
 1. **Phase 5 is in progress** (the user chose it before phase 4, 2026-11-11). Gate outcome C plus WP 5.3 (see the
    phase 3 notes). WP 5.1 is done (default `linear`). WP 5.2 (two-day attempt, from 2026-11-11), WP 5.3
    and the E1 hubness methods (WP 5.5) are implemented and run on the cluster. Then E7 and the 0.4.0 release.
+   Update 2026-11-13: E6 and WP 5.5 are done (WP 5.2 rejected, WP 5.3 accepted as an opt-in); E7 is
+   running, and the self-supervised default (refiner or training-free fallback) is decided on its
+   results.

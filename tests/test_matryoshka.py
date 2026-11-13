@@ -75,3 +75,32 @@ def test_embedkit_truncated_transform(small_X):
     np.testing.assert_allclose(Zt.numpy(), Z4, atol=1e-6)
     with pytest.raises(ValueError, match="dim"):
         ek.transform(small_X, dim=9)
+
+
+def test_embedkit_nested_dims_auto(small_X):
+    from embedkit import EmbedKit
+
+    kw = dict(epochs=1, eval_every=100, device="cpu", id_methods=["TwoNN"])
+    ek = EmbedKit(target_dim=200, nested_dims="auto", **kw)
+    assert ek._resolve_nested_dims(200) == (32, 64, 128)
+    assert ek._resolve_nested_dims(32) == (32,)
+    ek = EmbedKit(target_dim=8, nested_dims=(2, 4), **kw).fit(small_X)
+    loss = ek._trainer.loss
+    assert isinstance(loss, MatryoshkaLoss) and loss.dims == (2, 4)
+    assert ek.nested_dims_ == (2, 4) and ek._config["nested_dims"] == [2, 4]
+    assert ek.transform(small_X, dim=2).shape == (len(small_X), 2)
+    plain = EmbedKit(target_dim=8, **kw).fit(small_X)
+    assert not isinstance(plain._trainer.loss, MatryoshkaLoss) and plain.nested_dims_ is None
+
+
+def test_embedkit_nested_dims_validation(small_X):
+    from embedkit import EmbedKit
+
+    kw = dict(epochs=1, eval_every=100, device="cpu", id_methods=["TwoNN"])
+    with pytest.raises(ValueError, match="exceed"):
+        EmbedKit(target_dim=8, nested_dims=(4, 16), **kw).fit(small_X)
+    with pytest.raises(ValueError, match="'auto'"):
+        EmbedKit(target_dim=8, nested_dims="all", **kw).fit(small_X)
+    with pytest.raises(ValueError, match="not both"):
+        EmbedKit(target_dim=8, nested_dims=(4,), loss=MatryoshkaLoss(NTXentLoss(), dims=(2,)),
+                 **kw).fit(small_X)
