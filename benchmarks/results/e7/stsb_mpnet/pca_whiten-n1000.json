@@ -1,0 +1,1240 @@
+{
+ "experiment": "e7",
+ "dataset": "stsb_mpnet",
+ "method": "pca_whiten-n1000",
+ "family": "e7_pca_whiten",
+ "params": {
+  "target_dim": 128,
+  "n_fit": 1000
+ },
+ "deterministic": false,
+ "fit_with_labels": false,
+ "seeds": 5,
+ "device": "cuda",
+ "val_fraction": 0.2,
+ "git": {
+  "commit": "0392bbed9ae372e6c4c8da2461ea24f1facfc2e9",
+  "dirty": false
+ },
+ "embedkit_version": "0.2.0",
+ "python": "3.12.3",
+ "host": "r9ng-8000-3",
+ "created": "2026-11-13T01:31:43+00:00",
+ "dataset_meta": {
+  "model": "sentence-transformers/all-mpnet-base-v2",
+  "hf_dataset": "sentence-transformers/stsb",
+  "normalized": false,
+  "pooling": "mean, Normalize module removed",
+  "n_test_pairs": 1379,
+  "n_val_pairs": 1500,
+  "dataset": "stsb_mpnet",
+  "created": "2026-11-11T10:23:00+00:00",
+  "model_revision": "e8c3b32edf5434bc2275fc9bab85f82640a19130",
+  "device": "cuda",
+  "seconds": 26.5,
+  "source": "/projects/iris/fabio.gonzalezosorio/data/embedkit-bench/features/stsb_mpnet.npz",
+  "task": "sts"
+ },
+ "stages": {
+  "val": [
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 0,
+    "metric": "sts_spearman",
+    "value": 0.8685335247875892,
+    "fit_time": 0.22802033019252121,
+    "transform_time": 0.08015476306900382,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 0,
+    "metric": "trustworthiness",
+    "value": 0.9890962181504322,
+    "fit_time": 0.22802033019252121,
+    "transform_time": 0.08015476306900382,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 0,
+    "metric": "continuity",
+    "value": 0.9955761935036171,
+    "fit_time": 0.22802033019252121,
+    "transform_time": 0.08015476306900382,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 0,
+    "metric": "knn_overlap",
+    "value": 0.6174914089347079,
+    "fit_time": 0.22802033019252121,
+    "transform_time": 0.08015476306900382,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 0,
+    "metric": "linear_cka",
+    "value": 0.7916650504469673,
+    "fit_time": 0.22802033019252121,
+    "transform_time": 0.08015476306900382,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 0,
+    "metric": "k_skewness",
+    "value": 1.1051605362169903,
+    "fit_time": 0.22802033019252121,
+    "transform_time": 0.08015476306900382,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 0,
+    "metric": "effective_rank",
+    "value": 124.19676783224747,
+    "fit_time": 0.22802033019252121,
+    "transform_time": 0.08015476306900382,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 1,
+    "metric": "sts_spearman",
+    "value": 0.865258823872091,
+    "fit_time": 0.23987665795721114,
+    "transform_time": 0.08033304591663182,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 1,
+    "metric": "trustworthiness",
+    "value": 0.9854138581347845,
+    "fit_time": 0.23987665795721114,
+    "transform_time": 0.08033304591663182,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 1,
+    "metric": "continuity",
+    "value": 0.9953768463592819,
+    "fit_time": 0.23987665795721114,
+    "transform_time": 0.08033304591663182,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 1,
+    "metric": "knn_overlap",
+    "value": 0.6134707903780069,
+    "fit_time": 0.23987665795721114,
+    "transform_time": 0.08033304591663182,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 1,
+    "metric": "linear_cka",
+    "value": 0.7895075690380163,
+    "fit_time": 0.23987665795721114,
+    "transform_time": 0.08033304591663182,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 1,
+    "metric": "k_skewness",
+    "value": 1.1064020422682346,
+    "fit_time": 0.23987665795721114,
+    "transform_time": 0.08033304591663182,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 1,
+    "metric": "effective_rank",
+    "value": 124.33135980893769,
+    "fit_time": 0.23987665795721114,
+    "transform_time": 0.08033304591663182,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 2,
+    "metric": "sts_spearman",
+    "value": 0.8659766236734957,
+    "fit_time": 0.21561375306919217,
+    "transform_time": 0.07866993709467351,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 2,
+    "metric": "trustworthiness",
+    "value": 0.9864086349332987,
+    "fit_time": 0.21561375306919217,
+    "transform_time": 0.07866993709467351,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 2,
+    "metric": "continuity",
+    "value": 0.9951687018691096,
+    "fit_time": 0.21561375306919217,
+    "transform_time": 0.07866993709467351,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 2,
+    "metric": "knn_overlap",
+    "value": 0.6118556701030928,
+    "fit_time": 0.21561375306919217,
+    "transform_time": 0.07866993709467351,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 2,
+    "metric": "linear_cka",
+    "value": 0.7903123307975058,
+    "fit_time": 0.21561375306919217,
+    "transform_time": 0.07866993709467351,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 2,
+    "metric": "k_skewness",
+    "value": 1.1462585217532946,
+    "fit_time": 0.21561375306919217,
+    "transform_time": 0.07866993709467351,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 2,
+    "metric": "effective_rank",
+    "value": 124.42187995448215,
+    "fit_time": 0.21561375306919217,
+    "transform_time": 0.07866993709467351,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 3,
+    "metric": "sts_spearman",
+    "value": 0.8679045745089498,
+    "fit_time": 0.24834022903814912,
+    "transform_time": 0.08515338506549597,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 3,
+    "metric": "trustworthiness",
+    "value": 0.9853399058173489,
+    "fit_time": 0.24834022903814912,
+    "transform_time": 0.08515338506549597,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 3,
+    "metric": "continuity",
+    "value": 0.9947969694865069,
+    "fit_time": 0.24834022903814912,
+    "transform_time": 0.08515338506549597,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 3,
+    "metric": "knn_overlap",
+    "value": 0.6084192439862542,
+    "fit_time": 0.24834022903814912,
+    "transform_time": 0.08515338506549597,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 3,
+    "metric": "linear_cka",
+    "value": 0.7820825670585859,
+    "fit_time": 0.24834022903814912,
+    "transform_time": 0.08515338506549597,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 3,
+    "metric": "k_skewness",
+    "value": 1.2631900202809985,
+    "fit_time": 0.24834022903814912,
+    "transform_time": 0.08515338506549597,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 3,
+    "metric": "effective_rank",
+    "value": 124.30425031402284,
+    "fit_time": 0.24834022903814912,
+    "transform_time": 0.08515338506549597,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 4,
+    "metric": "sts_spearman",
+    "value": 0.8681241013183169,
+    "fit_time": 0.24183981399983168,
+    "transform_time": 0.07929482799954712,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 4,
+    "metric": "trustworthiness",
+    "value": 0.9853063429338377,
+    "fit_time": 0.24183981399983168,
+    "transform_time": 0.07929482799954712,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 4,
+    "metric": "continuity",
+    "value": 0.9949555829013315,
+    "fit_time": 0.24183981399983168,
+    "transform_time": 0.07929482799954712,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 4,
+    "metric": "knn_overlap",
+    "value": 0.6065292096219931,
+    "fit_time": 0.24183981399983168,
+    "transform_time": 0.07929482799954712,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 4,
+    "metric": "linear_cka",
+    "value": 0.7863465394612382,
+    "fit_time": 0.24183981399983168,
+    "transform_time": 0.07929482799954712,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 4,
+    "metric": "k_skewness",
+    "value": 1.0926916652071654,
+    "fit_time": 0.24183981399983168,
+    "transform_time": 0.07929482799954712,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 4,
+    "metric": "effective_rank",
+    "value": 124.4399080490054,
+    "fit_time": 0.24183981399983168,
+    "transform_time": 0.07929482799954712,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   }
+  ],
+  "test": [
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 0,
+    "metric": "sts_spearman",
+    "value": 0.8410368124751022,
+    "fit_time": 0.21097863605245948,
+    "transform_time": 0.07823695987462997,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 0,
+    "metric": "trustworthiness",
+    "value": 0.9879529249138131,
+    "fit_time": 0.21097863605245948,
+    "transform_time": 0.07823695987462997,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 0,
+    "metric": "continuity",
+    "value": 0.9935714122402268,
+    "fit_time": 0.21097863605245948,
+    "transform_time": 0.07823695987462997,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 0,
+    "metric": "knn_overlap",
+    "value": 0.644474921630094,
+    "fit_time": 0.21097863605245948,
+    "transform_time": 0.07823695987462997,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 0,
+    "metric": "linear_cka",
+    "value": 0.7989802803079056,
+    "fit_time": 0.21097863605245948,
+    "transform_time": 0.07823695987462997,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 0,
+    "metric": "k_skewness",
+    "value": 0.8613014428450598,
+    "fit_time": 0.21097863605245948,
+    "transform_time": 0.07823695987462997,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 0,
+    "metric": "effective_rank",
+    "value": 123.8274207843118,
+    "fit_time": 0.21097863605245948,
+    "transform_time": 0.07823695987462997,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 1,
+    "metric": "sts_spearman",
+    "value": 0.8365509797980498,
+    "fit_time": 0.2154586911201477,
+    "transform_time": 0.0761040321085602,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 1,
+    "metric": "trustworthiness",
+    "value": 0.9849161026443394,
+    "fit_time": 0.2154586911201477,
+    "transform_time": 0.0761040321085602,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 1,
+    "metric": "continuity",
+    "value": 0.9935935189493582,
+    "fit_time": 0.2154586911201477,
+    "transform_time": 0.0761040321085602,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 1,
+    "metric": "knn_overlap",
+    "value": 0.6460031347962382,
+    "fit_time": 0.2154586911201477,
+    "transform_time": 0.0761040321085602,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 1,
+    "metric": "linear_cka",
+    "value": 0.7944933216079618,
+    "fit_time": 0.2154586911201477,
+    "transform_time": 0.0761040321085602,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 1,
+    "metric": "k_skewness",
+    "value": 0.8539226892597274,
+    "fit_time": 0.2154586911201477,
+    "transform_time": 0.0761040321085602,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 1,
+    "metric": "effective_rank",
+    "value": 124.03023502292942,
+    "fit_time": 0.2154586911201477,
+    "transform_time": 0.0761040321085602,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 2,
+    "metric": "sts_spearman",
+    "value": 0.8336627351700591,
+    "fit_time": 0.22718214988708496,
+    "transform_time": 0.07657052110880613,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 2,
+    "metric": "trustworthiness",
+    "value": 0.9828026487267092,
+    "fit_time": 0.22718214988708496,
+    "transform_time": 0.07657052110880613,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 2,
+    "metric": "continuity",
+    "value": 0.991745113814793,
+    "fit_time": 0.22718214988708496,
+    "transform_time": 0.07657052110880613,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 2,
+    "metric": "knn_overlap",
+    "value": 0.6425940438871474,
+    "fit_time": 0.22718214988708496,
+    "transform_time": 0.07657052110880613,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 2,
+    "metric": "linear_cka",
+    "value": 0.7923690294273563,
+    "fit_time": 0.22718214988708496,
+    "transform_time": 0.07657052110880613,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 2,
+    "metric": "k_skewness",
+    "value": 0.8931552383501359,
+    "fit_time": 0.22718214988708496,
+    "transform_time": 0.07657052110880613,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 2,
+    "metric": "effective_rank",
+    "value": 124.0859614311308,
+    "fit_time": 0.22718214988708496,
+    "transform_time": 0.07657052110880613,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 3,
+    "metric": "sts_spearman",
+    "value": 0.833816790765887,
+    "fit_time": 0.2299395331647247,
+    "transform_time": 0.07757585891522467,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 3,
+    "metric": "trustworthiness",
+    "value": 0.9811520453417719,
+    "fit_time": 0.2299395331647247,
+    "transform_time": 0.07757585891522467,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 3,
+    "metric": "continuity",
+    "value": 0.9912071838925975,
+    "fit_time": 0.2299395331647247,
+    "transform_time": 0.07757585891522467,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 3,
+    "metric": "knn_overlap",
+    "value": 0.6366379310344827,
+    "fit_time": 0.2299395331647247,
+    "transform_time": 0.07757585891522467,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 3,
+    "metric": "linear_cka",
+    "value": 0.7814213206195486,
+    "fit_time": 0.2299395331647247,
+    "transform_time": 0.07757585891522467,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 3,
+    "metric": "k_skewness",
+    "value": 0.9377321904824686,
+    "fit_time": 0.2299395331647247,
+    "transform_time": 0.07757585891522467,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 3,
+    "metric": "effective_rank",
+    "value": 123.96935287651536,
+    "fit_time": 0.2299395331647247,
+    "transform_time": 0.07757585891522467,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 4,
+    "metric": "sts_spearman",
+    "value": 0.8345066071557284,
+    "fit_time": 0.18110492103733122,
+    "transform_time": 0.07320777699351311,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 4,
+    "metric": "trustworthiness",
+    "value": 0.9861909537677804,
+    "fit_time": 0.18110492103733122,
+    "transform_time": 0.07320777699351311,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 4,
+    "metric": "continuity",
+    "value": 0.99283467642019,
+    "fit_time": 0.18110492103733122,
+    "transform_time": 0.07320777699351311,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 4,
+    "metric": "knn_overlap",
+    "value": 0.6429075235109717,
+    "fit_time": 0.18110492103733122,
+    "transform_time": 0.07320777699351311,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 4,
+    "metric": "linear_cka",
+    "value": 0.7920855073159584,
+    "fit_time": 0.18110492103733122,
+    "transform_time": 0.07320777699351311,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 4,
+    "metric": "k_skewness",
+    "value": 0.8906272064486009,
+    "fit_time": 0.18110492103733122,
+    "transform_time": 0.07320777699351311,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca_whiten-n1000",
+    "seed": 4,
+    "metric": "effective_rank",
+    "value": 123.93191670863783,
+    "fit_time": 0.18110492103733122,
+    "transform_time": 0.07320777699351311,
+    "dim": 128,
+    "transductive": false,
+    "params": {
+     "n_components": 128,
+     "whiten": true,
+     "random_state": 0,
+     "n_fit": 1000
+    },
+    "per_point": null
+   }
+  ]
+ },
+ "errors": {},
+ "warnings": {
+  "val": [],
+  "test": []
+ },
+ "elapsed": 11.473776931175962
+}

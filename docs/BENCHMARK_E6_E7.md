@@ -23,10 +23,16 @@ of E1 (`docs/BENCHMARK_E1_E2.md`, sections Datasets and Protocol).
 - **WP 5.5: hubness reduction does not raise kNN accuracy on these embeddings.** The best change
   against raw is +0.005 (mutual proximity, CIFAR-100). Mutual proximity loses on Pets and on the
   synthetic set.
-- **Decision on the self-supervised default: pending E7** (confirmed by the user, 2026-11-13). The
-  plan's rule for gate C says that `EmbedKit(mode="self_supervised")` returns the best training-free
-  baseline when WP 5.2 fails. The previous point and the WP 5.3 result argue for keeping the refiner as a
-  label-free compressor. E7 (learning curves and transduction against PCA) decides.
+- **E7: the refiner needs thousands of rows to reach PCA, and never pulls ahead of it on real data.**
+  Fitted on 200 to 1000 rows, it loses to the better of PCA and PCA-whitening on Banking77 (-0.052 at
+  200 rows), CIFAR-100 (-0.006), STS-B (-0.145, no interval) and the synthetic set (-0.251). It wins
+  on Pets (+0.006) and ties on digits and STL-10. PCA is nearly flat from 200 rows. With every
+  training row the refiner has 1 win, 4 ties and 1 loss, as in E6.
+- **E7, transduction:** fitting on train + test rows (no labels) gains +0.006 (Banking77) and +0.020
+  (synthetic) for the refiner and ties elsewhere; no transform loses from it.
+- **Decision on the self-supervised default: pending**, now that E7 is in (the user deferred it to
+  E7 on 2026-11-13). The plan's rule for gate C says that `EmbedKit(mode="self_supervised")` returns
+  the best training-free baseline when WP 5.2 fails.
 
 ## E6: one-factor ablation of the refiner
 
@@ -136,8 +142,52 @@ here are not in that regime, and the methods leave accuracy unchanged. They stay
 
 ## E7
 
-Running (job 3078240, submitted 2026-11-13 01:05 CET). This section will hold the learning curves and
-the transduction comparison.
+Job 3078240 at `0392bbe`; the CIFAR-100 task hit the 12-hour limit with two PCA-whitening runs left,
+which job 3078976 finished. Full tables: `benchmarks/results/e7/REPORT.md`.
+
+The default refiner (`linear`), PCA and PCA-whitening at one d per dataset (the d that `e6_linear`
+selected), each fitted on n training rows drawn at random (5 seeds; n in {200, 500, 1k, 5k, 20k},
+below the training size) or on all of them. The kNN gallery and the probe always use the whole
+transformed training split, so only the fit sees fewer rows. The refiner is compared with the better
+of PCA and PCA-whitening at the same n, chosen on validation.
+
+**Learning curves**, refiner minus the best baseline (test kNN accuracy; STS-B Spearman, no interval);
+bold where the interval excludes 0:
+
+| Dataset (d) | n = 200 | 500 | 1000 | 5000 | 20000 | all |
+|---|---|---|---|---|---|---|
+| Banking77 (64) | **-0.052** | **-0.017** | **-0.007** | +0.006 | | **+0.007** (9993) |
+| CIFAR-100 (128) | **-0.006** | **-0.006** | **-0.006** | **-0.005** | **-0.003** | -0.003 (50000) |
+| digits (32) | -0.000 | -0.000 | | | | +0.000 (898) |
+| Pets (64) | **+0.006** | +0.002 | +0.001 | | | +0.004 (3680) |
+| STL-10 (128) | -0.002 | +0.001 | +0.000 | | | -0.001 (5000) |
+| STS-B (128) | -0.145 | -0.090 | -0.059 | -0.013 | | -0.004 (10566) |
+| synthetic (128) | **-0.251** | **-0.165** | **-0.122** | | | **-0.073** (3000) |
+
+The baselines barely move with n: PCA on CIFAR-100 goes from 0.864 at 200 rows to 0.875 with all
+50000, and on Banking77 from 0.920 to 0.919. The refiner gains 0.016 (CIFAR-100), 0.058 (Banking77),
+0.147 (STS-B) and 0.198 (synthetic) over the same range. On the synthetic set it falls below plain PCA
+under 1000 rows (0.638 against 0.743 at 200). A contrastive loss over kNN positives needs enough
+rows for the neighbour graph to carry the structure; PCA needs only the leading covariance
+directions, which a few hundred rows already estimate.
+
+**Transduction**, fitted on train + test rows against train only:
+
+| Dataset | refiner | PCA | PCA-whitening |
+|---|---|---|---|
+| Banking77 | **+0.006** | +0.002 | +0.001 |
+| CIFAR-100 | +0.001 | **+0.002** | +0.001 |
+| digits | +0.000 | -0.002 | +0.004 |
+| Pets | +0.003 | +0.002 | -0.003 |
+| STL-10 | -0.001 | -0.000 | +0.000 |
+| STS-B (no interval) | +0.003 | +0.008 | +0.000 |
+| synthetic | **+0.020** | -0.002 | -0.005 |
+
+Fitting on the unlabelled test rows helps the refiner on two datasets and never hurts any transform.
+The gains are small next to the differences between transforms.
+
+The third E7 item of the review, distribution shift, needs paired domains that these datasets do not
+have, and was not run.
 
 ## Compute
 
@@ -146,6 +196,7 @@ the transduction comparison.
 | 3077519 | E6 stage 1 | about 16 |
 | 3077755 | E6 stage 2 | 18.0 |
 | 3077756 | E1 hubness (CPU) | 0.3 CPU-node hours |
+| 3078240, 3078976 | E7 | 14.3 |
 
 ## Reproducing
 
