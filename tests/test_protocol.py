@@ -143,10 +143,16 @@ def test_string_labels(blobs):
 def test_every_registered_metric_runs(blobs):
     Xtr, ytr, Xte, yte = blobs
     pairs = (np.arange(0, 50), np.arange(50, 100), np.linspace(0, 1, 50))
+    class_metrics = [m for m in METRICS if not METRICS[m].needs_continuous_labels]
     df = evaluate_transform(lambda s: PCAReduce(8), Xtr, Xte, ytr, yte, seeds=(0,),
-                            metrics=list(METRICS), test_pairs=pairs)
-    assert set(df["metric"]) == set(METRICS)
+                            metrics=class_metrics, test_pairs=pairs)
+    assert set(df["metric"]) == set(class_metrics)
     assert np.isfinite(df["value"]).all()
+    # The continuous-label metrics, on a continuous target.
+    cont = [m for m in METRICS if METRICS[m].needs_continuous_labels]
+    df = evaluate_transform(lambda s: PCAReduce(8), Xtr, Xte, Xtr[:, 0].astype(float),
+                            Xte[:, 0].astype(float), seeds=(0,), metrics=cont)
+    assert set(df["metric"]) == set(cont) and np.isfinite(df["value"]).all()
 
 
 # --- compare ------------------------------------------------------------------------------------

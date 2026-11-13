@@ -10,7 +10,7 @@
 #SBATCH --partition=RTX8000Nodes
 #SBATCH --gres=gpu:1
 #SBATCH --gres-flags=enforce-binding
-#SBATCH --array=0-3%2
+#SBATCH --array=0-5%2
 #
 # One task per GPU feature set (GPU_SETS in env.sh): downloads the raw data and the encoder, and
 # writes $DATA/features/<set>.npz. A finished set is skipped, so tasks can be resubmitted.

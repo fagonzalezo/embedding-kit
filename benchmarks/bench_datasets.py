@@ -122,6 +122,72 @@ def make_synthetic_anisotropic(
     return Xtr.astype(np.float32), ytr, Xte.astype(np.float32), yte, info
 
 
+def make_synthetic_regression(n=6000, latent=8, D=256, hidden=128, nuis_scale=2.0, n_nuis=3,
+                              noise=0.1, levels=None, seed=0):
+    """A continuous target on a latent space seen through a random tanh MLP (E8, phase 6).
+
+    ``u ~ N(0, I_8)``; the target is ``sin(a.u) + 0.5 (b.u)^2`` (``a``, ``b`` random unit vectors),
+    standardised, plus Gaussian noise of standard deviation ``noise``. The embedding is the same
+    construction as :func:`make_synthetic_anisotropic`: a fixed 2-layer tanh MLP to ``D`` dimensions
+    plus ``n_nuis`` high-variance nuisance directions that do not depend on ``u``. The target is
+    non-linear in the embedding, so a ridge probe on the raw rows cannot fit it exactly. Calibration
+    (continuous target, test R^2): 10-NN regression on the latent ``u`` 0.77, ridge on the embedding
+    0.70, 10-NN on the embedding 0.43. With ``levels``, the target is quantised to that many equally
+    populated levels (quantiles of the training targets, values ``0 .. levels - 1``), on both
+    splits: heavy ties, the case of ``docs/BUG-rnc-ties.md``. Half the rows are train, half test.
+    """
+    from sklearn.model_selection import train_test_split
+
+    rng = np.random.default_rng(seed)
+    u = rng.standard_normal((n, latent))
+    a, b = (v / np.linalg.norm(v) for v in rng.standard_normal((2, latent)))
+    y = np.sin(u @ a) + 0.5 * (u @ b) ** 2
+    y = (y - y.mean()) / y.std() + noise * rng.standard_normal(n)
+    W1 = rng.normal(0, 1 / np.sqrt(latent), size=(latent, hidden))
+    W2 = rng.normal(0, 1 / np.sqrt(hidden), size=(hidden, D))
+    X = np.tanh(np.tanh(u @ W1 + rng.normal(0, 0.1, hidden)) @ W2 + rng.normal(0, 0.1, D))
+    dev_norm = np.linalg.norm(X - X.mean(0), axis=1).mean()
+    Q, _ = np.linalg.qr(rng.normal(size=(D, n_nuis)))
+    X = X + rng.normal(0, nuis_scale * dev_norm / np.sqrt(n_nuis), size=(n, n_nuis)) @ Q.T
+    Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.5, random_state=seed)
+    if levels is not None:
+        edges = np.quantile(ytr, np.linspace(0, 1, levels + 1)[1:-1])
+        ytr, yte = np.digitize(ytr, edges).astype(float), np.digitize(yte, edges).astype(float)
+    info = dict(latent=latent, nuis_scale=nuis_scale, n_nuis=n_nuis, noise=noise,
+                levels=levels or 0)
+    return Xtr.astype(np.float32), ytr.astype(np.float64), Xte.astype(np.float32), \
+        yte.astype(np.float64), info
+
+
+def _synthetic_regression(levels):
+    def load(root: Path) -> Dataset:
+        name = "synthetic_regression" + ("_ties" if levels else "")
+        Xtr, ytr, Xte, yte, info = make_synthetic_regression(levels=levels)
+        return Dataset(name, Xtr, ytr, Xte, yte,
+                       dict(source="benchmarks.bench_datasets.make_synthetic_regression",
+                            task="regression", learned_embedding=False, **info))
+
+    return load
+
+
+def label_subset(ds: Dataset, per_class: int, seed: int = 0) -> Dataset:
+    """Keep ``per_class`` labelled training rows of every class (all of a smaller class).
+
+    The label-efficiency variants of E8 (``<name>__lpc<k>``): the transform, the kNN gallery
+    and the probe all see only these rows; the test split is unchanged.
+    """
+    rng = np.random.default_rng(seed)
+    keep = np.sort(np.concatenate([
+        rng.permutation(np.flatnonzero(ds.y_train == c))[:per_class]
+        for c in np.unique(ds.y_train)]))
+    meta = dict(ds.meta, labels_per_class=per_class, base_dataset=ds.name,
+                n_train_full=len(ds.X_train))
+    for key in [k for k in meta if k.startswith("y_extra_") and k.endswith("_train")]:
+        meta[key] = meta[key][keep]
+    return Dataset(f"{ds.name}__lpc{per_class}", ds.X_train[keep], ds.y_train[keep], ds.X_test,
+                   ds.y_test, meta)
+
+
 def _synthetic_anisotropic(root: Path) -> Dataset:
     # The pilot ran make_synthetic(sep=1.0, nuis_scale=2.0).
     Xtr, ytr, Xte, yte, info = make_synthetic_anisotropic(sep=1.0, nuis_scale=2.0)
@@ -182,17 +248,35 @@ LOADERS: dict[str, Callable[[Path], Dataset]] = {
     # text (cluster)
     "banking77_mpnet": _cached("banking77_mpnet", "classification"),
     "stsb_mpnet": _cached("stsb_mpnet", "sts"),
+    # regression (E8): synthetic (local), Yelp stars and protein fluorescence (cluster)
+    "synthetic_regression": _synthetic_regression(None),
+    "synthetic_regression_ties": _synthetic_regression(5),
+    "yelp_mpnet": _cached("yelp_mpnet", "regression"),
+    "fluorescence_esm2": _cached("fluorescence_esm2", "regression"),
     # large unlabelled vector sets from ANN-Benchmarks (cluster)
     "glove100": _cached("glove100", "unlabelled"),
     "sift128": _cached("sift128", "unlabelled"),
     "gist960": _cached("gist960", "unlabelled"),
 }
 
-LOCAL = ("pets_resnet50", "digits", "synthetic_anisotropic")
+LOCAL = ("pets_resnet50", "digits", "synthetic_anisotropic", "synthetic_regression",
+         "synthetic_regression_ties")
 
 
 def load(name: str, root: str | os.PathLike | None = None) -> Dataset:
-    """Load a benchmark dataset by name. Raises :class:`DatasetUnavailableError` if it is absent."""
+    """Load a benchmark dataset by name. Raises :class:`DatasetUnavailableError` if it is absent.
+
+    ``<name>__lpc<k>`` is the classification set ``<name>`` with ``k`` labelled training rows
+    per class (:func:`label_subset`).
+    """
+    base, sep, variant = name.partition("__")
+    if sep:
+        if not variant.startswith("lpc") or not variant[3:].isdigit():
+            raise KeyError(f"Unknown dataset variant {variant!r} in {name!r} (expected lpc<k>)")
+        ds = load(base, root)
+        if ds.meta.get("task") != "classification":
+            raise ValueError(f"{name}: label subsets need a classification set")
+        return label_subset(ds, int(variant[3:]))
     if name not in LOADERS:
         raise KeyError(f"Unknown dataset {name!r}. Available: {sorted(LOADERS)}")
     return LOADERS[name](data_root(root))

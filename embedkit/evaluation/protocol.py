@@ -45,6 +45,7 @@ class MetricSpec:
     fn: Callable[[_Context], Any]
     needs_labels: bool = False
     needs_class_labels: bool = False
+    needs_continuous_labels: bool = False
 
 
 def _m():
@@ -107,6 +108,10 @@ METRICS: dict[str, MetricSpec] = {
     "linear_probe": MetricSpec(_probe, needs_labels=True),
     "linear_probe_c1": MetricSpec(_probe_c1, needs_labels=True, needs_class_labels=True),
     "recall_at_10": _recall(10),
+    # Regression (continuous targets): kNN regression, k = 10, cosine.
+    "knn_r2": MetricSpec(lambda c: _m().knn_regression_r2(
+        c.Z_train, c.y_train, c.Z_test, c.y_test, k=10, return_per_point=True),
+        needs_labels=True, needs_continuous_labels=True),
     "nc1": MetricSpec(lambda c: _m().nc1(c.Z_test, c.y_test), True, True),
     "silhouette": MetricSpec(lambda c: _m().silhouette(c.Z_test, c.y_test), True, True),
     # Label-free, on the test split: structure preservation relative to the input ...
@@ -122,7 +127,7 @@ METRICS: dict[str, MetricSpec] = {
 
 DEFAULT_LABELLED = (
     "knn_accuracy", "knn_accuracy_euclidean", "linear_probe", "linear_probe_c1", "recall_at_10",
-    "trustworthiness", "continuity", "k_skewness", "effective_rank",
+    "knn_r2", "trustworthiness", "continuity", "k_skewness", "effective_rank",
 )
 DEFAULT_UNLABELLED = (
     "trustworthiness", "continuity", "knn_overlap", "linear_cka", "k_skewness", "effective_rank",
@@ -152,6 +157,10 @@ def _resolve_metrics(
         if spec.needs_class_labels and kind != "class":
             if metrics is not None:
                 raise ValueError(f"Metric {name!r} needs class labels, got {kind} labels")
+            continue
+        if spec.needs_continuous_labels and kind != "continuous":
+            if metrics is not None:
+                raise ValueError(f"Metric {name!r} needs continuous labels, got {kind} labels")
             continue
         out.append(name)
     return out

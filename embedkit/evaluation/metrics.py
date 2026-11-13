@@ -18,6 +18,7 @@ from embedkit.utils.validation import _to_numpy, encode_labels
 
 __all__ = [
     "knn_accuracy",
+    "knn_regression_r2",
     "linear_probe",
     "recall_at_k",
     "trustworthiness",
@@ -199,7 +200,9 @@ def linear_probe(
 
     With ``return_per_point=True`` the result is ``(value, per_point)``: for classification
     ``per_point`` is the float array of shape ``(n_test,)`` of 0/1 correctness (its mean is the
-    accuracy); for regression it is ``None``, because R^2 is not a mean of per-point terms.
+    accuracy); for regression it is ``1 - e_i^2 / v`` with ``e_i`` the residual of test point
+    ``i`` and ``v`` the (population) variance of the test targets, whose mean is exactly R^2
+    (see :func:`_r2_terms`). For 2-D targets ``per_point`` is ``None``.
 
     Convergence warnings from L-BFGS are not silenced. The largest ``C`` on the grid is close to
     unregularised and may not converge within ``max_iter`` on separable data; that candidate then
@@ -226,8 +229,8 @@ def linear_probe(
         )
         value = float(correct.mean())
         return (value, correct) if return_per_point else value
-    value = _probe_regression(Ztr, y_train, Zte, y_test)
-    return (value, None) if return_per_point else value
+    value, per_point = _probe_regression(Ztr, y_train, Zte, y_test)
+    return (value, per_point) if return_per_point else value
 
 
 # A column whose training standard deviation is below this fraction of the largest column's is
@@ -290,7 +293,48 @@ def _probe_regression(Ztr, y_train, Zte, y_test) -> float:
     if ytr.ndim == 2 and ytr.shape[1] == 1:
         ytr, yte = ytr[:, 0], yte.reshape(len(yte), -1)[:, 0]
     model = RidgeCV(alphas=_PROBE_ALPHAS).fit(Ztr, ytr)
-    return float(r2_score(yte, model.predict(Zte), multioutput="uniform_average"))
+    pred = model.predict(Zte)
+    value = float(r2_score(yte, pred, multioutput="uniform_average"))
+    return value, (_r2_terms(yte, pred) if yte.ndim == 1 else None)
+
+
+def _r2_terms(y, pred) -> np.ndarray:
+    """Per-point terms ``1 - (y_i - pred_i)^2 / var(y)``, whose mean is R^2.
+
+    With a fixed test set the denominator is a constant, so a paired bootstrap over these terms
+    resamples R^2 differences as differences of squared errors.
+    """
+    y = np.asarray(y, dtype=np.float64)
+    v = float(np.mean((y - y.mean()) ** 2))
+    if v == 0.0:
+        raise ValueError("R^2 is undefined for constant test targets")
+    return 1.0 - (y - np.asarray(pred, dtype=np.float64)) ** 2 / v
+
+
+def knn_regression_r2(
+    Z_train, y_train, Z_test, y_test, k: int = 10, metric: str = "cosine",
+    return_per_point: bool = False,
+):
+    """Test R^2 of ``k``-nearest-neighbour regression (mean target of the neighbours).
+
+    Neighbours of each test point are searched among the training points. Targets must be
+    continuous and 1-D (integers are accepted and treated as numbers). With
+    ``return_per_point=True`` the result is ``(r2, terms)``, with the terms of :func:`_r2_terms`.
+    """
+    from sklearn.neighbors import KNeighborsRegressor
+
+    Ztr, Zte = _to_numpy(Z_train), _to_numpy(Z_test)
+    _check_same_dim(Ztr, Zte)
+    ytr = np.asarray(_labels_to_numpy(y_train), dtype=np.float64)
+    yte = np.asarray(_labels_to_numpy(y_test), dtype=np.float64)
+    if ytr.ndim != 1 or yte.ndim != 1:
+        raise ValueError("knn_regression_r2 needs 1-D targets")
+    _check_rows(Ztr, ytr, "train")
+    _check_rows(Zte, yte, "test")
+    reg = KNeighborsRegressor(n_neighbors=min(k, len(Ztr)), metric=metric, algorithm="brute")
+    terms = _r2_terms(yte, reg.fit(Ztr, ytr).predict(Zte))
+    value = float(terms.mean())
+    return (value, terms) if return_per_point else value
 
 
 def recall_at_k(

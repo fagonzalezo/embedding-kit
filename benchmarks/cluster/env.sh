@@ -19,7 +19,7 @@ CPUS=${SLURM_CPUS_PER_TASK:-2}
 export OPENBLAS_NUM_THREADS=$(( CPUS > 1 ? CPUS / 2 : 1 ))
 
 # Feature-extraction sets: GPU ones (images, text) and CPU ones (ANN-Benchmarks downloads).
-GPU_SETS=(cifar100_dinov2 stl10_clip banking77_mpnet stsb_mpnet)
+GPU_SETS=(cifar100_dinov2 stl10_clip banking77_mpnet stsb_mpnet yelp_mpnet fluorescence_esm2)
 CPU_SETS=(glove100 sift128 gist960)
 # Datasets of experiment E1 (one array task each).
 E1_SETS=(pets_resnet50 digits synthetic_anisotropic cifar100_dinov2 stl10_clip banking77_mpnet stsb_mpnet)

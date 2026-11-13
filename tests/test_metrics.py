@@ -541,7 +541,8 @@ class TestReturnPerPoint:
         y = X @ rng.normal(size=4)
         Xtr, ytr, Xte, yte = split(X, y)
         v3, pp = M.linear_probe(Xtr, ytr, Xte, yte, return_per_point=True)
-        assert pp is None
+        # Regression: terms 1 - e_i^2 / var(y_test), whose mean is R^2 (phase 6).
+        assert pp.shape == (len(yte),) and pp.mean() == pytest.approx(v3)
         assert v3 == M.linear_probe(Xtr, ytr, Xte, yte)
 
     def test_recall_at_k(self):

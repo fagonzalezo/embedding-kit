@@ -20,6 +20,12 @@ Sets:
   ``val_pairs_a``, ``val_pairs_b``, ``val_scores`` (used for selection).
 - ``glove100``, ``sift128``, ``gist960``: ANN-Benchmarks vectors (train / test as published),
   unlabelled.
+- ``yelp_mpnet`` (E8, regression with heavy ties): Yelp review stars, a random 20k / 5k subset
+  (seed 0) of ``Yelp/yelp_review_full``, all-mpnet-base-v2 (768-d); targets 1.0 to 5.0.
+- ``fluorescence_esm2`` (E8, continuous regression): TAPE GFP fluorescence
+  (``proteinea/fluorescence``, train 21,446 / test 27,217, as published: the test sequences have
+  more mutations than the training ones), ESM-2 35M mean-pooled over residues (480-d); targets
+  ``log_fluorescence``.
 """
 
 from __future__ import annotations
@@ -44,6 +50,7 @@ MODELS = {
     "dinov2": "facebook/dinov2-base",
     "clip": "openai/clip-vit-base-patch32",
     "mpnet": "sentence-transformers/all-mpnet-base-v2",
+    "esm2": "facebook/esm2_t12_35M_UR50D",
 }
 ANN = {
     "glove100": "glove-100-angular",
@@ -242,6 +249,60 @@ def stsb_mpnet(root: Path, device: str, batch_size: int) -> tuple[dict, dict]:
                         n_val_pairs=len(ds["validation"]))
 
 
+def yelp_mpnet(root: Path, device: str, batch_size: int) -> tuple[dict, dict]:
+    from datasets import load_dataset
+
+    ds = load_dataset("Yelp/yelp_review_full", cache_dir=str(root / "raw" / "hf_datasets"))
+    rng = np.random.default_rng(0)
+    encode = _sentence_encoder(device)
+    arrays = {}
+    for split, n, key in (("train", 20_000, "train"), ("test", 5_000, "test")):
+        part = ds[split]
+        idx = np.sort(rng.choice(len(part), n, replace=False))
+        rows = part.select(idx.tolist())
+        arrays[f"X_{key}"] = encode(rows["text"], batch_size)
+        arrays[f"y_{key}"] = np.asarray(rows["label"], dtype=np.float64) + 1.0  # 1..5 stars
+        arrays[f"idx_{key}"] = idx
+    return arrays, dict(model=MODELS["mpnet"], hf_dataset="Yelp/yelp_review_full",
+                        target="stars 1-5", subset="random 20000 train / 5000 test, seed 0",
+                        normalized=False, pooling="mean, Normalize module removed",
+                        max_seq_length=384)
+
+
+def fluorescence_esm2(root: Path, device: str, batch_size: int) -> tuple[dict, dict]:
+    import torch
+    from datasets import load_dataset
+    from transformers import AutoModel, AutoTokenizer
+
+    ds = load_dataset("proteinea/fluorescence", cache_dir=str(root / "raw" / "hf_datasets"))
+    tok = AutoTokenizer.from_pretrained(MODELS["esm2"])
+    model = AutoModel.from_pretrained(MODELS["esm2"]).to(device).eval()
+
+    @torch.no_grad()
+    def encode(seqs):
+        out = []
+        for start in range(0, len(seqs), batch_size):
+            batch = tok(list(seqs[start: start + batch_size]), return_tensors="pt", padding=True)
+            batch = {k: v.to(device) for k, v in batch.items()}
+            h = model(**batch).last_hidden_state
+            # Mean over residues: drop <cls>, <eos> and padding.
+            mask = batch["attention_mask"].clone()
+            mask[:, 0] = 0
+            mask[torch.arange(len(mask)), batch["attention_mask"].sum(1) - 1] = 0
+            m = mask.unsqueeze(-1).to(h.dtype)
+            out.append(((h * m).sum(1) / m.sum(1)).float().cpu().numpy())
+        return np.concatenate(out)
+
+    arrays = {}
+    for split, key in (("train", "train"), ("test", "test")):
+        part = ds[split]
+        arrays[f"X_{key}"] = encode(part["primary"])
+        arrays[f"y_{key}"] = np.asarray(part["log_fluorescence"], dtype=np.float64)
+    return arrays, dict(model=MODELS["esm2"], hf_dataset="proteinea/fluorescence",
+                        target="log_fluorescence", pooling="mean over residues (no cls/eos)",
+                        splits="TAPE train / test as published")
+
+
 # --- ANN-Benchmarks -----------------------------------------------------------------------------
 
 
@@ -273,6 +334,8 @@ BUILDERS = {
     "stl10_clip": stl10_clip,
     "banking77_mpnet": banking77_mpnet,
     "stsb_mpnet": stsb_mpnet,
+    "yelp_mpnet": yelp_mpnet,
+    "fluorescence_esm2": fluorescence_esm2,
     **{name: _ann(name) for name in ANN},
 }
 
