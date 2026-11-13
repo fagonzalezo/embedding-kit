@@ -82,6 +82,8 @@ def validation_split(ds, fraction: float, seed: int = 0):
 
     idx = np.arange(len(ds.X_train))
     stratify = ds.y_train if ds.meta.get("task") == "classification" else None
+    if stratify is not None and np.bincount(np.unique(stratify, return_inverse=True)[1]).min() < 2:
+        stratify = None  # a class with one row (E8 label subsets) cannot be split
     if ds.meta.get("task") == "sts":
         return np.arange(len(ds.X_train)), np.arange(0)  # validation comes from meta["val_split"]
     tr, va = train_test_split(idx, test_size=fraction, random_state=seed, stratify=stratify)
@@ -227,7 +229,7 @@ def _one_line(record) -> str:
     by_metric: dict[str, list[float]] = {}
     for r in rows:
         by_metric.setdefault(r["metric"], []).append(r["value"])
-    keys = [k for k in ("knn_accuracy_euclidean", "knn_accuracy", "linear_probe",
+    keys = [k for k in ("knn_accuracy_euclidean", "knn_accuracy", "linear_probe", "knn_r2",
                         "trustworthiness") if k in by_metric][:3]
     return ", ".join(f"{k} {np.mean(by_metric[k]):.3f}" for k in keys)
 

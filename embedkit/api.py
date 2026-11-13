@@ -240,6 +240,8 @@ class EmbedKit:
     def _resolve_monitor(self) -> str:
         if self.monitor != "auto":
             return self.monitor
+        if self._resolve_val_split() <= 0:  # nothing held out: a label-free statistic, logged
+            return "k_skewness"
         return {"supervised": "val_knn_accuracy", "regression": "val_ridge_r2"}.get(
             self.mode, "k_skewness")
 

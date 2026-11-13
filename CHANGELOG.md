@@ -20,6 +20,20 @@ Phase 6 of `docs/IMPLEMENTATION_PLAN.md`: supervised and regression modes.
 - Trainer monitors `train_nc1` and `val_nc1` (neural-collapse NC1 on the training subsample and the
   validation rows); supervised `EmbedKit` logs both in `history`. `val_knn_accuracy` now rejects
   continuous labels with a clear message.
+- `knn_regression_r2` and the `knn_r2` protocol metric (10-NN regression); the regression ridge probe
+  returns per-point terms `1 - e_i^2 / var(y_test)` (mean = R^2), so `compare` bootstraps it.
+- Benchmark E8 (`run.py --experiment e8`, `report_e8.py`, `cluster/e8.slurm.sh`): supervised arms
+  against the new default and the previous one, LDA, label noise, superclass fitting, label
+  efficiency (`<name>__lpc<k>`), and regression arms (the 0.1.2 RnC in `legacy_losses.py`) on
+  `synthetic_regression[_ties]`, `yelp_mpnet` and `fluorescence_esm2`.
+
+### Fixed
+- Early stopping with ties: of evaluations with the same best monitor value, the latest one's
+  weights are restored (was the first). On a small validation split kNN accuracy often plateaus, and
+  restoring the first plateau epoch kept the refiner near its initialisation. Ties still do not
+  reset the patience.
+- `EmbedKit(mode="supervised" | "regression", early_stopping_patience=None)` no longer fails: with
+  nothing held out, `monitor="auto"` falls back to `k_skewness`.
 
 ## 0.4.0 (unreleased)
 

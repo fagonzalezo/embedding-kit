@@ -29,6 +29,15 @@ E2_SETS=(cifar100_dinov2 pets_resnet50 banking77_mpnet synthetic_anisotropic)
 E6_TASKS=(cifar100_dinov2:0/3 cifar100_dinov2:1/3 cifar100_dinov2:2/3 banking77_mpnet stsb_mpnet
           pets_resnet50 synthetic_anisotropic stl10_clip digits)
 
+# Tasks of experiment E8 (phase 6). Longest first; label-efficiency sets grouped with "+".
+E8_TASKS=(cifar100_dinov2:0/4 cifar100_dinov2:1/4 cifar100_dinov2:2/4 cifar100_dinov2:3/4
+          yelp_mpnet fluorescence_esm2 banking77_mpnet stl10_clip pets_resnet50
+          synthetic_anisotropic synthetic_regression+synthetic_regression_ties+digits
+          cifar100_dinov2__lpc100+cifar100_dinov2__lpc20
+          cifar100_dinov2__lpc5+cifar100_dinov2__lpc1+banking77_mpnet__lpc1+banking77_mpnet__lpc5
+          banking77_mpnet__lpc20+banking77_mpnet__lpc100+stl10_clip__lpc1+stl10_clip__lpc5
+          stl10_clip__lpc20+stl10_clip__lpc100)
+
 # Datasets of experiment E7 (one array task each). Longest first.
 E7_SETS=(cifar100_dinov2 banking77_mpnet stsb_mpnet pets_resnet50 synthetic_anisotropic stl10_clip digits)
 

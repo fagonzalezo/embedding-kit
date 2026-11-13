@@ -111,7 +111,7 @@ class _Prefix:
         self.ek, self.dim = ek, dim
 
     def fit(self, X, y=None):
-        self.ek.fit(X)
+        self.ek.fit(X, y)  # labels reach supervised models (E8); None for self-supervised ones
         return self
 
     def transform(self, X):
@@ -281,4 +281,172 @@ def e7_methods(dataset) -> list[Method]:
     return m
 
 
-EXPERIMENTS: dict[str, Callable] = {"e1": e1_methods, "e6": e6_methods, "e7": e7_methods}
+class _LDA:
+    """Linear discriminant analysis as a supervised transform (E8 baseline): ``min(C - 1, d)``
+    discriminant directions, shrinkage covariance (Ledoit-Wolf), so it also works when a class
+    has fewer rows than dimensions."""
+
+    def fit(self, X, y):
+        from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+
+        y = np.asarray(y)
+        k = min(len(np.unique(y)) - 1, X.shape[1])
+        self.lda_ = LinearDiscriminantAnalysis(n_components=k, solver="eigen",
+                                               shrinkage="auto").fit(X, y)
+        return self
+
+    def transform(self, X):
+        return self.lda_.transform(X).astype(np.float32)
+
+    def get_params(self) -> dict:
+        return dict(solver="eigen", shrinkage="auto")
+
+
+class _FitLabels:
+    """Fit ``transform`` with substituted labels; evaluation keeps the true ones (E8).
+
+    ``kind="coarse"``: each fine label replaced by its superclass (``mapping``, fine -> coarse).
+    ``kind="noise"``: a fraction ``rate`` of the labels replaced by a different class drawn
+    uniformly (fixed by ``seed``). The kNN gallery and the probe use the clean labels, so the
+    result measures what the representation learned, not how a noisy classifier scores.
+    """
+
+    def __init__(self, transform, kind: str, mapping=None, rate: float = 0.0, seed: int = 0):
+        self.transform_, self.kind, self.mapping, self.rate, self.seed = (
+            transform, kind, mapping, rate, seed)
+
+    def fit(self, X, y):
+        y = np.asarray(y)
+        if self.kind == "coarse":
+            y_fit = np.asarray([self.mapping[int(v)] for v in y])
+        else:
+            rng = np.random.default_rng(self.seed)
+            classes = np.unique(y)
+            y_fit = y.copy()
+            flip = np.flatnonzero(rng.random(len(y)) < self.rate)
+            for i in flip:
+                y_fit[i] = rng.choice(classes[classes != y[i]])
+        self.transform_.fit(X, y_fit)
+        return self
+
+    def transform(self, X):
+        return self.transform_.transform(X)
+
+    def get_params(self) -> dict:
+        get = getattr(self.transform_, "get_params", None)
+        return {**(get() if callable(get) else {}), "fit_labels": self.kind, "rate": self.rate}
+
+
+E8_NOISE = (0.1, 0.2, 0.4)
+E8_SPREAD = (0.25, 0.5)
+E8_CLASS_METRICS = ("knn_accuracy", "knn_accuracy_euclidean", "linear_probe", "nc1")
+
+
+def _e8_dim(d_in: int) -> int:
+    return min(128, d_in // 2)
+
+
+def e8_methods(dataset) -> list[Method]:
+    """E8: supervised and regression modes (phase 6 of the plan, review section 5).
+
+    Every refiner arm is ``EmbedKit`` in the dataset's mode at one d (``min(128, D // 2)``) with
+    one factor changed from the phase 6 default (``supcon`` / ``rnc``). Classification: the
+    previous default (``prev``: MLP, SupCon + 0.5 AlignUniform, no early stopping, as in E1), the
+    uniformity term, the MLP, no early stopping, the spread term (Chen et al. 2022), nested
+    output; LDA and raw as baselines; label noise (``-noise<p>``) and, on CIFAR-100, fitting on
+    the 20 superclasses (``-coarse``), both scored with the clean fine labels. Label-efficiency
+    variants (``<name>__lpc<k>``) run a reduced grid. Regression: the 0.1.2 RnC with the tie bug
+    (``rnc_old``), no early stopping, Gaussian-noise views instead of kNN pairs, the MLP; raw and
+    PCA as baselines.
+    """
+    from embedkit import EmbedKit
+    from embedkit.improvement.augmentation import GaussianNoise
+    from embedkit.improvement.losses import (
+        AlignUniformLoss,
+        CombinedLoss,
+        SupConLoss,
+    )
+
+    d_in = dataset.X_train.shape[1]
+    k = _e8_dim(d_in)
+    task = dataset.meta.get("task")
+    m: list[Method] = [Method("raw", lambda s, ds, dev: B.Identity(), family="raw",
+                              metrics=E8_CLASS_METRICS if task == "classification" else None)]
+
+    def refiner(name, family, mode, wrap=None, **kw):
+        def make(s, ds, dev):
+            extra = {key: (v() if callable(v) else v) for key, v in kw.items()}
+            t = EmbedKit(mode=mode, target_dim=extra.pop("target_dim", k), random_state=s,
+                         device=dev, **extra)
+            return wrap(t, s) if wrap else t
+        return Method(name, make, deterministic=False, fit_with_labels=True, family=family,
+                      params=dict(mode=mode, target_dim=k, **{
+                          key: (repr(v()) if callable(v) else v) for key, v in kw.items()}),
+                      metrics=E8_CLASS_METRICS if mode == "supervised" else None)
+
+    if task == "regression":
+        from legacy_losses import RankNContrastLoss012
+
+        m.append(Method(f"pca-{k}", lambda s, ds, dev: B.PCAReduce(k), family="pca"))
+        m += [
+            refiner("rnc", "rnc", "regression"),
+            refiner("rnc_old", "rnc_old", "regression", loss=lambda: RankNContrastLoss012()),
+            refiner("rnc_noes", "rnc_noes", "regression", early_stopping_patience=None),
+            refiner("rnc_noise", "rnc_noise", "regression",
+                    augmentation=lambda: GaussianNoise(std=0.05)),
+            refiner("rnc_mlp", "rnc_mlp", "regression", architecture="mlp"),
+        ]
+        return m
+    if task != "classification":
+        raise ValueError(f"E8 needs a classification or regression set, got {task!r}")
+
+    lda = Method("lda", lambda s, ds, dev: _LDA(), fit_with_labels=True, family="lda",
+                 metrics=E8_CLASS_METRICS)
+    supcon = refiner("supcon", "supcon", "supervised")
+    prev = refiner("prev", "prev", "supervised", architecture="mlp", early_stopping_patience=None,
+                   loss=lambda: CombinedLoss([(SupConLoss(0.07), 1.0), (AlignUniformLoss(), 0.5)]))
+    noes = refiner("supcon_noes", "supcon_noes", "supervised", early_stopping_patience=None)
+    if "labels_per_class" in dataset.meta:  # label efficiency: a reduced grid
+        # LDA needs more rows than classes.
+        return m + ([lda] if dataset.meta["labels_per_class"] >= 2 else []) + [supcon, prev, noes]
+
+    m += [lda, supcon, prev, noes,
+          refiner("supcon_au", "supcon_au", "supervised",
+                  loss=lambda: CombinedLoss([(SupConLoss(0.07), 1.0), (AlignUniformLoss(), 0.5)])),
+          refiner("supcon_mlp", "supcon_mlp", "supervised", architecture="mlp")]
+    for w in E8_SPREAD:
+        m.append(refiner(f"spread{w}", "supcon_spread", "supervised",
+                         loss=lambda w=w: SupConLoss(0.07, spread_weight=w)))
+    # Nested output: one model at min(256, D), read at k (against supcon at k).
+    top = min(MATRYOSHKA_MAX_DIM, d_in)
+    if top > k:
+        m.append(Method(
+            f"nested-d{k}",
+            lambda s, ds, dev: _Prefix(EmbedKit(mode="supervised", target_dim=top,
+                                                nested_dims=(k,), random_state=s, device=dev), k),
+            deterministic=False, fit_with_labels=True, family="supcon_nested",
+            params=dict(target_dim=top, dim=k), metrics=E8_CLASS_METRICS))
+
+    def wrapped(base, suffix, wrap):
+        return Method(f"{base.name}-{suffix}", lambda s, ds, dev: wrap(base.make(s, ds, dev), s),
+                      deterministic=base.deterministic, fit_with_labels=True,
+                      family=f"{base.family}-{suffix.rstrip('0123456789')}",
+                      params={**base.params, "fit_labels": suffix}, metrics=E8_CLASS_METRICS)
+
+    for rate in E8_NOISE:
+        tag = f"noise{int(rate * 100)}"
+        for base in (supcon, lda):
+            m.append(wrapped(base, tag, lambda t, s, rate=rate: _FitLabels(t, "noise", rate=rate,
+                                                                           seed=s)))
+    if "y_extra_coarse_train" in dataset.meta:
+        fine, coarse = dataset.y_train, dataset.meta["y_extra_coarse_train"]
+        mapping = {int(f): int(c) for f, c in zip(fine, coarse)}
+        spread = next(x for x in m if x.name == f"spread{E8_SPREAD[-1]}")
+        au = next(x for x in m if x.name == "supcon_au")
+        for base in (supcon, spread, au, lda):
+            m.append(wrapped(base, "coarse", lambda t, s: _FitLabels(t, "coarse", mapping)))
+    return m
+
+
+EXPERIMENTS: dict[str, Callable] = {"e1": e1_methods, "e6": e6_methods, "e7": e7_methods,
+                                    "e8": e8_methods}

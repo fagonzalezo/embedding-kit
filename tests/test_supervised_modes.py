@@ -110,3 +110,34 @@ def test_spread_keeps_more_within_class_variability():
                     random_state=0, lr=1e-2).fit(X, y)
         out[w] = t.history["train_nc1"][-1]
     assert out[0.5] > out[0.0]
+
+
+def test_no_early_stopping_falls_back_to_label_free_monitor():
+    X, y = _classes()
+    ek = EmbedKit(mode="supervised", target_dim=4, epochs=2, eval_every=1,
+                  early_stopping_patience=None, **KW).fit(X, y)
+    assert ek.monitor_ == "k_skewness" and ek._trainer.val_split == 0.0
+
+
+def test_tied_best_keeps_latest_weights(monkeypatch):
+    # A monitor stuck at one value: the restored weights are the last evaluation's.
+    import embedkit.improvement.trainer as T
+
+    monkeypatch.setitem(T.MONITORS, "isotropy", (lambda Z, **_: 0.5, "max"))
+    X, y = _classes()
+    t = Trainer(EmbeddingRefiner(16, 4, architecture="linear"), GaussianNoise(0.1), SupConLoss(),
+                epochs=6, eval_every=2, eval_metrics=["isotropy"], monitor="isotropy",
+                early_stopping_patience=10, device="cpu", random_state=0).fit(X, y)
+    assert t.best_epoch_ == 6 and t.stopped_epoch_ == 6
+    # Ties do not reset the patience: with patience 2 training stops at the third evaluation.
+    t = Trainer(EmbeddingRefiner(16, 4, architecture="linear"), GaussianNoise(0.1), SupConLoss(),
+                epochs=20, eval_every=2, eval_metrics=["isotropy"], monitor="isotropy",
+                early_stopping_patience=2, device="cpu", random_state=0).fit(X, y)
+    assert t.stopped_epoch_ == 6
+
+
+def test_nc1_monitor_nan_with_one_class():
+    from embedkit.improvement.trainer import _monitor_val_nc1
+
+    Z = np.random.default_rng(0).standard_normal((5, 3))
+    assert np.isnan(_monitor_val_nc1(Z, y=np.zeros(5, dtype=int)))

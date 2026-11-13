@@ -91,20 +91,23 @@ def _monitor_val_ridge_r2(Z, *, y, Z_ref, y_ref, **_) -> float:
     return float(linear_probe(Z_ref, y_ref, Z, y, task="regression"))
 
 
-def _monitor_val_nc1(Z, *, y, **_) -> float:
+def _nc1_or_nan(Z, y) -> float:
     from embedkit.evaluation.metrics import nc1
 
+    # NaN, not an error, when the rows hold fewer than two classes (tiny validation splits).
+    return float(nc1(Z, y)) if len(np.unique(y)) >= 2 else float("nan")
+
+
+def _monitor_val_nc1(Z, *, y, **_) -> float:
     if y is None:
         raise ValueError("val_nc1 needs labels and val_split > 0")
-    return float(nc1(Z, y))
+    return _nc1_or_nan(Z, y)
 
 
 def _monitor_train_nc1(Z, *, Z_ref, y_ref, **_) -> float:
-    from embedkit.evaluation.metrics import nc1
-
     if Z_ref is None or y_ref is None:
         raise ValueError("train_nc1 needs labels")
-    return float(nc1(Z_ref, y_ref))
+    return _nc1_or_nan(Z_ref, y_ref)
 
 
 MONITORS: dict[str, tuple[MonitorFn, Literal["min", "max"]]] = {
@@ -202,7 +205,8 @@ class Trainer:
         Name in :data:`MONITORS`. Its direction (minimise or maximise) comes from the registry.
     restore_best:
         When early stopping is enabled, load the weights of the best evaluation at the end of
-        :meth:`fit`, whether training stopped early or ran out of epochs.
+        :meth:`fit`, whether training stopped early or ran out of epochs. Of evaluations with
+        the same best score, the latest wins; only a strict improvement resets the patience.
     device:
         ``None`` selects CUDA, then Apple MPS, then CPU. If the loss cannot run on MPS, the
         trainer falls back to CPU with a warning.
@@ -474,6 +478,12 @@ class Trainer:
                     best_state = _copy_state(self.model)
             else:
                 patience_count += 1
+                if score == self.best_score_:
+                    # A tie keeps the later weights (a coarse monitor such as kNN accuracy on a
+                    # small validation split often plateaus), but does not reset the patience.
+                    self.best_epoch_ = epoch
+                    if track_best and self.restore_best:
+                        best_state = _copy_state(self.model)
 
             if track_best and patience_count >= self.early_stopping_patience:
                 break
