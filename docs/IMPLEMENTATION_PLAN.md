@@ -640,9 +640,9 @@ Release as 0.5.0.
 | 5.4 | Structure preservation, VICReg | dropped (gate C) |
 | 5.5 | Hubness reduction | done (2026-11-13): implemented; no kNN gain on the E1 sets, no default change |
 | 5.6 | Run E6 and E7 | done (2026-11-13; `docs/BENCHMARK_E6_E7.md`); self-supervised default is PCA |
-| 6.1 | Supervised defaults | not started |
-| 6.2 | Class collapse | not started |
-| 6.3 | Run E8 | not started |
+| 6.1 | Supervised defaults | implemented (2026-11-13); judged in E8 |
+| 6.2 | Class collapse | implemented (2026-11-13): `train_nc1`/`val_nc1`, `SupConLoss(spread_weight)` |
+| 6.3 | Run E8 | running (job 3079012, 2026-11-13) |
 | 7.1 | Run E4 | not started |
 | 7.2 | Selection-based auto-configuration | not started |
 | 7.3 | Robustness and scaling | not started |
@@ -841,6 +841,39 @@ Release as 0.5.0.
   stays as `method="refiner"`, with `nested_dims` for WP 5.3. Effort moves to phases 4, 6 and 7
   after the 0.4.0 release. Not yet benchmarked: supervised mode with the `linear` architecture (E6
   is self-supervised only); phase 6 (E8) covers it.
+
+### Phase 6 notes (2026-11-13)
+
+- **Started 2026-11-13, by the user's choice over phase 4.** Regression data chosen by the user:
+  a synthetic set with a continuous and a 5-level tied target (local), Yelp review stars
+  (`yelp_mpnet`, 20k / 5k, mpnet) and TAPE GFP fluorescence (`fluorescence_esm2`, ESM-2 35M,
+  21k / 27k, test sequences carry more mutations). The rerun of `sup_rnc` in kbn-histo-survival
+  (`docs/BUG-rnc-ties.md`) is handed over to that project and not run here.
+- **WP 6.1**: `EmbedKit(mode="supervised")` uses `SupConLoss` alone and `monitor="auto"` /
+  `early_stopping_patience="auto"`: `val_knn_accuracy`, patience 10, 10% held out, best weights
+  restored. `mode="regression"`: `RankNContrastLoss`, `val_ridge_r2`. With `early_stopping_patience=None`
+  nothing is held out and the logged monitor falls back to `k_skewness`.
+- **WP 6.2**: `train_nc1` and `val_nc1` monitors (logged by supervised `EmbedKit`);
+  `SupConLoss(spread_weight=w)`, `(1 - w) SupCon + w` class-conditional InfoNCE (Chen et al. 2022).
+- **Trainer fix found by the E8 smoke run**: early stopping restored the *first* of tied best
+  evaluations; on digits validation kNN accuracy (90 rows) plateaued from epoch 5, so every arm
+  came back at its PCA initialisation. Ties now keep the latest weights without resetting patience.
+- **E8 design** (`benchmarks/experiments.py:e8_methods`, `report_e8.py`): one d per set,
+  min(128, D // 2). Classification arms change one factor from `supcon` (the new default):
+  `prev` (MLP, SupCon + 0.5 AlignUniform, no early stopping: the E1 configuration),
+  `supcon_au`, `supcon_mlp`, `supcon_noes`, `spread{0.25,0.5}` (selected on validation),
+  `nested-d<k>` (one model at min(256, D) read at k), with raw and LDA (shrinkage) as baselines.
+  Label noise 10/20/40% and CIFAR-100 superclass fitting change only the fit labels; evaluation
+  uses clean fine labels. Label efficiency: `<set>__lpc{1,5,20,100}` on CIFAR-100, Banking77 and
+  STL-10, everything restricted to the labelled rows. Regression arms change one factor from `rnc`:
+  `rnc_old` (0.1.2 loss, `benchmarks/legacy_losses.py`), `rnc_noes`, `rnc_noise` (Gaussian views
+  instead of kNN pairs), `rnc_mlp`; raw and PCA as baselines; metrics ridge R^2 (`linear_probe`,
+  now with per-point terms) and 10-NN R^2 (`knn_r2`). Rule: a change of default needs wins on
+  the first metric on at least half the datasets, as in phase 5.
+- **Smoke run (1 seed, local) to watch for**: an MLP refiner beat the linear one in supervised
+  mode on the synthetic set (+0.017 kNN) and by a wide margin in regression (synthetic ties:
+  ridge R^2 0.860 against 0.696); the linear RnC refiner lost to ridge on raw (-0.068) while
+  raising 10-NN R^2 from 0.44 to 0.75. The 0.1.2 RnC tied the fixed one there.
 
 ## Open points for the next session
 
