@@ -263,20 +263,40 @@ LOCAL = ("pets_resnet50", "digits", "synthetic_anisotropic", "synthetic_regressi
          "synthetic_regression_ties")
 
 
+def row_subset(ds: Dataset, n: int, seed: int = 0) -> Dataset:
+    """Keep ``n`` random training rows; the test split is unchanged.
+
+    The small-sample regression variants of E8 (``<name>__n<k>``), the regression counterpart
+    of :func:`label_subset`.
+    """
+    if n >= len(ds.X_train):
+        raise ValueError(f"{ds.name}: n={n} is not below the {len(ds.X_train)} training rows")
+    keep = np.sort(np.random.default_rng(seed).permutation(len(ds.X_train))[:n])
+    meta = dict(ds.meta, train_rows=n, base_dataset=ds.name, n_train_full=len(ds.X_train))
+    for key in [k for k in meta if k.startswith("y_extra_") and k.endswith("_train")]:
+        meta[key] = meta[key][keep]
+    return Dataset(f"{ds.name}__n{n}", ds.X_train[keep], ds.y_train[keep], ds.X_test,
+                   ds.y_test, meta)
+
+
 def load(name: str, root: str | os.PathLike | None = None) -> Dataset:
     """Load a benchmark dataset by name. Raises :class:`DatasetUnavailableError` if it is absent.
 
     ``<name>__lpc<k>`` is the classification set ``<name>`` with ``k`` labelled training rows
-    per class (:func:`label_subset`).
+    per class (:func:`label_subset`); ``<name>__n<k>`` keeps ``k`` training rows of any set
+    (:func:`row_subset`).
     """
     base, sep, variant = name.partition("__")
     if sep:
-        if not variant.startswith("lpc") or not variant[3:].isdigit():
-            raise KeyError(f"Unknown dataset variant {variant!r} in {name!r} (expected lpc<k>)")
-        ds = load(base, root)
-        if ds.meta.get("task") != "classification":
-            raise ValueError(f"{name}: label subsets need a classification set")
-        return label_subset(ds, int(variant[3:]))
+        if variant.startswith("lpc") and variant[3:].isdigit():
+            ds = load(base, root)
+            if ds.meta.get("task") != "classification":
+                raise ValueError(f"{name}: label subsets need a classification set")
+            return label_subset(ds, int(variant[3:]))
+        if variant.startswith("n") and variant[1:].isdigit():
+            return row_subset(load(base, root), int(variant[1:]))
+        raise KeyError(f"Unknown dataset variant {variant!r} in {name!r} "
+                       "(expected lpc<k> or n<k>)")
     if name not in LOADERS:
         raise KeyError(f"Unknown dataset {name!r}. Available: {sorted(LOADERS)}")
     return LOADERS[name](data_root(root))

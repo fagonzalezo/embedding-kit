@@ -360,6 +360,9 @@ def e8_methods(dataset) -> list[Method]:
     PCA as baselines. Both modes also run the residual adapter (``supcon_res``, ``rnc_res``:
     the PCA-initialised linear map plus a zero-initialised MLP), added after the first E8 results
     showed the plain MLP ahead in regression, to tell the non-linearity from the PCA start.
+    A second round adds both to the label-efficiency grid, runs the regression architectures on
+    small training sets (``<name>__n<k>``), and combines the regression MLP with Gaussian-noise
+    views (``rnc_mlp_noise``) and with no early stopping (``rnc_mlp_noes``).
     """
     from embedkit import EmbedKit
     from embedkit.improvement.augmentation import GaussianNoise
@@ -399,6 +402,13 @@ def e8_methods(dataset) -> list[Method]:
             refiner("rnc_mlp", "rnc_mlp", "regression", architecture="mlp"),
             refiner("rnc_res", "rnc_res", "regression", architecture="residual"),
         ]
+        if "train_rows" in dataset.meta:  # small training sets: architecture only
+            return [x for x in m if x.name in ("raw", f"pca-{k}", "rnc", "rnc_mlp", "rnc_res")]
+        # The MLP with each of the other one-factor changes that won (a second round).
+        m += [refiner("rnc_mlp_noise", "rnc_mlp_noise", "regression", architecture="mlp",
+                      augmentation=lambda: GaussianNoise(std=0.05)),
+              refiner("rnc_mlp_noes", "rnc_mlp_noes", "regression", architecture="mlp",
+                      early_stopping_patience=None)]
         return m
     if task != "classification":
         raise ValueError(f"E8 needs a classification or regression set, got {task!r}")
@@ -411,7 +421,10 @@ def e8_methods(dataset) -> list[Method]:
     noes = refiner("supcon_noes", "supcon_noes", "supervised", early_stopping_patience=None)
     if "labels_per_class" in dataset.meta:  # label efficiency: a reduced grid
         # LDA needs more rows than classes.
-        return m + ([lda] if dataset.meta["labels_per_class"] >= 2 else []) + [supcon, prev, noes]
+        return m + ([lda] if dataset.meta["labels_per_class"] >= 2 else []) + [
+            supcon, prev, noes,
+            refiner("supcon_mlp", "supcon_mlp", "supervised", architecture="mlp"),
+            refiner("supcon_res", "supcon_res", "supervised", architecture="residual")]
 
     m += [lda, supcon, prev, noes,
           refiner("supcon_au", "supcon_au", "supervised",

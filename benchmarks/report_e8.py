@@ -30,7 +30,10 @@ from report_gate import _fmt, _stats  # noqa: E402
 
 CLASS_ARMS = ("prev", "supcon_au", "supcon_mlp", "supcon_res", "supcon_noes", "supcon_spread",
               "supcon_nested")
-REG_ARMS = ("rnc_old", "rnc_noes", "rnc_noise", "rnc_mlp", "rnc_res")
+REG_ARMS = ("rnc_old", "rnc_noes", "rnc_noise", "rnc_mlp", "rnc_res", "rnc_mlp_noise",
+            "rnc_mlp_noes")
+# Second round: the regression MLP combined with the other changes, against the MLP alone.
+MLP_COMBOS = ("rnc_mlp_noise", "rnc_mlp_noes")
 # Architecture: the residual adapter against the plain MLP (both against the linear default above).
 ARCH_PAIRS = {"classification": ("supcon_res", "supcon_mlp"), "regression": ("rnc_res", "rnc_mlp")}
 
@@ -91,8 +94,16 @@ def analyse(exp_dir: Path, dataset: str) -> dict:
     res, mlp = ARCH_PAIRS[task]
     arch = ({mt: _cell(test, mt, res, mlp) for mt in (primary, second)}
             if {res, mlp} <= set(test.method) else None)
+    have = set(test.method)
+    combos = {c: {mt: _cell(test, mt, c, "rnc_mlp") for mt in (primary, second)}
+              for c in MLP_COMBOS if {c, "rnc_mlp"} <= have}
+    small = {f"{a} vs {b}": {mt: _cell(test, mt, a, b) for mt in (primary, second)}
+             for a, b in (("rnc_mlp", "rnc"), ("rnc_res", "rnc"), ("rnc_res", "rnc_mlp"),
+                          ("rnc_mlp", "raw"), ("supcon_mlp", "supcon"), ("supcon_res", "supcon"))
+             if {a, b} <= have}
     return dict(task=task, primary=primary, second=second, rows=rows, noise=noise,
-                coarse=coarse, supcon_vs_lda=vs_lda, arch=arch, failed=failed)
+                coarse=coarse, supcon_vs_lda=vs_lda, arch=arch, combos=combos, small=small,
+                failed=failed)
 
 
 def _dim(test, method):
@@ -102,8 +113,9 @@ def _dim(test, method):
 
 def render(results: dict) -> str:
     out = ["# Experiment e8", "", __doc__.split("\n\n", 2)[2].strip(), ""]
-    main = {n: r for n, r in results.items() if "__lpc" not in n}
+    main = {n: r for n, r in results.items() if "__" not in n}
     lpc = {n: r for n, r in results.items() if "__lpc" in n}
+    small = {n: r for n, r in results.items() if re.search(r"__n\d+$", n)}
     for task in ("classification", "regression"):
         sets = {n: r for n, r in main.items() if r["task"] == task}
         if not sets:
@@ -142,6 +154,14 @@ def render(results: dict) -> str:
             v = [a[first["primary"]][0] for a in arch.values()]
             out += ["", f"Residual against MLP on {first['primary']}: {v.count('win')} wins, "
                     f"{v.count('tie')} ties, {v.count('loss')} losses.", ""]
+        combos = {name: r["combos"] for name, r in sets.items() if r["combos"]}
+        if combos:
+            out += ["The regression MLP with a second change, against `rnc_mlp` alone:", "",
+                    f"| Dataset | Arm | {first['primary']} [95% CI] | {first['second']} |",
+                    "|---|---|---|---|"]
+            out += [f"| {name} | {c} | {x[first['primary']][1]} | {x[first['second']][1]} |"
+                    for name, cs in combos.items() for c, x in cs.items()]
+            out.append("")
     for name, r in main.items():
         nc1 = "nc1" in (r["rows"]["default"] or {})
         out += [f"## {name} ({r['task']}; {r['primary']}, also {r['second']})", "",
@@ -178,8 +198,8 @@ def render(results: dict) -> str:
         out.append("")
     if lpc:
         out += ["## Label efficiency (k labelled training rows per class)", "",
-                "| Set | raw | LDA | supcon | prev | supcon_noes | supcon vs raw | "
-                "supcon vs LDA |", "|---|---|---|---|---|---|---|---|"]
+                "| Set | raw | LDA | supcon | prev | supcon_noes | supcon_mlp | supcon_res | "
+                "supcon vs raw | supcon vs LDA |", "|---|---|---|---|---|---|---|---|---|---|"]
         for name in sorted(lpc, key=lambda s: (s.split("__")[0], int(s.split("lpc")[1]))):
             r = lpc[name]
             test_rows = {x["method"]: x for x in [r["rows"]["default"], *r["rows"]["baselines"],
@@ -187,8 +207,33 @@ def render(results: dict) -> str:
             g = lambda m: test_rows[m]["value"] if m in test_rows else ""  # noqa: E731
             vs_raw = test_rows.get("supcon", {}).get("vs_raw")
             out.append(f"| {name} | {g('raw')} | {g('lda')} | {g('supcon')} | {g('prev')} | "
-                       f"{g('supcon_noes')} | {vs_raw[1] if vs_raw else ''} | "
-                       f"{r['supcon_vs_lda']} |")
+                       f"{g('supcon_noes')} | {g('supcon_mlp')} | {g('supcon_res')} | "
+                       f"{vs_raw[1] if vs_raw else ''} | {r['supcon_vs_lda']} |")
+        out.append("")
+        pairs = sorted({p for r in lpc.values() for p in r["small"] if p.startswith("supcon")})
+        if pairs:
+            out += ["Architecture with few labels, on knn_accuracy:", "",
+                    "| Set | " + " | ".join(pairs) + " |", "|---|" + "---|" * len(pairs)]
+            for name in sorted(lpc, key=lambda s: (s.split("__")[0], int(s.split("lpc")[1]))):
+                sm = lpc[name]["small"]
+                out.append(f"| {name} | " + " | ".join(
+                    sm[p]["knn_accuracy"][1] if p in sm else "" for p in pairs) + " |")
+            out.append("")
+    if small:
+        out += ["## Regression with few training rows (``<name>__n<k>``)", "",
+                "| Set | raw | PCA | rnc | rnc_mlp | rnc_res | rnc_mlp vs rnc | rnc_res vs rnc | "
+                "rnc_res vs rnc_mlp | rnc_mlp vs raw |", "|---|" + "---|" * 9]
+        for name in sorted(small, key=lambda s: (s.split("__")[0], int(s.split("__n")[1]))):
+            r = small[name]
+            rows = {x["method"]: x for x in [r["rows"]["default"], *r["rows"]["baselines"],
+                                             *r["rows"]["arms"].values()] if x}
+            g = lambda m: rows[m]["value"] if m in rows else ""  # noqa: E731
+            pca = next((m for m in rows if m.startswith("pca-")), "")
+            c = lambda p: r["small"][p][r["primary"]][1] if p in r["small"] else ""  # noqa: E731
+            out.append(f"| {name} | {g('raw')} | {g(pca)} | {g('rnc')} | {g('rnc_mlp')} | "
+                       f"{g('rnc_res')} | {c('rnc_mlp vs rnc')} | {c('rnc_res vs rnc')} | "
+                       f"{c('rnc_res vs rnc_mlp')} | {c('rnc_mlp vs raw')} |")
+        out += ["", "Scored on linear_probe (ridge R^2)."]
         out.append("")
     return "\n".join(out)
 

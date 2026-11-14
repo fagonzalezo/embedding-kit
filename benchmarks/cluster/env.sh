@@ -45,6 +45,15 @@ E8_TASKS=(cifar100_dinov2:0/4 cifar100_dinov2:1/4 cifar100_dinov2:2/4 cifar100_d
 E8R_TASKS=(cifar100_dinov2@supcon_res
            yelp_mpnet+fluorescence_esm2+synthetic_regression+synthetic_regression_ties@rnc_res
            banking77_mpnet+stl10_clip+pets_resnet50+synthetic_anisotropic+digits@supcon_res)
+# Second round: the MLP and residual arms with few labels, regression with few training rows
+# (__n<k>, whole reduced grid), and the regression MLP combined with noise views / no early stop.
+#   TASKS=E8C_TASKS sbatch --array=0-5%2 e8.slurm.sh
+E8C_TASKS=(yelp_mpnet+fluorescence_esm2@rnc_mlp_noise,rnc_mlp_noes
+           cifar100_dinov2__lpc100+cifar100_dinov2__lpc20+cifar100_dinov2__lpc5+cifar100_dinov2__lpc1@supcon_mlp,supcon_res
+           banking77_mpnet__lpc100+banking77_mpnet__lpc20+banking77_mpnet__lpc5+banking77_mpnet__lpc1@supcon_mlp,supcon_res
+           synthetic_regression+synthetic_regression_ties@rnc_mlp_noise,rnc_mlp_noes
+           yelp_mpnet__n200+yelp_mpnet__n1000+fluorescence_esm2__n200+fluorescence_esm2__n1000+synthetic_regression__n200+synthetic_regression__n1000+synthetic_regression_ties__n200+synthetic_regression_ties__n1000
+           stl10_clip__lpc100+stl10_clip__lpc20+stl10_clip__lpc5+stl10_clip__lpc1@supcon_mlp,supcon_res)
 
 E7_SETS=(cifar100_dinov2 banking77_mpnet stsb_mpnet pets_resnet50 synthetic_anisotropic stl10_clip digits)
 
