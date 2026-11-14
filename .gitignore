@@ -26,3 +26,6 @@ docs/BUG-supcon-nan.md
 docs/BUG-rnc-ties.md
 benchmarks/data/
 .claude/
+
+# E8 per-run results (about 200 MB) stay on the cluster; REPORT.md is committed
+benchmarks/results/e8/*/

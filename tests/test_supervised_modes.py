@@ -5,7 +5,7 @@ import pytest
 
 from embedkit import EmbedKit
 from embedkit.evaluation.metrics import nc1
-from embedkit.improvement.augmentation import GaussianNoise
+from embedkit.improvement.augmentation import GaussianNoise, KNNPairs
 from embedkit.improvement.losses import RankNContrastLoss, SupConLoss
 from embedkit.improvement.model import EmbeddingRefiner
 from embedkit.improvement.trainer import Trainer
@@ -31,6 +31,9 @@ def test_supervised_defaults():
     ek = EmbedKit(mode="supervised", target_dim=4, epochs=4, eval_every=2, **KW).fit(X, y)
     t = ek._trainer
     assert type(t.loss) is SupConLoss and t.loss.spread_weight == 0.0  # no AlignUniform
+    # E8: the residual adapter (PCA-initialised linear map plus a zero-initialised MLP).
+    assert ek.architecture_ == "residual" and t.model.architecture == "residual"
+    assert isinstance(t.augmentation, KNNPairs)
     assert ek.monitor_ == "val_knn_accuracy" and t.monitor_mode == "max"
     assert ek.early_stopping_patience_ == 10 and t.val_split == 0.1 and t.restore_best
     for name in ("val_knn_accuracy", "train_nc1", "val_nc1"):
@@ -39,15 +42,47 @@ def test_supervised_defaults():
 
 def test_regression_mode():
     X, y = _regression()
-    ek = EmbedKit(mode="regression", target_dim=4, epochs=4, eval_every=2, **KW).fit(X, y)
+    with pytest.warns(UserWarning, match="raw embeddings"):  # 120 rows: the E8 caveat
+        ek = EmbedKit(mode="regression", target_dim=4, epochs=4, eval_every=2, **KW).fit(X, y)
     t = ek._trainer
     assert ek.method_ == "refiner" and isinstance(t.loss, RankNContrastLoss)
+    # E8: the plain MLP with relative Gaussian-noise views.
+    assert ek.architecture_ == "mlp" and t.model.architecture == "mlp"
+    assert type(t.augmentation) is GaussianNoise and t.augmentation.std == 0.05
     assert ek.monitor_ == "val_ridge_r2" and t.monitor_mode == "max"
     assert len(t.history["val_ridge_r2"]) == 2
     # Integer targets are cast to float, so they are treated as continuous, not as classes.
-    EmbedKit(mode="regression", target_dim=4, epochs=2, eval_every=2, **KW).fit(
-        X, np.round(y).astype(int))
+    with pytest.warns(UserWarning):
+        EmbedKit(mode="regression", target_dim=4, epochs=2, eval_every=2, **KW).fit(
+            X, np.round(y).astype(int))
     assert ek.transform(X).shape == (len(X), 4)
+
+
+def test_regression_warning_only_for_small_training_sets():
+    import warnings
+
+    X, y = _regression(n=1001)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        EmbedKit(mode="regression", target_dim=4, epochs=1, eval_every=100, **KW).fit(X, y)
+
+
+def test_explicit_architecture_and_augmentation_override_auto():
+    X, y = _classes()
+    ek = EmbedKit(mode="supervised", target_dim=4, epochs=1, eval_every=100, architecture="linear",
+                  augmentation=GaussianNoise(0.1), **KW).fit(X, y)
+    assert ek.architecture_ == "linear" and type(ek._trainer.augmentation) is GaussianNoise
+    ek = EmbedKit(method="refiner", target_dim=4, epochs=1, eval_every=100, **KW).fit(X)
+    assert ek.architecture_ == "linear" and isinstance(ek._trainer.augmentation, KNNPairs)
+
+
+def test_architecture_survives_save_load(tmp_path):
+    X, y = _classes()
+    ek = EmbedKit(mode="supervised", target_dim=4, epochs=1, eval_every=100, **KW).fit(X, y)
+    ek.save(tmp_path / "m")
+    ek2 = EmbedKit.load(tmp_path / "m", device="cpu")
+    assert ek2._trainer.model.architecture == "residual"
+    np.testing.assert_allclose(ek2.transform(X), ek.transform(X), atol=1e-5)
 
 
 def test_modes_need_labels_and_valid_name():

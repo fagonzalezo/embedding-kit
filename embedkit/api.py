@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Literal
@@ -10,7 +11,7 @@ import numpy as np
 import torch
 
 from embedkit.analysis.report import EmbedKitAnalyzer, EmbedKitReport
-from embedkit.improvement.augmentation import EmbeddingMixup, KNNPairs
+from embedkit.improvement.augmentation import EmbeddingMixup, GaussianNoise, KNNPairs
 from embedkit.improvement.losses import (
     AlignUniformLoss,
     CombinedLoss,
@@ -50,10 +51,15 @@ class EmbedKit:
     32, 64 and 128 (``benchmarks/results/e6/REPORT.md``). A sequence gives the dimensions
     directly. ``None`` (the default) trains the full output only.
 
-    Modes of the refiner (WP 6.1). ``"supervised"`` (class labels): ``SupConLoss`` alone, with
-    ``val_knn_accuracy`` as the monitor. ``"regression"`` (continuous targets, cast to float):
-    ``RankNContrastLoss`` with ``val_ridge_r2`` (a ridge probe) as the monitor.
-    ``"self_supervised"``: NT-Xent plus 0.5 alignment-uniformity, monitored by ``k_skewness``.
+    Modes of the refiner (WP 6.1). ``"supervised"`` (class labels): ``SupConLoss`` alone on the
+    ``"residual"`` architecture with ``KNNPairs(5)`` views, ``val_knn_accuracy`` as the monitor.
+    ``"regression"`` (continuous targets, cast to float): ``RankNContrastLoss`` on the ``"mlp"``
+    architecture with ``GaussianNoise(0.05)`` views, ``val_ridge_r2`` (a ridge probe) as the
+    monitor; ``fit`` warns with 1000 rows or fewer, where in E8 no refiner reliably beat the raw
+    embeddings. ``"self_supervised"``: the ``"linear"`` architecture with ``KNNPairs(5)`` views
+    and NT-Xent plus 0.5 alignment-uniformity, monitored by ``k_skewness``. These are the
+    ``"auto"`` values of ``architecture`` and ``augmentation``; ``docs/BENCHMARK_SUPERVISED.md``
+    has the evidence (E8).
     ``monitor="auto"`` and ``early_stopping_patience="auto"`` resolve per mode: with labels, 10%
     of the rows are held out, training stops after 10 evaluations without improvement of the
     monitor and the best weights are restored; without labels there is no early stopping (E2
@@ -70,7 +76,7 @@ class EmbedKit:
         target_dim: int | Literal["auto"] = "auto",
         hidden_dim: int = 256,
         n_layers: int = 2,
-        architecture: Literal["mlp", "residual", "linear"] = "linear",
+        architecture: Literal["auto", "mlp", "residual", "linear"] = "auto",
         epochs: int = 100,
         batch_size: int = 256,
         optimizer: str = "adam",
@@ -123,6 +129,12 @@ class EmbedKit:
             raise ValueError(f"mode={self.mode!r} needs labels: call fit(X, y)")
         if self.mode == "regression":
             y = np.asarray(_to_numpy(y) if isinstance(y, torch.Tensor) else y, dtype=np.float32)
+            if n <= _SMALL_REGRESSION_ROWS and self._resolve_method() == "refiner":
+                warnings.warn(
+                    f"Regression refiner fitted on {n} rows: with {_SMALL_REGRESSION_ROWS} "
+                    "training rows or fewer, no refiner reliably beat the raw embeddings in E8 "
+                    "(docs/BENCHMARK_SUPERVISED.md); compare with the raw embeddings or PCA.",
+                    UserWarning, stacklevel=2)
 
         # Step 1: analyze
         analyzer = EmbedKitAnalyzer(
@@ -141,6 +153,8 @@ class EmbedKit:
         augmentation = self._resolve_augmentation(report)
         loss_fn = self._resolve_loss(report)
         nested = self._resolve_nested_dims(target_dim)
+        architecture = self._resolve_architecture()
+        self.architecture_ = architecture
         if nested is not None:
             if isinstance(loss_fn, MatryoshkaLoss):
                 raise ValueError("Pass nested_dims or a MatryoshkaLoss, not both")
@@ -160,7 +174,7 @@ class EmbedKit:
             "target_dim": target_dim,
             "hidden_dim": self.hidden_dim,
             "n_layers": self.n_layers,
-            "architecture": self.architecture,
+            "architecture": architecture,
             "epochs": self.epochs,
             "batch_size": self.batch_size,
             "optimizer": self.optimizer,
@@ -180,7 +194,7 @@ class EmbedKit:
                 target_dim=target_dim,
                 hidden_dim=self.hidden_dim,
                 n_layers=self.n_layers,
-                architecture=self.architecture,
+                architecture=architecture,
             )
         self._trainer = Trainer(
             model=model,
@@ -214,8 +228,10 @@ class EmbedKit:
         """``method="pca"``: the linear refiner at its PCA initialisation, not trained."""
         given = [name for name, value, default in (
             ("augmentation", self.augmentation_cfg, "auto"), ("loss", self.loss_cfg, "auto"),
-            ("nested_dims", self.nested_dims, None), ("architecture", self.architecture, "linear"),
+            ("nested_dims", self.nested_dims, None),
         ) if not (value is default or value == default)]
+        if self.architecture not in ("auto", "linear"):
+            given.append("architecture")
         if given:
             raise ValueError(
                 f"{', '.join(given)} configure training, which method='pca' does not do; pass "
@@ -225,6 +241,7 @@ class EmbedKit:
                                  architecture="linear")
         model.initialize_from_data(X_np)
         self.nested_dims_ = None
+        self.architecture_ = "linear"
         self._config = {
             "mode": self.mode,
             "method": "pca",
@@ -236,6 +253,14 @@ class EmbedKit:
         }
         self._trainer = _inference_trainer(model, self.device)
         return self
+
+    def _resolve_architecture(self) -> str:
+        # E8 (docs/BENCHMARK_SUPERVISED.md): with class labels the residual adapter matched the
+        # MLP on full training sets and, unlike it, did not collapse with 1-5 labels per class;
+        # for regression the MLP won on every dataset.
+        if self.architecture != "auto":
+            return self.architecture
+        return {"supervised": "residual", "regression": "mlp"}.get(self.mode, "linear")
 
     def _resolve_monitor(self) -> str:
         if self.monitor != "auto":
@@ -347,6 +372,9 @@ class EmbedKit:
     def _resolve_augmentation(self, report: EmbedKitReport):
         if self.augmentation_cfg != "auto":
             return self.augmentation_cfg
+        if self.mode == "regression":
+            # E8: noise views beat input-space neighbour pairs with the MLP on 3 of 4 datasets.
+            return GaussianNoise(std=0.05)
         return KNNPairs(k=5)
 
     def _resolve_loss(self, report: EmbedKitReport):
@@ -360,6 +388,9 @@ class EmbedKit:
         if self.mode == "regression":
             return RankNContrastLoss()
         return CombinedLoss([(NTXentLoss(temperature=0.07), 1.0), (AlignUniformLoss(), 0.5)])
+
+
+_SMALL_REGRESSION_ROWS = 1000
 
 
 def _inference_trainer(model: EmbeddingRefiner, device=None) -> Trainer:

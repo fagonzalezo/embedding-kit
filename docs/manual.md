@@ -649,7 +649,7 @@ print(trainer.history)             # {"loss": [...], "uniformity": [...], ...}
 
 | `method` | Builds |
 |-----------|--------|
-| `"auto"` (default) | `"pca"` when `mode="self_supervised"`, `"refiner"` when `mode="supervised"` |
+| `"auto"` (default) | `"pca"` when `mode="self_supervised"`, `"refiner"` when `mode="supervised"` or `"regression"` |
 | `"pca"` | The top `target_dim` principal directions followed by L2 normalisation; nothing is trained. It is the `linear` refiner at its initialisation, so `transform`, `dim=`, `save` and `load` behave as for a trained model. |
 | `"refiner"` | A trained `EmbeddingRefiner` (below) |
 
@@ -657,13 +657,24 @@ Why PCA without labels: in benchmarks E1, E6 and E7 (`docs/BENCHMARK_E1_E2.md`, 
 
 **Refiner configuration** (`method="refiner"`):
 
-| Condition | Effect |
-|-----------|--------|
-| `augmentation == "auto"` | `KNNPairs(k=5)` |
-| `mode == "self_supervised"` | Base loss is `NTXentLoss(temperature=0.07)` |
-| `mode == "supervised"` | Base loss is `SupConLoss(temperature=0.07)` |
-| `loss == "auto"` | The base loss plus `AlignUniformLoss` (weight 0.5) via `CombinedLoss` |
-| `target_dim == "auto"` | Uses `report.suggested_target_dim` = `clip(1.5 × ID, ID, D)` (both methods) |
+| Setting (`"auto"`) | `mode="self_supervised"` | `mode="supervised"` | `mode="regression"` |
+|---|---|---|---|
+| `architecture` | `"linear"` | `"residual"` | `"mlp"` |
+| `augmentation` | `KNNPairs(k=5)` | `KNNPairs(k=5)` | `GaussianNoise(std=0.05)` |
+| `loss` | `NTXentLoss(0.07)` + 0.5 `AlignUniformLoss` | `SupConLoss(0.07)` | `RankNContrastLoss()` |
+| `monitor` | `k_skewness` (logged only) | `val_knn_accuracy` | `val_ridge_r2` |
+| `early_stopping_patience` | `None` | 10 (10% of rows held out, best weights restored) | 10 (as supervised) |
+
+`target_dim="auto"` uses `report.suggested_target_dim` = `clip(1.5 × ID, ID, D)` (both methods).
+After `fit`, `architecture_`, `monitor_` and `early_stopping_patience_` hold the resolved values.
+
+Why these defaults: benchmark E8 (`docs/BENCHMARK_SUPERVISED.md`). With class labels, the residual
+adapter (a PCA-initialised linear map plus a zero-initialised MLP) matched the plain MLP on full
+training sets and did not collapse with 1-5 labels per class as the MLP did; against the raw
+embeddings and LDA it won on kNN accuracy on 4 and 3 of 6 datasets and lost on none. With few
+labels (5 per class) LDA was better than every refiner. For regression the MLP with noise views
+beat the linear refiner, the raw embeddings and PCA on all 4 datasets; with 1000 training rows or
+fewer no refiner reliably beat the raw embeddings, and `fit` warns.
 
 **Class:** `EmbedKit(mode, method, augmentation, loss, target_dim, hidden_dim, n_layers, architecture, epochs, batch_size, optimizer, lr, scheduler, eval_every, early_stopping_patience, monitor, val_split, device, id_methods, random_state, nested_dims)`
 
@@ -671,11 +682,11 @@ After `fit`, `method_` holds the method used.
 
 `nested_dims=None` (default), `"auto"` or a sequence trains nested prefixes readable with `transform(X, dim=m)`; see `MatryoshkaLoss` above.
 
-`EmbedKit` trains for a fixed budget of `epochs` (default 100) and does not stop early: in the E2
-benchmark (`docs/BENCHMARK_E1_E2.md`) no label-free statistic tracked downstream accuracy within a run.
-To stop early, pass `early_stopping_patience` (counted in evaluations, every `eval_every` epochs) and
-a `monitor`; `val_split` then defaults to 0.1 of the rows, held out from training. Without early
-stopping it defaults to 0 and every row is used for training.
+Without labels, `EmbedKit` trains for a fixed budget of `epochs` (default 100) and does not stop
+early: in the E2 benchmark (`docs/BENCHMARK_E1_E2.md`) no label-free statistic tracked downstream
+accuracy within a run. With labels it stops on the held-out monitor above. `early_stopping_patience`
+is counted in evaluations, every `eval_every` epochs; with early stopping `val_split` defaults to 0.1
+of the rows, held out from training, and without it to 0, so every row is used for training.
 
 ```python
 from embedkit import EmbedKit
@@ -689,9 +700,13 @@ X_small = ek.transform(X, dim=16)   # PCA at 16, renormalised
 ek = EmbedKit(mode="self_supervised", method="refiner", epochs=100, target_dim="auto")
 X_refined = ek.fit_transform(X)
 
-# supervised
+# supervised (class labels): SupCon on the residual adapter
 ek = EmbedKit(mode="supervised", epochs=100)
 X_refined = ek.fit_transform(X, y=labels)
+
+# regression (continuous targets): Rank-N-Contrast on an MLP
+ek = EmbedKit(mode="regression", epochs=100)
+X_refined = ek.fit_transform(X, y=targets)
 
 # inspect what was auto-configured
 print(ek.analysis_report.severity)

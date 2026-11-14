@@ -3,7 +3,7 @@
 A Python library for analyzing and improving ML embedding spaces. Embedding Kit has two pillars:
 
 - **Analysis** — a suite of geometry-aware metrics that diagnose problems in an embedding space (hubness, distance collapse, anisotropy, intrinsic dimensionality mismatch, etc.) and produce actionable recommendations.
-- **Improvement** — dimension reduction and refinement. Without labels, `EmbedKit` defaults to PCA with L2 normalisation, which a trained contrastive refiner did not beat in our benchmarks ([`docs/BENCHMARK_E6_E7.md`](docs/BENCHMARK_E6_E7.md)); the refiner stays available. With labels, a supervised contrastive refiner (SupCon), which did beat the baselines in E1.
+- **Improvement** — dimension reduction and refinement. Without labels, `EmbedKit` defaults to PCA with L2 normalisation, which a trained contrastive refiner did not beat in our benchmarks ([`docs/BENCHMARK_E6_E7.md`](docs/BENCHMARK_E6_E7.md)); the refiner stays available. With class labels, a supervised contrastive refiner (SupCon on a residual adapter), and with continuous targets a Rank-N-Contrast refiner; in E8, with all training rows, these beat or tied the raw embeddings, LDA and PCA ([`docs/BENCHMARK_SUPERVISED.md`](docs/BENCHMARK_SUPERVISED.md)).
 
 ## Features
 
@@ -87,9 +87,12 @@ X_32 = EmbedKit(target_dim=128).fit(X).transform(X, dim=32)   # nested prefixes
 # Self-supervised contrastive refiner (opt-in; see docs/BENCHMARK_E6_E7.md)
 X_refined = EmbedKit(mode="self_supervised", method="refiner", epochs=100).fit_transform(X)
 
-# Supervised refinement with class labels
+# Supervised refinement with class labels (see docs/BENCHMARK_SUPERVISED.md)
 y = np.load("labels.npy")
 X_refined = EmbedKit(mode="supervised", epochs=100).fit_transform(X, y=y)
+
+# Regression targets (Rank-N-Contrast)
+X_refined = EmbedKit(mode="regression", epochs=100).fit_transform(X, y=targets)
 ```
 
 See [`examples/`](https://github.com/fagonzalezo/embedding-kit/tree/main/examples) for full usage patterns including low-level API, custom augmentations, and workflow integrations.

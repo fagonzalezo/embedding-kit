@@ -640,9 +640,9 @@ Release as 0.5.0.
 | 5.4 | Structure preservation, VICReg | dropped (gate C) |
 | 5.5 | Hubness reduction | done (2026-11-13): implemented; no kNN gain on the E1 sets, no default change |
 | 5.6 | Run E6 and E7 | done (2026-11-13; `docs/BENCHMARK_E6_E7.md`); self-supervised default is PCA |
-| 6.1 | Supervised defaults | implemented (2026-11-13); judged in E8 |
+| 6.1 | Supervised defaults | done (2026-11-14): supervised = SupCon on the residual adapter, regression = RnC on the MLP with noise views (E8) |
 | 6.2 | Class collapse | implemented (2026-11-13): `train_nc1`/`val_nc1`, `SupConLoss(spread_weight)` |
-| 6.3 | Run E8 | running (job 3079012, 2026-11-13) |
+| 6.3 | Run E8 | done (2026-11-14; `docs/BENCHMARK_SUPERVISED.md`) |
 | 7.1 | Run E4 | not started |
 | 7.2 | Selection-based auto-configuration | not started |
 | 7.3 | Robustness and scaling | not started |
@@ -874,6 +874,23 @@ Release as 0.5.0.
   mode on the synthetic set (+0.017 kNN) and by a wide margin in regression (synthetic ties:
   ridge R^2 0.860 against 0.696); the linear RnC refiner lost to ridge on raw (-0.068) while
   raising 10-NN R^2 from 0.44 to 0.75. The 0.1.2 RnC tied the fixed one there.
+
+### Phase 6 outcome (2026-11-14)
+
+- E8 ran in three jobs (3079012, 3079280, 3079354; about 27 GPU-hours). Tables in
+  `benchmarks/results/e8/REPORT.md`, summary and decisions in `docs/BENCHMARK_SUPERVISED.md`.
+- **Supervised default: residual adapter** (decided with the user). The rule (wins on half the
+  datasets) accepted the plain MLP (3 of 6) and not the residual adapter (2 of 6, no losses). A
+  follow-up on 1-100 labels per class showed the MLP collapsing with few labels (6 losses of 12,
+  down to -0.082) and the residual adapter robust (6 wins, 2 small losses), so the rule was set
+  aside. Against raw and LDA the new default wins on 4 and 3 of 6 sets and loses on none.
+- **Regression default: MLP with `GaussianNoise(0.05)` views** (decided with the user); meets the
+  rule on all 4 sets, and beats raw and PCA on all 4. `fit` warns with 1000 rows or fewer, where no
+  refiner reliably beat raw.
+- `architecture` and `augmentation` default to `"auto"`, resolved per mode; the E8 arms pin the
+  WP 6.1 settings so the benchmark does not move with the library.
+- Not done here: the kbn-histo-survival rerun (handed over), ConR or SupReMix (RnC beats ridge
+  once on the MLP).
 
 ## Open points for the next session
 

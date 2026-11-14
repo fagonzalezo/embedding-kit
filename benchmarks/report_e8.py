@@ -36,6 +36,9 @@ REG_ARMS = ("rnc_old", "rnc_noes", "rnc_noise", "rnc_mlp", "rnc_res", "rnc_mlp_n
 MLP_COMBOS = ("rnc_mlp_noise", "rnc_mlp_noes")
 # Architecture: the residual adapter against the plain MLP (both against the linear default above).
 ARCH_PAIRS = {"classification": ("supcon_res", "supcon_mlp"), "regression": ("rnc_res", "rnc_mlp")}
+# The defaults chosen from E8 (``EmbedKit`` since phase 6), against the training-free baselines.
+CHOSEN = {"classification": ("supcon_res", ("raw", "lda")),
+          "regression": ("rnc_mlp_noise", ("raw", "pca"))}
 
 
 def _select(val, test, meta, family, primary):
@@ -101,9 +104,13 @@ def analyse(exp_dir: Path, dataset: str) -> dict:
              for a, b in (("rnc_mlp", "rnc"), ("rnc_res", "rnc"), ("rnc_res", "rnc_mlp"),
                           ("rnc_mlp", "raw"), ("supcon_mlp", "supcon"), ("supcon_res", "supcon"))
              if {a, b} <= have}
+    chosen, bases = CHOSEN[task]
+    bases = [f"pca-{_dim(test, default)}" if b == "pca" else b for b in bases]
+    final = ({b.split("-")[0]: {mt: _cell(test, mt, chosen, b) for mt in (primary, second)}
+              for b in bases if b in have} if chosen in have else {})
     return dict(task=task, primary=primary, second=second, rows=rows, noise=noise,
                 coarse=coarse, supcon_vs_lda=vs_lda, arch=arch, combos=combos, small=small,
-                failed=failed)
+                final=final, failed=failed)
 
 
 def _dim(test, method):
@@ -161,6 +168,21 @@ def render(results: dict) -> str:
                     "|---|---|---|---|"]
             out += [f"| {name} | {c} | {x[first['primary']][1]} | {x[first['second']][1]} |"
                     for name, cs in combos.items() for c, x in cs.items()]
+            out.append("")
+        chosen, bases = CHOSEN[task]
+        fin = {name: r["final"] for name, r in sets.items() if r["final"]}
+        if fin:
+            out += [f"The chosen default `{chosen}` against the baselines:", "",
+                    "| Dataset | " + " | ".join(f"vs {b}, {first[k]}" for b in bases
+                                                 for k in ("primary", "second")) + " |",
+                    "|---|" + "---|" * (2 * len(bases))]
+            out += ["| " + name + " | " + " | ".join(
+                f[b][first[k]][1] if b in f else "" for b in bases for k in ("primary", "second"))
+                + " |" for name, f in fin.items()]
+            for b in bases:
+                v = [f[b][first["primary"]][0] for f in fin.values() if b in f]
+                out.append(f"\nAgainst {b} on {first['primary']}: {v.count('win')} wins, "
+                           f"{v.count('tie')} ties, {v.count('loss')} losses.")
             out.append("")
     for name, r in main.items():
         nc1 = "nc1" in (r["rows"]["default"] or {})

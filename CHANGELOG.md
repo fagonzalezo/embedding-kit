@@ -5,6 +5,17 @@
 Phase 6 of `docs/IMPLEMENTATION_PLAN.md`: supervised and regression modes.
 
 ### Changed
+- **Supervised `EmbedKit` trains the residual adapter** (`architecture="residual"`: the
+  PCA-initialised linear map plus a zero-initialised MLP). In E8 it ties the plain MLP on full
+  training sets and, unlike it, does not collapse with 1-5 labels per class
+  (`docs/BENCHMARK_SUPERVISED.md`).
+- **Regression `EmbedKit` trains the plain MLP on Gaussian-noise views**
+  (`architecture="mlp"`, `GaussianNoise(0.05)`, relative to the per-feature scale). In E8 it beats
+  the linear RnC refiner, the raw embeddings and PCA on all 4 regression sets. `fit` warns with
+  1000 rows or fewer, where no refiner reliably beat the raw embeddings.
+- `architecture` and `augmentation` default to `"auto"`: residual / MLP / linear and `KNNPairs(5)`
+  / `GaussianNoise(0.05)` / `KNNPairs(5)` for supervised / regression / self-supervised. The
+  resolved architecture is in `architecture_` after `fit`.
 - **Supervised `EmbedKit` drops the uniformity term**: the default loss is `SupConLoss(0.07)` alone
   (was SupCon + 0.5 `AlignUniformLoss`), which spread each class against SupCon's pull (review 3.4).
 - **Supervised `EmbedKit` stops on a held-out score**: `monitor="auto"` and
@@ -22,10 +33,14 @@ Phase 6 of `docs/IMPLEMENTATION_PLAN.md`: supervised and regression modes.
   continuous labels with a clear message.
 - `knn_regression_r2` and the `knn_r2` protocol metric (10-NN regression); the regression ridge probe
   returns per-point terms `1 - e_i^2 / var(y_test)` (mean = R^2), so `compare` bootstraps it.
-- Benchmark E8 (`run.py --experiment e8`, `report_e8.py`, `cluster/e8.slurm.sh`): supervised arms
+- Benchmark E8 (`run.py --experiment e8`, `report_e8.py`, `cluster/e8.slurm.sh`,
+  `docs/BENCHMARK_SUPERVISED.md`): supervised arms
   against the new default and the previous one, LDA, label noise, superclass fitting, label
   efficiency (`<name>__lpc<k>`), and regression arms (the 0.1.2 RnC in `legacy_losses.py`) on
-  `synthetic_regression[_ties]`, `yelp_mpnet` and `fluorescence_esm2`.
+  `synthetic_regression[_ties]`, `yelp_mpnet` and `fluorescence_esm2`; residual and MLP arms in
+  both modes, regression on 200 and 1000 training rows (`<name>__n<k>`), and the chosen defaults
+  against the baselines in the report. `e8.slurm.sh` takes `TASKS=<array in env.sh>` and
+  `<dataset>@<method>,...` entries.
 
 ### Fixed
 - `EmbedKit.load(directory, device=None)`: the device for `transform` can be given. A bundle fitted

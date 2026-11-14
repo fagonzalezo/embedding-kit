@@ -365,7 +365,7 @@ def e8_methods(dataset) -> list[Method]:
     views (``rnc_mlp_noise``) and with no early stopping (``rnc_mlp_noes``).
     """
     from embedkit import EmbedKit
-    from embedkit.improvement.augmentation import GaussianNoise
+    from embedkit.improvement.augmentation import GaussianNoise, KNNPairs
     from embedkit.improvement.losses import (
         AlignUniformLoss,
         CombinedLoss,
@@ -379,6 +379,10 @@ def e8_methods(dataset) -> list[Method]:
                               metrics=E8_CLASS_METRICS if task == "classification" else None)]
 
     def refiner(name, family, mode, wrap=None, **kw):
+        # Pin the defaults E8 ran with (before phase 6 made them depend on the mode), so that every
+        # arm is "the 0.4 default plus its own change" whatever the library default is now.
+        kw = {"architecture": "linear", "augmentation": lambda: KNNPairs(k=5), **kw}
+
         def make(s, ds, dev):
             extra = {key: (v() if callable(v) else v) for key, v in kw.items()}
             t = EmbedKit(mode=mode, target_dim=extra.pop("target_dim", k), random_state=s,
