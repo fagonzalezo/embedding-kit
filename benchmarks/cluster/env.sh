@@ -39,6 +39,13 @@ E8_TASKS=(cifar100_dinov2:0/4 cifar100_dinov2:1/4 cifar100_dinov2:2/4 cifar100_d
           stl10_clip__lpc20+stl10_clip__lpc100)
 
 # Datasets of experiment E7 (one array task each). Longest first.
+# E8 follow-up: the residual adapter (supcon_res, rnc_res) on the main sets, after the first E8
+# results showed the plain MLP ahead in regression. "@" names the methods to run.
+#   TASKS=E8R_TASKS sbatch --array=0-2%2 e8.slurm.sh
+E8R_TASKS=(cifar100_dinov2@supcon_res
+           yelp_mpnet+fluorescence_esm2+synthetic_regression+synthetic_regression_ties@rnc_res
+           banking77_mpnet+stl10_clip+pets_resnet50+synthetic_anisotropic+digits@supcon_res)
+
 E7_SETS=(cifar100_dinov2 banking77_mpnet stsb_mpnet pets_resnet50 synthetic_anisotropic stl10_clip digits)
 
 check_clean() {

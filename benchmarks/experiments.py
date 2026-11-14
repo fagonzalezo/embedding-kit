@@ -357,7 +357,9 @@ def e8_methods(dataset) -> list[Method]:
     the 20 superclasses (``-coarse``), both scored with the clean fine labels. Label-efficiency
     variants (``<name>__lpc<k>``) run a reduced grid. Regression: the 0.1.2 RnC with the tie bug
     (``rnc_old``), no early stopping, Gaussian-noise views instead of kNN pairs, the MLP; raw and
-    PCA as baselines.
+    PCA as baselines. Both modes also run the residual adapter (``supcon_res``, ``rnc_res``:
+    the PCA-initialised linear map plus a zero-initialised MLP), added after the first E8 results
+    showed the plain MLP ahead in regression, to tell the non-linearity from the PCA start.
     """
     from embedkit import EmbedKit
     from embedkit.improvement.augmentation import GaussianNoise
@@ -395,6 +397,7 @@ def e8_methods(dataset) -> list[Method]:
             refiner("rnc_noise", "rnc_noise", "regression",
                     augmentation=lambda: GaussianNoise(std=0.05)),
             refiner("rnc_mlp", "rnc_mlp", "regression", architecture="mlp"),
+            refiner("rnc_res", "rnc_res", "regression", architecture="residual"),
         ]
         return m
     if task != "classification":
@@ -413,7 +416,8 @@ def e8_methods(dataset) -> list[Method]:
     m += [lda, supcon, prev, noes,
           refiner("supcon_au", "supcon_au", "supervised",
                   loss=lambda: CombinedLoss([(SupConLoss(0.07), 1.0), (AlignUniformLoss(), 0.5)])),
-          refiner("supcon_mlp", "supcon_mlp", "supervised", architecture="mlp")]
+          refiner("supcon_mlp", "supcon_mlp", "supervised", architecture="mlp"),
+          refiner("supcon_res", "supcon_res", "supervised", architecture="residual")]
     for w in E8_SPREAD:
         m.append(refiner(f"spread{w}", "supcon_spread", "supervised",
                          loss=lambda w=w: SupConLoss(0.07, spread_weight=w)))

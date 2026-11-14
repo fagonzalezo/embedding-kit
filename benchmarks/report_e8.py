@@ -28,8 +28,11 @@ from report import load_results  # noqa: E402
 from report_e6 import paired  # noqa: E402
 from report_gate import _fmt, _stats  # noqa: E402
 
-CLASS_ARMS = ("prev", "supcon_au", "supcon_mlp", "supcon_noes", "supcon_spread", "supcon_nested")
-REG_ARMS = ("rnc_old", "rnc_noes", "rnc_noise", "rnc_mlp")
+CLASS_ARMS = ("prev", "supcon_au", "supcon_mlp", "supcon_res", "supcon_noes", "supcon_spread",
+              "supcon_nested")
+REG_ARMS = ("rnc_old", "rnc_noes", "rnc_noise", "rnc_mlp", "rnc_res")
+# Architecture: the residual adapter against the plain MLP (both against the linear default above).
+ARCH_PAIRS = {"classification": ("supcon_res", "supcon_mlp"), "regression": ("rnc_res", "rnc_mlp")}
 
 
 def _select(val, test, meta, family, primary):
@@ -85,8 +88,11 @@ def analyse(exp_dir: Path, dataset: str) -> dict:
     coarse = {m: row(m) for m in sorted(set(test.method)) if m.endswith("-coarse")}
     vs_lda = (_cell(test, primary, "supcon", "lda")[1]
               if {"supcon", "lda"} <= set(test.method) else "")
+    res, mlp = ARCH_PAIRS[task]
+    arch = ({mt: _cell(test, mt, res, mlp) for mt in (primary, second)}
+            if {res, mlp} <= set(test.method) else None)
     return dict(task=task, primary=primary, second=second, rows=rows, noise=noise,
-                coarse=coarse, supcon_vs_lda=vs_lda, failed=failed)
+                coarse=coarse, supcon_vs_lda=vs_lda, arch=arch, failed=failed)
 
 
 def _dim(test, method):
@@ -125,6 +131,17 @@ def render(results: dict) -> str:
                        f"{'yes' if vs.count('win') >= n / 2 else 'no'} |")
         out += ["", f"Accepted: wins on the first metric on at least half of the {n} datasets.",
                 ""]
+        res, mlp = ARCH_PAIRS[task]
+        arch = {name: r["arch"] for name, r in sets.items() if r["arch"]}
+        if arch:
+            out += [f"`{res}` (residual) against `{mlp}` (plain MLP):", "",
+                    f"| Dataset | {first['primary']} [95% CI] | {first['second']} |",
+                    "|---|---|---|"]
+            out += [f"| {name} | {a[first['primary']][1]} | {a[first['second']][1]} |"
+                    for name, a in arch.items()]
+            v = [a[first["primary"]][0] for a in arch.values()]
+            out += ["", f"Residual against MLP on {first['primary']}: {v.count('win')} wins, "
+                    f"{v.count('tie')} ties, {v.count('loss')} losses.", ""]
     for name, r in main.items():
         nc1 = "nc1" in (r["rows"]["default"] or {})
         out += [f"## {name} ({r['task']}; {r['primary']}, also {r['second']})", "",
