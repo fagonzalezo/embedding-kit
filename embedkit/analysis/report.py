@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -50,6 +50,7 @@ class EmbedKitReport(BaseResult):
     calibration: dict[str, CalibratedStatistic] | None = None
     n_outside_null: int | None = None
     z_threshold: float = 3.0
+    properties: list[str] = field(default_factory=list)
 
     def to_dataframe(self) -> pd.DataFrame:
         dc = self.geometry.distance_concentration
@@ -81,6 +82,14 @@ class EmbedKitReport(BaseResult):
             ),
             ("Geometry", "effective_rank", self.geometry.isotropy.effective_rank),
             ("Geometry", "isotropy_score", self.geometry.isotropy.isotropy_score),
+            ("Geometry", "isoscore", self.geometry.isotropy.isoscore),
+            *[("Geometry", f"top_{k}_variance_share", v)
+              for k, v in self.geometry.isotropy.top_k_variance_share.items()],
+            *[("Geometry", f"top_{k}_coordinate_share", v)
+              for k, v in self.geometry.isotropy.top_k_coordinate_share.items()],
+            ("Geometry", "spectrum_alpha", self.geometry.isotropy.spectrum_alpha),
+            ("Geometry", "mean_vector_ratio", self.geometry.isotropy.mean_vector_ratio),
+            ("Geometry", "mean_cosine", self.geometry.isotropy.mean_cosine),
             ("Geometry", "neighbor_consistency", nc.mean_consistency),
             ("Geometry", "uniformity", self.geometry.uniformity.uniformity),
             ("Kernel", "effective_rank", self.kernel.effective_rank),
@@ -129,7 +138,16 @@ class EmbedKitReport(BaseResult):
         print(f"  participation_ratio : {self.geometry.isotropy.participation_ratio:.2f}")
         pr_norm = self.geometry.isotropy.participation_ratio_normalized
         print(f"  PR (normalized)     : {pr_norm:.3f}")
-        print(f"  isotropy_score      : {self.geometry.isotropy.isotropy_score:.3f}")
+        iso = self.geometry.isotropy
+        print(f"  isotropy_score      : {iso.isotropy_score:.3f}")
+        print(f"  IsoScore            : {iso.isoscore:.3f}")
+        print(f"  spectrum alpha      : {iso.spectrum_alpha:.2f}")
+        shares = " / ".join(f"{v:.2f}" for v in iso.top_k_variance_share.values())
+        print(f"  top 1/3/10 PC share : {shares}")
+        shares = " / ".join(f"{v:.2f}" for v in iso.top_k_coordinate_share.values())
+        print(f"  top 1/3/10 coords   : {shares}")
+        print(f"  mean vector ratio   : {iso.mean_vector_ratio:.3f}")
+        print(f"  mean cosine         : {iso.mean_cosine:.3f}")
         print(f"  relative_contrast   : {dc.relative_contrast:.3f}")
         print(f"  distance_cv         : {self.geometry.distance_concentration.distance_cv:.4f}")
         print(f"  neighbor_consistency: {self.geometry.neighbor_consistency.mean_consistency:.3f}")
@@ -150,6 +168,9 @@ class EmbedKitReport(BaseResult):
                       f"± {c.null_std:.4f}  z = {c.z_score:+.1f}")
             print(f"  outside ±{self.z_threshold:g}: {self.n_outside_null} of "
                   f"{len(self.calibration)}")
+        print("\n[Properties]")
+        for prop in self.properties:
+            print(f"  • {prop}")
         print("\n[Recommendations]")
         for rec in self.recommendations:
             print(f"  • {rec}")
@@ -264,6 +285,7 @@ class EmbedKitAnalyzer(BaseAnalyzer):
             None if calibration is None
             else int(sum(abs(c.z_score) > self.z_threshold for c in calibration.values()))
         )
+        properties = _properties(geo_bundle, calibration)
         recommendations = _recommendations(
             id_result, hub_result, geo_bundle, calibration, d, self.z_threshold
         )
@@ -277,6 +299,7 @@ class EmbedKitAnalyzer(BaseAnalyzer):
             suggested_sigma=suggested_sigma,
             suggested_target_dim=suggested_target_dim,
             recommendations=recommendations,
+            properties=properties,
             input_shape=(n, d),
             calibration=calibration,
             n_outside_null=n_outside,
@@ -358,22 +381,39 @@ def _recommendations(
                 "dimensionality reduction may improve downstream tasks."
             )
 
-    # Isotropy / participation ratio (normalised by d, so it does not depend on the dimension)
-    pr = geo_bundle.isotropy.participation_ratio_normalized
-    if pr < 0.1:
-        recs.append(
-            f"Low participation ratio ({pr:.2f} of {d} dimensions): embeddings are highly "
-            "anisotropic. Consider whitening or applying an alignment loss."
-        )
-    elif pr < 0.3:
-        recs.append(
-            f"Moderate anisotropy (normalized participation ratio={pr:.2f}): "
-            "alignment losses or PCA whitening may help."
-        )
-
     if not recs:
-        recs.append("No major issues detected. Embedding geometry looks healthy.")
+        recs.append("No recommendation: no statistic is beyond its null range or a fixed rule.")
     return recs
+
+
+def _properties(geo_bundle, calibration) -> list[str]:
+    """Descriptive statements about the geometry (WP 4.3), with no thresholds.
+
+    Anisotropy, a shared mean direction and clustered directions are properties, not defects:
+    strict isotropy is at odds with cluster structure, and whitening can hurt classification
+    (review section 3). Which of them predict that an intervention helps is E4's question.
+    """
+    iso = geo_bundle.isotropy
+    pcs = " / ".join(f"{v:.0%}" for v in iso.top_k_variance_share.values())
+    coords = " / ".join(f"{v:.0%}" for v in iso.top_k_coordinate_share.values())
+    props = [
+        f"Spectrum: the top 1 / 3 / 10 principal components hold {pcs} of the variance; "
+        f"the eigenvalues decay as i^-{iso.spectrum_alpha:.2f}; corrected participation ratio "
+        f"{iso.participation_ratio_normalized:.3f} of the dimensions (IsoScore "
+        f"{iso.isoscore:.3f}, which is biased low when n is not much larger than d).",
+        f"Coordinates: the top 1 / 3 / 10 coordinates hold {coords} of the variance.",
+        f"Mean direction: the mean vector is {iso.mean_vector_ratio:.2f} of the average norm, "
+        f"and random pairs have mean cosine {iso.mean_cosine:.2f}.",
+    ]
+    c = (calibration or {}).get("uniformity")
+    if c is not None:
+        side = "more clustered than" if c.z_score > 0 else "more spread than"
+        props.append(
+            f"Directions on the sphere are {side} the {c.null_model} null (uniformity "
+            f"{c.observed:.3g} against {c.null_mean:.3g} ± {c.null_std:.2g}, "
+            f"z = {c.z_score:+.1f})."
+        )
+    return props
 
 
 def _calibrated_recommendations(calibration, z_threshold: float) -> list[str]:
@@ -403,11 +443,5 @@ def _calibrated_recommendations(calibration, z_threshold: float) -> list[str]:
         recs.append(
             f"The kNN graph is less stable under small perturbations than the null "
             f"(neighbor_consistency {describe(c)})."
-        )
-    c = calibration.get("uniformity")
-    if c is not None and c.z_score > z_threshold:
-        recs.append(
-            f"Directions are more clustered on the sphere than the null "
-            f"(uniformity {describe(c)}). This describes the geometry; it is not a defect."
         )
     return recs

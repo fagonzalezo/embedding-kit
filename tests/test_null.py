@@ -204,7 +204,7 @@ class TestReportCalibration:
 
         report = EmbedKitAnalyzer(id_methods=["TwoNN"]).fit(_gaussian(1000, 64, "power", 3))
         assert report.n_outside_null == 0, report.calibration
-        assert not any("null" in r for r in report.recommendations)
+        assert not any("than the null" in r for r in report.recommendations)
 
     def test_calibration_subsample_and_off_switch(self):
         from embedkit.analysis.report import EmbedKitAnalyzer

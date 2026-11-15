@@ -41,15 +41,40 @@ class IsotropyResult(BaseResult):
         The same ratio with ``tr(C^2)`` replaced by its unbiased estimate of ``tr(Sigma^2)``
         (Gaussian sampling model), so that iid data gives about ``d`` whatever ``n / d`` is.
     participation_ratio_normalized:
-        ``participation_ratio_corrected / d``, in ``[0, 1]``. This is the value the report
-        thresholds.
+        ``participation_ratio_corrected / d``, in ``[0, 1]``: the n-robust isotropy summary.
     effective_rank:
         ``exp`` of the entropy of the normalised eigenvalues, over the full non-zero spectrum.
+        A plug-in value: for iid data it is below ``min(n - 1, d)`` by a factor that depends on
+        ``d / n`` (0.66 at n = 3,000, d = 2,500).
     isotropy_score:
-        ``effective_rank / min(n - 1, d)``, in ``[0, 1]``.
+        ``effective_rank / min(n - 1, d)``, in ``[0, 1]``; same finite-sample bias.
+    isoscore:
+        IsoScore (Rudman et al. 2022), computed as published, in ``[0, 1]``. Its six steps reduce
+        to ``(participation_ratio - 1) / (d - 1)``, so it carries the plug-in bias: iid data at
+        n = 300, d = 512 score 0.37, not 1. ``participation_ratio_normalized`` corrects that.
+    top_k_variance_share:
+        ``{k: share of the total variance in the top k principal components}`` for k in 1, 3, 10.
+    top_k_coordinate_share:
+        The same for the k coordinates with the largest variance: a few dominant coordinates are
+        the "rogue dimensions" of Timkey and van Schijndel (2021).
+    spectrum_alpha:
+        Power-law decay exponent of the eigenvalues, ``lambda_i ~ i^-alpha`` (Agrawal et al.
+        2022), from a least-squares line on the log-log spectrum over the top half of the
+        non-zero eigenvalues: the finite-sample tail bends down and inflated the full-range fit
+        (by up to 0.35 for alpha = 1 at n = 300, d = 512). Recovers alpha = 1 and 2 within 0.06
+        from n = 300 to 5,000; a flat spectrum gives 0.1-0.35. NaN with fewer than 4 non-zero
+        eigenvalues.
+    mean_vector_ratio:
+        ``||mean(x)|| / mean(||x||)`` on the uncentred rows, in ``[0, 1]``: how much of each
+        vector is a shared offset.
+    mean_cosine:
+        Average cosine similarity over all pairs of distinct rows of the subsample, uncentred.
     eigenvalue_spectrum_top, explained_variance_ratio:
         The largest ``n_components`` eigenvalues, for plotting only. The ratio is relative to
         the total variance.
+
+    These are properties of the geometry, not defects: strict isotropy is at odds with cluster
+    structure, and whitening can hurt classification (review section 3).
     """
 
     participation_ratio: float
@@ -59,6 +84,12 @@ class IsotropyResult(BaseResult):
     explained_variance_ratio: np.ndarray
     participation_ratio_normalized: float
     participation_ratio_corrected: float
+    isoscore: float
+    top_k_variance_share: dict[int, float]
+    top_k_coordinate_share: dict[int, float]
+    spectrum_alpha: float
+    mean_vector_ratio: float
+    mean_cosine: float
 
     @property
     def eigenvalue_spectrum(self) -> np.ndarray:
@@ -177,6 +208,8 @@ class IsotropyAnalyzer(BaseAnalyzer):
         n, d = X.shape
         m = max(n - 1, 1)
         Xc = X.astype(np.float64)
+        mean_vector_ratio, mean_cosine = _mean_direction(Xc)
+        coord_var = Xc.var(axis=0, ddof=1) if n > 1 else np.zeros(d)
         Xc -= Xc.mean(axis=0)
 
         # tr(C) = ||Xc||_F^2 / (n-1);
@@ -211,6 +244,7 @@ class IsotropyAnalyzer(BaseAnalyzer):
         else:
             eff_rank = 1.0
         isotropy_score = eff_rank / max(min(n - 1, d), 1)
+        isoscore = float(np.clip((pr - 1.0) / (d - 1), 0.0, 1.0)) if d > 1 and pr > 0 else 0.0
 
         top = eigenvalues[: self.n_components]
         return IsotropyResult(
@@ -221,7 +255,53 @@ class IsotropyAnalyzer(BaseAnalyzer):
             explained_variance_ratio=(top / (total + 1e-30)).astype(np.float32),
             participation_ratio_normalized=pr_norm,
             participation_ratio_corrected=float(pr_corr),
+            isoscore=isoscore,
+            top_k_variance_share=_top_k_share(eigenvalues),
+            top_k_coordinate_share=_top_k_share(coord_var),
+            spectrum_alpha=_spectrum_alpha(eigenvalues),
+            mean_vector_ratio=mean_vector_ratio,
+            mean_cosine=mean_cosine,
         )
+
+
+_TOP_K = (1, 3, 10)
+
+
+def _top_k_share(variances: np.ndarray) -> dict[int, float]:
+    """``{k: share of the total in the k largest values}`` for k in 1, 3, 10."""
+    v = np.sort(np.asarray(variances, dtype=np.float64))[::-1]
+    total = v.sum()
+    if total <= 0:
+        return {k: float("nan") for k in _TOP_K}
+    return {k: float(v[:k].sum() / total) for k in _TOP_K}
+
+
+def _spectrum_alpha(eigenvalues: np.ndarray) -> float:
+    """Power-law exponent of the top half of the non-zero spectrum (see ``IsotropyResult``)."""
+    lam = np.asarray(eigenvalues, dtype=np.float64)
+    lam = lam[lam > 1e-12 * lam[0]] if len(lam) and lam[0] > 0 else lam[:0]
+    r = len(lam) // 2
+    if r < 2 or len(lam) < 4:
+        return float("nan")
+    i = np.arange(1, r + 1)
+    slope = np.polyfit(np.log(i), np.log(lam[:r]), 1)[0]
+    return float(-slope)
+
+
+def _mean_direction(X: np.ndarray) -> tuple[float, float]:
+    """``||mean(x)|| / mean(||x||)`` and the mean cosine over all pairs of distinct rows."""
+    norms = np.linalg.norm(X, axis=1)
+    if norms.mean() <= 0:
+        return 0.0, 0.0
+    ratio = float(np.linalg.norm(X.mean(axis=0)) / norms.mean())
+    n = X.shape[0]
+    if n < 2:
+        return ratio, float("nan")
+    Z = X[norms > 0] / norms[norms > 0, None]
+    s = Z.sum(axis=0)
+    # sum over i != j of z_i . z_j = ||sum z||^2 - sum ||z_i||^2; zero rows count as cosine 0.
+    cos = (float(s @ s) - float(np.sum(Z * Z))) / (n * (n - 1))
+    return ratio, cos
 
 
 class NeighborConsistency(BaseAnalyzer):

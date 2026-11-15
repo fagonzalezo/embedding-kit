@@ -136,11 +136,11 @@ print(f"Distance CV:        {result.distance_cv:.4f}")
 
 An *isotropic* embedding space uses all directions equally — variance is spread evenly across every dimension. An *anisotropic* space concentrates most variance in a small number of principal directions, leaving the rest unused.
 
-**Why it matters.** Anisotropy often co-occurs with hubness (a few dominant directions create hub structure). It also wastes capacity: if 700 of 768 dimensions carry negligible variance, those dimensions add noise but no signal. Studies of language model embeddings have shown that strong anisotropy is common in pre-trained representations and degrades downstream tasks (Mu et al., 2018).
+**Why it matters.** Anisotropy often co-occurs with hubness (a few dominant directions create hub structure), and removing the mean and top components helped some language-model tasks (Mu et al., 2018). It is a property, not a defect: strict isotropy is at odds with cluster structure, and whitening can hurt classification. The report therefore describes these statistics in `report.properties` and makes no recommendation from them; which of them predict that an intervention helps is the question of experiment E4.
 
 **Class:** `IsotropyAnalyzer(n_components=512, n_max=5000, random_state=42)`
 
-**Result fields:** `isotropy_score`, `participation_ratio`, `participation_ratio_corrected`, `participation_ratio_normalized`, `effective_rank`, `eigenvalue_spectrum_top`, `explained_variance_ratio`
+**Result fields:** `isotropy_score`, `participation_ratio`, `participation_ratio_corrected`, `participation_ratio_normalized`, `effective_rank`, `isoscore`, `top_k_variance_share`, `top_k_coordinate_share`, `spectrum_alpha`, `mean_vector_ratio`, `mean_cosine`, `eigenvalue_spectrum_top`, `explained_variance_ratio`
 
 All statistics are computed exactly, from the covariance or the Gram matrix of at most `n_max` rows, at any dimension. `eigenvalue_spectrum_top` holds the top `n_components` eigenvalues, for plotting (`eigenvalue_spectrum` is a deprecated alias).
 
@@ -148,8 +148,12 @@ All statistics are computed exactly, from the covariance or the Gram matrix of a
 
 - `isotropy_score` = `effective_rank / min(n − 1, D)`: `[0, 1]` (clipped). **1 = perfectly isotropic** (all directions used equally); near 0 = the space has effectively collapsed to a single direction.
 - `participation_ratio` = `(Σλᵢ)² / Σλᵢ²`: `[1, D]`. Intuitively, the number of eigenvalue-weighted dimensions that contribute to the space. Near D = isotropic. The sample value is biased downward by about `1 / (1 + D/n)`, so an isotropic Gaussian with n = 3,000 gives 0.75·D at D = 1,000 and 0.55·D at D = 2,500.
-- `participation_ratio_corrected`: the same ratio with an unbiased estimate of `tr(Σ²)` (exact for Gaussian data), clipped to `[1, D]`. `participation_ratio_normalized` = corrected / D, in `[0, 1]`; the report flags values below 0.1 as highly and below 0.3 as moderately anisotropic.
-- `effective_rank` = `exp(H)` where H is the entropy of the normalized eigenvalue spectrum: `[1, D]`. Measures how many "effective" principal components are needed to describe the space.
+- `participation_ratio_corrected`: the same ratio with an unbiased estimate of `tr(Σ²)` (exact for Gaussian data), clipped to `[1, D]`. `participation_ratio_normalized` = corrected / D, in `[0, 1]`: the summary of isotropy that does not depend on n.
+- `effective_rank` = `exp(H)` where H is the entropy of the normalized eigenvalue spectrum: `[1, D]`. Measures how many "effective" principal components are needed to describe the space. Like `isotropy_score`, it is a plug-in value, biased low when n is not much larger than D (0.66 of the maximum for iid data at n = 3,000, D = 2,500).
+- `isoscore`: IsoScore (Rudman et al., 2022), `[0, 1]`, computed as published. Its six steps reduce to `(participation_ratio − 1) / (D − 1)`, so it carries the plug-in bias: iid data at n = 300, D = 512 score 0.37, not 1.
+- `top_k_variance_share`: share of the variance in the top 1, 3 and 10 principal components. `top_k_coordinate_share`: the same for the coordinates with the largest variance; a few dominant coordinates are the "rogue dimensions" of Timkey and van Schijndel (2021).
+- `spectrum_alpha`: power-law decay exponent of the eigenvalues, `λᵢ ∝ i^−α` (Agrawal et al., 2022), fitted on a log-log scale over the top half of the non-zero spectrum (the finite-sample tail bends down). It recovers α = 1 and 2 within 0.06 from n = 300 to 5,000; a flat spectrum gives 0.1 to 0.35.
+- `mean_vector_ratio` = `‖mean(x)‖ / mean(‖x‖)` and `mean_cosine` (average cosine over all pairs of distinct rows), both uncentred: how much of each vector is a shared offset.
 
 ```python
 from embedkit.analysis.geometry import IsotropyAnalyzer
@@ -244,7 +248,7 @@ print(f"Condition number: {result.condition_number:.2e}")
 
 ### 1.8 Unified Analysis Report
 
-`EmbedKitAnalyzer` runs all seven analyzers in a single call and assembles the results into an `EmbedKitReport`. The report also holds a null-model calibration and a list of **recommendations**.
+`EmbedKitAnalyzer` runs all seven analyzers in a single call and assembles the results into an `EmbedKitReport`. The report also holds a null-model calibration, a list of **properties** (descriptive statements about the spectrum, the dominant coordinates, the mean direction and, when calibrated, uniformity against the null; no thresholds) and a list of **recommendations** (actions: hubness, concentration and neighbour consistency beyond the null, many antihubs, a low ID/D).
 
 **Null-model calibration** (`calibrate=True`, the default). k-skewness, `distance_cv`, neighbour consistency and uniformity depend on n, d, k and the covariance spectrum, so a fixed threshold means something different on every dataset. The analyzer recomputes these four statistics on `n_null_draws` (default 20) data sets drawn from a null model of the same size as a subsample of `n_calibration` rows (default 2,000), with the same k and metric. `report.calibration[name]` holds the observed value, the null mean and standard deviation, and the z-score. `report.n_outside_null` counts the statistics with `|z| > z_threshold` (default 3); it replaces the old `severity`. The default `null_model="gaussian"` is a Gaussian with the data's mean and a covariance whose trace and `tr(Σ²)` match unbiased estimates from the data (`embedkit.analysis.null`); `"permuted"` permutes each column independently. The recommendations about these four statistics come from the z-scores, and with `calibrate=False` none is made. Calibration costs `n_null_draws + 1` evaluations of the four statistics: about 50 s for 3,680 × 2,048 ResNet features on a laptop.
 
@@ -786,6 +790,8 @@ fig = viz.plot_knn_graph(X, k=10, highlight_hubs=True)
 
 ## References
 
+Agrawal, K. K., Mondal, A. K., Ghosh, A., & Richards, B. A. (2022). α-ReQ: Assessing representation quality in self-supervised learning by measuring eigenspectrum decay. In *Advances in Neural Information Processing Systems* (Vol. 35).
+
 Albergante, L., Bac, J., & Zinovyev, A. (2019). Estimating the effective dimension of large biological datasets using Fisher separability analysis. In *2019 International Joint Conference on Neural Networks (IJCNN)*. IEEE.
 
 Amsaleg, L., Chelly, O., Furon, T., Girard, S., Houle, M. E., Kawarabayashi, K., & Nett, M. (2015). Estimating local intrinsic dimensionality. In *Proceedings of the 21st ACM SIGKDD International Conference on Knowledge Discovery and Data Mining* (pp. 29–38). ACM.
@@ -826,11 +832,15 @@ Mu, J., Bhat, S., & Viswanath, P. (2018). All-but-the-top: Simple and effective 
 
 Radovanović, M., Nanopoulos, A., & Ivanovic, M. (2010). Hubs in space: Popular nearest neighbors in high-dimensional data. *Journal of Machine Learning Research*, 11, 2487–2531.
 
+Rudman, W., Gillman, N., Rayne, T., & Eickhoff, C. (2022). IsoScore: Measuring the uniformity of embedding space utilization. In *Findings of the Association for Computational Linguistics: ACL 2022*.
+
 Schnitzer, D., Flexer, A., Schedl, M., & Widmer, G. (2012). Local and global scaling reduce hubs in space. *Journal of Machine Learning Research*, 13, 2871–2902.
 
 Schroff, F., Kalenichenko, D., & Philbin, J. (2015). FaceNet: A unified embedding for face recognition and clustering. In *Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR 2015)* (pp. 815–823). IEEE.
 
 van den Oord, A., Li, Y., & Vinyals, O. (2018). Representation learning with contrastive predictive coding. *arXiv preprint arXiv:1807.03748*.
+
+Timkey, W., & van Schijndel, M. (2021). All bark and no bite: Rogue dimensions in transformer language models obscure representational quality. In *Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing (EMNLP)*.
 
 Wang, T., & Isola, P. (2020). Understanding contrastive representation learning through alignment and uniformity on the hypersphere. In *Proceedings of the 37th International Conference on Machine Learning (ICML 2020)*, PMLR 119.
 

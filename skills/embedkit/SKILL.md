@@ -110,15 +110,18 @@ For detailed interpretation of every metric and its healthy ranges, read
 
 ## Pathology → Improvement Quick Reference
 
+> These fixed-threshold pairings are from 0.1.x and are not backed by a benchmark. Since 0.5.0 the
+> report judges hubness, distance concentration and neighbour consistency against a null model,
+> and describes anisotropy and clustering as properties (`report.properties`), not defects.
+> Experiment E4 (WP 7.1) decides which pairings stay.
+
 | Detected pathology | Metric signal | Recommended improvement |
 |---|---|---|
 | Severe hubness | `k_skewness > 5` | `AlignUniformLoss` + `KNNPairs` |
 | Moderate hubness | `k_skewness 2–5` | `NTXentLoss` + `KNNPairs` |
-| High anisotropy | `participation_ratio_normalized < 0.1` | `AlignUniformLoss` or PCA whitening first |
 | Distance collapse | `distance_cv < 0.02` (provisional) | Reduce `target_dim` aggressively |
 | Sparse manifold | `ID/D < 0.1` | Strong bottleneck (low `target_dim`) |
 | Low neighbor stability | `mean_consistency < 0.5` | `KNNPairs` (auto-config default) |
-| Poor spread / clusters | `uniformity > -1.0` | `AlignUniformLoss` |
 | Supervised, class labels available | any severity | `mode="supervised"`, `SupConLoss` |
 | Supervised, continuous/regression labels | any severity | `mode="supervised"`, `RankNContrastLoss` |
 | Sparse / NLP embeddings | high dim, sparse values | `FeatureDropout` augmentation |

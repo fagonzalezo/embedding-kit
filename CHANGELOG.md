@@ -3,7 +3,26 @@
 ## Unreleased
 
 Phase 6 of `docs/IMPLEMENTATION_PLAN.md`: supervised and regression modes. Phase 4, WP 4.1:
-null-calibrated statistics in the report; WP 4.2: intrinsic dimension per estimator.
+null-calibrated statistics in the report; WP 4.2: intrinsic dimension per estimator; WP 4.3:
+isotropy and spectrum statistics, reported as properties.
+
+### Changed (WP 4.3)
+- **Anisotropy and clustered directions are properties, not defects.** The participation-ratio
+  recommendations ("highly anisotropic ... consider whitening") and the calibrated uniformity
+  statement leave `report.recommendations` for the new `report.properties`: descriptive
+  sentences about the spectrum, the dominant coordinates, the mean direction and (when
+  calibrated) uniformity against the null, with no thresholds. Which of them predict that an
+  intervention helps is E4's question (WP 7.1).
+- With no recommendation, the report says "No recommendation: ..." instead of "Embedding geometry
+  looks healthy".
+
+### Added (WP 4.3)
+- `IsotropyResult`: `isoscore` (Rudman et al. 2022, as published; it reduces to
+  `(PR - 1) / (d - 1)` and has the plug-in bias), `top_k_variance_share` and
+  `top_k_coordinate_share` for k in 1, 3, 10 (principal components; coordinates, the "rogue
+  dimensions" of Timkey and van Schijndel 2021), `spectrum_alpha` (power-law exponent of the top
+  half of the spectrum; recovers 1 and 2 within 0.06), `mean_vector_ratio` and `mean_cosine`
+  (uncentred). All in `to_dataframe()` and `print_summary()`.
 
 ### Changed (WP 4.2)
 - **Breaking: `IntrinsicDimensionResult.consensus` and the `aggregate` argument are removed.** The

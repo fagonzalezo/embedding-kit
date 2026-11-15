@@ -632,7 +632,7 @@ Release as 0.6.0.
 | 3.3 | Write up and gate | done (2026-11-11; `docs/BENCHMARK_E1_E2.md`; gate outcome C plus WP 5.3) |
 | 4.1 | Null models | done (2026-11-14): moment-matched Gaussian null; acceptance met in all 32 cells; `severity` replaced by `n_outside_null` |
 | 4.2 | Intrinsic dimension | done (2026-11-14): per-estimator bootstrap intervals, TwoNN scale curve, ESS; acceptance revised with the user (bias at ID 10 and 20 goes to E3); target dim from TwoNN |
-| 4.3 | Isotropy and spectrum | not started |
+| 4.3 | Isotropy and spectrum | done (2026-11-14): IsoScore, PC and coordinate shares, spectrum alpha, mean direction; `report.properties` replaces the anisotropy recommendations |
 | 4.4 | Metric consistency, kernel spectrum | not started |
 | 4.5 | Run E3 and E5 | not started |
 | 5.1 | Residual adapter | done (2026-11-12): accepted in E6; `EmbedKit` default is now `architecture="linear"` |
@@ -976,13 +976,38 @@ Release as 0.6.0.
   Pets: TwoNN 16.2 [15.3, 17.0], MLE 12.9, lPCA 38.0, MOM 9.4; scale curve 16.1, 17.0, 15.3, 14.0
   (n to n/8), no plateau.
 
+### WP 4.3 notes (2026-11-14)
+
+- **IsoScore is the plug-in participation ratio.** Rudman et al.'s six steps reduce to
+  `(PR - 1) / (d - 1)` (checked to 1e-6 against a step-by-step implementation). It is reported
+  as published, so it carries the plug-in bias (iid data, n = 300, d = 512: 0.37);
+  `participation_ratio_normalized` is the corrected summary.
+- **spectrum_alpha** is fitted on the top half of the non-zero eigenvalues. Full-range fits are
+  inflated by the finite-sample tail (alpha = 1: 1.33 at n = 500, d = 256 and 1.35 at n = 300,
+  d = 512); the top half gives 0.99-1.03 and 2.00-2.06 for alpha = 1 and 2 at n from 300 to
+  5,000. A flat spectrum gives 0.1-0.35.
+- **"Rogue dimensions"** in the review cite Timkey and van Schijndel (2021), who mean
+  coordinates; the plan's "spectrum" item means principal components. Both are reported
+  (`top_k_coordinate_share`, `top_k_variance_share`).
+- **Properties, not recommendations.** `report.properties` holds descriptive sentences with no
+  thresholds; the participation-ratio rules and the calibrated uniformity statement moved there.
+  The recommendations left are the calibrated hubness, concentration and consistency rules, the
+  antihub rule and the ID/D rule; E4 decides which survive.
+- **Pets** (3,680 x 2,048): top 1 / 3 / 10 PCs 9% / 18% / 35% of the variance, alpha 1.43,
+  coordinates 2% / 6% / 14%, mean vector 0.41 of the average norm, mean cosine 0.17, IsoScore
+  0.024. Its only recommendation is now the ID/D rule.
+- `effective_rank` and `isotropy_score` keep the plug-in bias noted in phase 1; their docs say
+  so and point to `participation_ratio_normalized`. No correction was added.
+- `skills/embedkit/SKILL.md`: the anisotropy and clustering rows of the quick-reference table are
+  removed, with a note that the remaining fixed-threshold rows await E4 (full rewrite in WP 7.4).
+
 ## Open points for the next session
 
 All design decisions in this plan are confirmed.
 
 1. **Phases 5 and 6 are done** (0.4.0 tagged locally on 2026-11-13; phase 6 is unreleased).
-2. **Phase 4 is in progress** (started 2026-11-14). WP 4.1 and WP 4.2 are done (see the phase 4
-   and WP 4.2 notes); next are WP 4.3 (isotropy and spectrum), WP 4.4 and E3/E5 in WP 4.5. E3 must
+2. **Phase 4 is in progress** (started 2026-11-14). WP 4.1, 4.2 and 4.3 are done (see their
+   notes); next are WP 4.4 (one metric everywhere, kernel spectrum) and E3/E5 in WP 4.5. E3 must
    include the per-estimator bias table that WP 4.2's revised acceptance hands over. Phases 4 and
    6 ship together as 0.5.0, and phase 7 as 0.6.0 (the user's decision, 2026-11-14). The user
    also kept calibration on by default with 20 draws.
