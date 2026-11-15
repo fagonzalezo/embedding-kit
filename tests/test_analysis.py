@@ -120,14 +120,17 @@ class TestEmbedKitAnalyzer:
         report = EmbedKitAnalyzer(id_methods=["TwoNN"]).fit(small_X)
         assert report.suggested_k > 0
         assert report.suggested_target_dim > 0
-        assert report.severity in ("low", "medium", "high")
+        assert set(report.calibration) == {
+            "k_skewness", "distance_cv", "neighbor_consistency", "uniformity"}
+        assert 0 <= report.n_outside_null <= 4
         assert len(report.recommendations) > 0
 
     def test_to_dict(self, small_X):
         from embedkit.analysis.report import EmbedKitAnalyzer
         report = EmbedKitAnalyzer(id_methods=["TwoNN"]).fit(small_X)
         d = report.to_dict()
-        assert "severity" in d
+        assert "n_outside_null" in d
+        assert "z_score" in d["calibration"]["k_skewness"]
         assert "recommendations" in d
 
     def test_to_dataframe(self, small_X):
@@ -136,13 +139,15 @@ class TestEmbedKitAnalyzer:
         df = report.to_dataframe()
         assert "metric" in df.columns
         assert "value" in df.columns
+        assert "k_skewness_z" in set(df["metric"])
 
     def test_print_summary(self, small_X, capsys):
         from embedkit.analysis.report import EmbedKitAnalyzer
         report = EmbedKitAnalyzer(id_methods=["TwoNN"]).fit(small_X)
         report.print_summary()
         captured = capsys.readouterr()
-        assert "severity" in captured.out.lower()
+        assert "[calibration]" in captured.out.lower()
+        assert "recommendations" in captured.out.lower()
 
     def test_input_shape(self, small_X):
         from embedkit.analysis.report import EmbedKitAnalyzer

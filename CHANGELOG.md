@@ -2,7 +2,35 @@
 
 ## Unreleased
 
-Phase 6 of `docs/IMPLEMENTATION_PLAN.md`: supervised and regression modes.
+Phase 6 of `docs/IMPLEMENTATION_PLAN.md`: supervised and regression modes. Phase 4, WP 4.1:
+null-calibrated statistics in the report.
+
+### Changed (WP 4.1)
+- **Breaking: `EmbedKitReport.severity` is removed.** It was a sum of fixed-threshold crossings
+  with no reference distribution (review 3.2). `report.n_outside_null` counts the calibrated
+  statistics with `|z| > z_threshold` (default 3), or is `None` without calibration.
+- **The recommendations about k-skewness, `distance_cv`, neighbour consistency and uniformity
+  come from z-scores against a null model**, not from the constants (k-skewness > 2 or 5,
+  `distance_cv < 0.02`, consistency < 0.5, uniformity > -1). Each is made only in its direction
+  (more hubness, more concentrated distances, a less stable graph, more clustered directions than
+  the null). With `calibrate=False` none is made. The antihub, ID/D and participation-ratio rules
+  are unchanged until WP 4.2 and 4.3.
+- `EmbedKit.fit` runs the report with `calibrate=False`: it reads only `suggested_target_dim`.
+- `DistanceConcentration` and `UniformityScore` compute pairwise distances from one BLAS product
+  in float64 instead of `scipy` `cdist` / `pdist`, 15-20 times faster at 2,000 x 2,048.
+  Distances agree with `cdist` to 1e-13 and identical rows still give exact zeros; uniformity,
+  now computed in float64 instead of float32, agrees to about 1e-8.
+
+### Added (WP 4.1)
+- `embedkit.analysis.null`: `spectrum_matched_gaussian` (a Gaussian with the data's mean and
+  covariance `alpha C + beta I`, where the trace and `tr(Sigma^2)` match unbiased estimates;
+  the sample covariance itself makes iid data look more isotropic than their own null, with
+  distance-CV z-scores down to -19), `column_permuted`, `null_distribution`, `calibrate` and
+  `CalibratedStatistic` (observed, null mean and sd, z-score).
+- `EmbedKitAnalyzer(calibrate=True, null_model="gaussian", n_null_draws=20, n_calibration=2000,
+  z_threshold=3.0)` and `report.calibration`, also in `to_dataframe()` and `print_summary()`.
+  It costs `n_null_draws + 1` evaluations of the four statistics on `n_calibration` rows (about
+  50 s at 3,680 x 2,048).
 
 ### Changed
 - **Supervised `EmbedKit` trains the residual adapter** (`architecture="residual"`: the

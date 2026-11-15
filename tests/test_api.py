@@ -22,7 +22,8 @@ class TestEmbedKit:
         ek = EmbedKit(epochs=2, eval_every=100)
         ek.fit(small_X)
         assert ek.analysis_report is not None
-        assert ek.analysis_report.severity in ("low", "medium", "high")
+        # EmbedKit reads only suggested_target_dim, so it skips the null calibration.
+        assert ek.analysis_report.calibration is None
 
     def test_explicit_target_dim(self, small_X):
         from embedkit import EmbedKit

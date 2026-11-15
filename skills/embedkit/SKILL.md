@@ -80,7 +80,8 @@ report = analyzer.fit(X, y=None)    # y enables centered_kernel_alignment
 | `report.hubness` | `HubnessResult` | k-occurrence distribution, skewness, hub/antihub ratios |
 | `report.geometry` | `GeometryBundle` | Distance concentration, isotropy, neighbor consistency, uniformity |
 | `report.kernel` | `KernelDiagnosticsResult` | RBF kernel rank, spectral gap, condition number |
-| `report.severity` | `"low"/"medium"/"high"` | Overall pathology severity |
+| `report.calibration` | `dict[str, CalibratedStatistic]` | k-skewness, distance CV, neighbour consistency, uniformity against a null model (z-scores) |
+| `report.n_outside_null` | `int` | Calibrated statistics with \|z\| > 3 (replaces `severity`) |
 | `report.recommendations` | `list[str]` | Actionable suggestions |
 | `report.suggested_k` | `int` | Recommended kNN size |
 | `report.suggested_sigma` | `float` | Recommended RBF sigma |
@@ -99,7 +100,7 @@ print(report.hubness.k_skewness)
 print(report.geometry.isotropy.participation_ratio)
 print(report.intrinsic_dim.consensus)
 print(report.recommendations)
-print(report.severity)           # "low" | "medium" | "high"
+print(report.n_outside_null)     # calibrated statistics with |z| > 3
 ```
 
 For detailed interpretation of every metric and its healthy ranges, read

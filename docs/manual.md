@@ -240,9 +240,9 @@ print(f"Condition number: {result.condition_number:.2e}")
 
 ### 1.8 Unified Analysis Report
 
-`EmbedKitAnalyzer` runs all seven analyzers in a single call and assembles the results into an `EmbedKitReport`. The report also computes a **severity level** and a list of **recommendations** that guide the improvement module.
+`EmbedKitAnalyzer` runs all seven analyzers in a single call and assembles the results into an `EmbedKitReport`. The report also holds a null-model calibration and a list of **recommendations**.
 
-**Severity scoring.** Each problematic metric adds points to a cumulative score (hubness, ID/D ratio, anisotropy, distance concentration, neighbor consistency, and uniformity each contribute 1–2 points). Score ≥ 4 → `"high"`, ≥ 2 → `"medium"`, else `"low"`.
+**Null-model calibration** (`calibrate=True`, the default). k-skewness, `distance_cv`, neighbour consistency and uniformity depend on n, d, k and the covariance spectrum, so a fixed threshold means something different on every dataset. The analyzer recomputes these four statistics on `n_null_draws` (default 20) data sets drawn from a null model of the same size as a subsample of `n_calibration` rows (default 2,000), with the same k and metric. `report.calibration[name]` holds the observed value, the null mean and standard deviation, and the z-score. `report.n_outside_null` counts the statistics with `|z| > z_threshold` (default 3); it replaces the old `severity`. The default `null_model="gaussian"` is a Gaussian with the data's mean and a covariance whose trace and `tr(Σ²)` match unbiased estimates from the data (`embedkit.analysis.null`); `"permuted"` permutes each column independently. The recommendations about these four statistics come from the z-scores, and with `calibrate=False` none is made. Calibration costs `n_null_draws + 1` evaluations of the four statistics: about 50 s for 3,680 × 2,048 ResNet features on a laptop.
 
 **Auto-configuration outputs.** The report exposes three suggested hyperparameters consumed by `EmbedKit`:
 
@@ -252,7 +252,7 @@ print(f"Condition number: {result.condition_number:.2e}")
 | `suggested_sigma` | RBF bandwidth from median-distance heuristic |
 | `suggested_target_dim` | `clip(1.5 × ID, ID, D)` — a dimensionality target that preserves the manifold with headroom |
 
-**Class:** `EmbedKitAnalyzer(k, id_methods, metric, random_state)`
+**Class:** `EmbedKitAnalyzer(k, id_methods, metric, random_state, calibrate, null_model, n_null_draws, n_calibration, z_threshold)`
 
 ```python
 from embedkit import EmbedKitAnalyzer
@@ -263,7 +263,8 @@ report.print_summary()
 # access individual sub-results
 print(report.hubness.k_skewness)
 print(report.geometry.isotropy.isotropy_score)
-print(report.severity)            # "low" | "medium" | "high"
+print(report.calibration["k_skewness"].z_score)   # against the null model
+print(report.n_outside_null)      # statistics with |z| > 3
 print(report.recommendations)     # list of strings
 print(report.suggested_target_dim)
 
@@ -709,7 +710,7 @@ ek = EmbedKit(mode="regression", epochs=100)
 X_refined = ek.fit_transform(X, y=targets)
 
 # inspect what was auto-configured
-print(ek.analysis_report.severity)
+print(ek.analysis_report.suggested_target_dim)   # EmbedKit runs the report uncalibrated
 print(ek._config)
 
 # save and reload

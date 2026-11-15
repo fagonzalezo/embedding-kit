@@ -91,7 +91,7 @@ class TestIsotropyD6:
     def test_report_has_no_anisotropy_recommendation(self, d):
         from embedkit.analysis.report import EmbedKitAnalyzer
 
-        report = EmbedKitAnalyzer(id_methods=["TwoNN"]).fit(_iid(3000, d))
+        report = EmbedKitAnalyzer(id_methods=["TwoNN"], calibrate=False).fit(_iid(3000, d))
         assert not any("anisotrop" in r.lower() or "participation" in r.lower()
                        for r in report.recommendations), report.recommendations
 
@@ -267,25 +267,28 @@ class TestDistanceConcentrationD10:
         r = DistanceConcentration().fit(_iid(100, 8))
         assert r.relative_contrast > 0 and 0 <= r.concentration_ratio <= 1
 
-    def test_report_flags_concentration_by_cv(self):
+    def test_report_flags_concentration_by_calibrated_cv(self):
+        # WP 4.1: the fixed distance_cv threshold of WP 1.5 is replaced by a z-score against
+        # the null model; only a CV below the null range is reported.
         from types import SimpleNamespace as NS
 
-        from embedkit.analysis.report import _assess_severity_and_recommendations
+        from embedkit.analysis.null import calibrated_statistic
+        from embedkit.analysis.report import _recommendations
 
-        def bundle(cv):
-            return NS(
-                isotropy=NS(participation_ratio_normalized=1.0, participation_ratio=1.0),
-                distance_concentration=NS(distance_cv=cv, concentration_ratio=0.0),
-                neighbor_consistency=NS(mean_consistency=1.0),
-                uniformity=NS(uniformity=-3.0),
-            )
-
+        bundle = NS(isotropy=NS(participation_ratio_normalized=1.0))
         idr = NS(consensus=float("nan"))
-        hub = NS(k_skewness=0.0, antihub_ratio=0.0)
-        _, low_cv = _assess_severity_and_recommendations(idr, hub, bundle(0.005), None, 100)
-        _, ok_cv = _assess_severity_and_recommendations(idr, hub, bundle(0.2), None, 100)
-        assert any("distance concentration" in r for r in low_cv)
-        assert not any("distance concentration" in r for r in ok_cv)
+        hub = NS(antihub_ratio=0.0)
+        null = np.array([0.05, 0.051, 0.049, 0.05])
+
+        def recs(cv):
+            cal = {"distance_cv": calibrated_statistic(cv, null, "gaussian", 100)}
+            return _recommendations(idr, hub, bundle, cal, 100)
+
+        assert any("more concentrated" in r for r in recs(0.03))
+        assert not any("more concentrated" in r for r in recs(0.05))
+        assert not any("more concentrated" in r for r in recs(0.08))  # wrong direction
+        assert not any("concentrated" in r
+                       for r in _recommendations(idr, hub, bundle, None, 100))
 
 
 # --------------------------------------------------------------------------------------

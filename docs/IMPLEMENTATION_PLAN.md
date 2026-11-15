@@ -19,8 +19,8 @@ This plan is written to be picked up in a later session without the conversation
 
 ### Environment facts a new session needs
 
-- Run Python with `conda run -n pytorch python ...` from the repository root. The project's `.venv` is broken
-  (SciPy does not import).
+- Run Python with `conda run -n pytorch python ...` from the repository root. The project's `.venv` was broken
+  (SciPy did not import) and was removed on 2026-11-14.
 - **FAISS crashes in that environment** (`OMP: Error #15`, or a segfault inside `index.search`). Until WP 0.1 is
   done, run tests with:
 
@@ -74,10 +74,10 @@ The user was asked about each of these and confirmed the choice shown. Several w
 | 1 | Every defect rated A or B is fixed, with a regression test | 0 | 4 to 6 days | 0.1.3 |
 | 2 | Evaluation module, training-free baselines, benchmark harness | 1 | 4 to 5 days | 0.2.0 |
 | 3 | Experiments E1 and E2, then the decision gate | 2 | 3 to 4 days plus compute | none |
-| 4 | Diagnostics that are calibrated and consistent | 1 (2 for tests) | 5 to 7 days | 0.3.0 |
+| 4 | Diagnostics that are calibrated and consistent | 1 (2 for tests) | 5 to 7 days | 0.5.0 (with phase 6; decided 2026-11-14) |
 | 5 | Refiner improvements, each judged by the harness | 3 (gate) | 1 to 2 weeks | 0.4.0 |
-| 6 | Supervised and regression modes | 2, WP 1.2 | 4 to 6 days | with 0.4.0 |
-| 7 | Auto-configuration that selects among candidates; documentation | 3, 4, 5 | 4 to 5 days | 0.5.0 |
+| 6 | Supervised and regression modes | 2, WP 1.2 | 4 to 6 days | 0.5.0 (with phase 4) |
+| 7 | Auto-configuration that selects among candidates; documentation | 3, 4, 5 | 4 to 5 days | 0.6.0 |
 
 Phases 4 and 6 do not depend on the gate and can run in parallel with phase 3's compute.
 
@@ -415,7 +415,8 @@ Independent of the outcome:
 ## Phase 4: diagnostics
 
 **Goal:** every number in the report is consistent across n and d, comparable against a reference, and honours the
-requested metric. Release as 0.3.0. This phase does not depend on the gate.
+requested metric. Release as 0.5.0, together with phase 6 (the user's decision, 2026-11-14: 0.4.0
+was already tagged for phase 5). This phase does not depend on the gate.
 
 ### WP 4.1 Null models and calibrated statistics (review 3.2)
 
@@ -568,7 +569,7 @@ needs phase 2 and WP 1.2, and does not depend on the gate.
 ## Phase 7: auto-configuration and documentation
 
 **Goal:** `EmbedKit()` with defaults does something defensible, and the documentation says what was measured.
-Release as 0.5.0.
+Release as 0.6.0.
 
 ### WP 7.1 Run E4
 
@@ -629,7 +630,7 @@ Release as 0.5.0.
 | 3.1 | Run E1 | done (2026-11-11; cluster array 3077382) |
 | 3.2 | Run E2 | done (2026-11-11; cluster array 3077451) |
 | 3.3 | Write up and gate | done (2026-11-11; `docs/BENCHMARK_E1_E2.md`; gate outcome C plus WP 5.3) |
-| 4.1 | Null models | not started |
+| 4.1 | Null models | done (2026-11-14): moment-matched Gaussian null; acceptance met in all 32 cells; `severity` replaced by `n_outside_null` |
 | 4.2 | Intrinsic dimension | not started |
 | 4.3 | Isotropy and spectrum | not started |
 | 4.4 | Metric consistency, kernel spectrum | not started |
@@ -892,14 +893,61 @@ Release as 0.5.0.
 - Not done here: the kbn-histo-survival rerun (handed over), ConR or SupReMix (RnC beats ridge
   once on the MLP).
 
+### Phase 4 notes (2026-11-14)
+
+- **Started 2026-11-14, after phase 6.** WP 4.1 first, on `phase1/correctness`.
+- **The null in WP 4.1 is not the plain sample covariance.** A Gaussian with the data's sample
+  covariance fails the acceptance test: the sample spectrum is more spread than the population one
+  (plug-in PR biased by about `1 / (1 + d/n)`), so data drawn from a Gaussian look more isotropic
+  than their own null. Prototype, 2 repetitions: distance-CV z = -19 at n = 300, d = 512 and -8 at
+  n = 3,000, d = 512; neighbour consistency z = -5. `spectrum_matched_gaussian` instead uses
+  `alpha C + (1 - alpha) tr(C)/d I`, with `alpha` set so that the trace is kept and `tr(Sigma^2)`
+  equals its unbiased Wishart estimate (the same estimate as `participation_ratio_corrected`). The
+  mean is kept, because uniformity is computed on uncentred, normalised vectors.
+- **Acceptance (`tests/test_null.py::test_gaussian_null_is_calibrated_full`,
+  `EMBEDKIT_SLOW_TESTS=1`; between 45 and 77 min on the laptop, run under load):** 40
+  repetitions, 20 null draws,
+  n in {300, 3,000}, d in {32, 512}, flat and power-law (`lambda_i = 1/i`) spectra with a random
+  rotation and mean, k = the report's default. Share of repetitions with |z| <= 3, per statistic:
+  at least 0.975 in all 32 cells (k-skewness 0.975-1.0, neighbour consistency 0.975-1.0,
+  distance CV and uniformity 1.0). The default suite runs a 10-repetition version at n = 300 and
+  a permutation-null check on independent exponential columns. The 40-repetition run used the
+  `cdist`/`pdist` code from before the speed-up below; the in-suite version passes on the new
+  code, which gives the same values (distances to 1e-13, uniformity to about 1e-8).
+- **Report.** `EmbedKitAnalyzer(calibrate=True, null_model="gaussian", n_null_draws=20,
+  n_calibration=2000, z_threshold=3.0)`. Observed and null values are computed on the same
+  `n_calibration`-row subsample with the report's k and metric, so `report.calibration[...]
+  .observed` can differ from `report.hubness.k_skewness` (computed on up to `n_max` rows).
+  `severity` is removed (decision taken in this WP, as the plan allowed); `n_outside_null` counts
+  `|z| > 3`. Recommendations for the four statistics are one-directional (more hubness, more
+  concentration, a less stable graph, more clustered directions than the null); the antihub,
+  ID/D and participation-ratio thresholds are untouched until WP 4.2 and 4.3. `EmbedKit.fit`
+  passes `calibrate=False`.
+- **Cost.** About 50 s extra on Pets (3,680 x 2,048), on top of 15 s, after moving
+  `DistanceConcentration` and `UniformityScore` from `scipy` `cdist`/`pdist` to one BLAS product
+  (15-20 times faster, same values to 1e-13). Neighbour consistency (5 perturbed kNN searches per
+  draw) is now most of it.
+- **First reading on real data (Pets ResNet50).** All four statistics are far from the Gaussian
+  null: k-skewness z = -4.3 (less hubness than the null), distance CV +39, neighbour consistency
+  +26, uniformity +14. On real embeddings a Gaussian null may flag nearly everything; E4 (WP 7.1)
+  decides which recommendations stay.
+- **Left for WP 7.4:** `skills/embedkit/references/metric_guide.md` still describes the old
+  severity scoring (the manual, `SKILL.md` and `examples/02_self_supervised.py` were updated).
+  The frozen 0.1.2 review scripts in `benchmarks/review_2026_11/` (`verify2.py` reads `severity`)
+  are left as they are; the benchmark harness does not call `EmbedKitAnalyzer`.
+
 ## Open points for the next session
 
-All design decisions in this plan are confirmed. Two practical points remain:
+All design decisions in this plan are confirmed.
 
-1. **Phase 5 is in progress** (the user chose it before phase 4, 2026-11-11). Gate outcome C plus WP 5.3 (see the
-   phase 3 notes). WP 5.1 is done (default `linear`). WP 5.2 (two-day attempt, from 2026-11-11), WP 5.3
-   and the E1 hubness methods (WP 5.5) are implemented and run on the cluster. Then E7 and the 0.4.0 release.
-   Update 2026-11-13: phase 5 is done. WP 5.2 rejected, WP 5.3 accepted as an opt-in, WP 5.5 done,
-   E6 and E7 run; the self-supervised default is PCA (see the phase 5 notes). Next: the 0.4.0
-   release (tagged locally as `v0.4.0`, 2026-11-13; there is no 0.3.0, as phase 4 comes after), then
-   phases 4, 6 and 7.
+1. **Phases 5 and 6 are done** (0.4.0 tagged locally on 2026-11-13; phase 6 is unreleased).
+2. **Phase 4 is in progress** (started 2026-11-14). WP 4.1 is done (see the phase 4 notes); next are
+   WP 4.2 (intrinsic dimension: per-estimator reports, bootstrap intervals, ID against scale; it
+   also needs a new source for `suggested_target_dim` once `consensus` goes), WP 4.3, WP 4.4 and
+   E3/E5 in WP 4.5. Phases 4 and 6 ship together as 0.5.0, and phase 7 as 0.6.0 (the user's
+   decision, 2026-11-14). The user also kept calibration on by default with 20 draws.
+3. **Phase 7** follows phase 4.
+4. **Benchmark results:** new experiments commit only their reports and summaries, as E8 does;
+   per-run JSON stays on the cluster. E8's per-run files exist only on Occidata
+   (`$BASE/embedding-kit/benchmarks/results/e8/`); the local copies were deleted on 2026-11-14
+   after an MD5 check.

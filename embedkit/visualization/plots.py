@@ -149,11 +149,16 @@ class AnalysisPlotter:
         axes[1, 1].set_title("Key Metrics")
         axes[1, 1].tick_params(axis="x", rotation=30)
 
-        # 6: severity text
+        # 6: summary text
+        n_out = self.report.n_outside_null
+        outside = (
+            "not calibrated" if n_out is None
+            else f"{n_out} of {len(self.report.calibration)}"
+        )
         axes[1, 2].axis("off")
         axes[1, 2].text(
             0.1, 0.9,
-            f"Severity: {self.report.severity.upper()}\n"
+            f"Outside the null: {outside}\n"
             f"ID: {self.report.intrinsic_dim.consensus:.1f}\n"
             f"Uniformity: {self.report.geometry.uniformity.uniformity:.3f}\n\n"
             + "\n".join(f"• {r[:60]}..." if len(r) > 60 else f"• {r}"

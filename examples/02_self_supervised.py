@@ -32,7 +32,7 @@ report_after.print_summary()
 
 print(f"\nk_skewness:  {report_before.hubness.k_skewness:.3f} → {report_after.hubness.k_skewness:.3f}")
 print(f"uniformity:  {report_before.geometry.uniformity.uniformity:.4f} → {report_after.geometry.uniformity.uniformity:.4f}")
-print(f"severity:    {report_before.severity} → {report_after.severity}")
+print(f"outside the null: {report_before.n_outside_null} → {report_after.n_outside_null}")
 
 viz = EmbeddingVisualizer(method="pca", random_state=0)
 fig = viz.plot_comparison(X, X_refined)
