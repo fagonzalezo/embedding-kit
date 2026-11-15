@@ -349,7 +349,10 @@ class NeighborConsistency(BaseAnalyzer):
         else:
             _, base_indices = knn(X, self.k, metric=self.metric)
 
-        std = self.noise_std * float(np.std(X))
+        # RMS per-coordinate sd of the centred rows: translation-invariant. np.std(X) over all
+        # entries (before 0.5) also counted the spread of the coordinate means, so adding a
+        # common vector changed the perturbation and the consistency.
+        std = self.noise_std * float(np.sqrt(np.mean(np.var(X, axis=0, dtype=np.float64))))
         noise_buf = np.empty(X.shape, dtype=np.float64)
         consistencies = []
         for _ in range(n_pert):

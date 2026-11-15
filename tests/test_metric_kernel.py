@@ -165,3 +165,14 @@ def test_cosine_knn_matches_scikit_learn_cosine():
         X).kneighbors(X)
     np.testing.assert_array_equal(idx, ref_i[:, 1:])
     np.testing.assert_allclose(dist, ref_d[:, 1:], atol=1e-5)
+
+
+def test_neighbor_consistency_is_translation_invariant():
+    # WP 4.5: the perturbation scale ignores the coordinate means.
+    from embedkit.analysis.geometry import NeighborConsistency
+
+    X = _gauss(400, 16, alpha=1.0, seed=7)
+    shift = 50.0 * np.random.default_rng(8).standard_normal(16).astype(np.float32)
+    a = NeighborConsistency(k=10).fit(X).mean_consistency
+    b = NeighborConsistency(k=10).fit(X + shift).mean_consistency
+    assert a == pytest.approx(b, abs=0.01)

@@ -1037,6 +1037,63 @@ Release as 0.6.0.
 - `skills/embedkit/references/metric_guide.md` still lists `condition_number`; it is rewritten
   in WP 7.4 with the rest of that file.
 
+### WP 4.5 design and criteria, fixed before the runs (2026-11-15)
+
+Scale chosen by the user (2026-11-15): one-factor sweeps, E5 with the training-free baselines
+only. E3 does not fit `run.py`'s transform-evaluation shape, so it is `benchmarks/e3.py` (as E2
+is `e2.py`); E5's repair half is `run.py --experiment e5` on damaged variants
+`<name>__dmg_<kind><level>` (`bench_datasets.damage`), its detection half `benchmarks/e5.py`.
+Per-run files stay on Occidata; the reports and summaries are committed.
+
+**E3 grid** (`e3.py --list`): `id` 1,110 cells (16 manifolds x 14 settings x 5 seeds, less the
+D = 64 cells of the two 72-variable manifolds), `gauss` 1,260 cells, `subsample` 120 cells.
+
+**E3 analysis.**
+- ID, per manifold, estimator and setting: bias (mean over 5 seeds minus the true ID), sd over
+  seeds, mean bootstrap se (n <= 5,000) and the coverage of the 95% intervals. The WP 4.2 bias
+  table is the centre cells of the spheres and cubes at ID 10 and 20. The scale plateau is scored
+  as a noise detector: plateau rate on noise-free cells against noisy ones.
+- Gauss: for each calibrated statistic, the share of cells with `|z| < 3`, overall and by
+  family, n, d, k and metric. The WP 4.1 criterion (at least 95%) is the bar; cells below it are
+  listed. The raw statistics give the null tables (mean and sd by n, d, k for each family), and
+  each recommendation's firing rate on these null data is its false-alarm rate.
+- Subsample (the phase 4 exit criterion): the reading of a report is (a) the set of
+  recommendation types (hubness, concentration, consistency, antihub, ID/D low, ID/D moderate),
+  (b) the sign of each calibrated z beyond +-3 (-1, 0, +1), (c) the plateau flag. For each set
+  the majority reading over the 5 subsets at n = 2,000 is compared with that at 20,000; the
+  criterion holds when every item agrees. Per-seed disagreement is reported too. If the ID/D
+  rule flips between 2k and 20k, that is a finding, not something to tune away.
+
+**E5 expected signatures** (written before the runs):
+
+| Damage | Expected change in the report | Expected effect on accuracy | Expected repair |
+|---|---|---|---|
+| `mean` | mean-vector ratio and mean cosine up; Euclidean statistics unchanged (translation) | none for Euclidean kNN and the probe; little for cosine | `center_l2`, `abtt-1` |
+| `nuis` | top-1/3 PC shares up, corrected PR down, alpha up | kNN down | `abtt-3`, whitening |
+| `aniso` | PR down, alpha up; calibrated z small (the null follows the spectrum) | kNN down on some sets | ZCA, whitening |
+| `noise` | TwoNN up, plateau lost, `distance_cv` down, neighbour consistency down | kNN down | PCA |
+| `pad` | TwoNN up, top-k shares down, ID/D down | kNN down | PCA |
+| `domain` | kernel spectral gap and top-1 PC share up | little (membership is independent of labels) | none needed |
+
+A damage counts as detected by a calibrated statistic and by a property as defined in the
+noise-floor bullet below. A damage is
+recovered by a baseline when that baseline's cosine kNN accuracy on the damaged set is within 1
+point of raw on the clean set.
+
+**Seen while building the harness** (digits, Pets; not results): on Pets, `mean`, `domain` and
+`aniso` up to condition number 100 barely move kNN accuracy, so the levels for `aniso` and
+`noise` were raised to (100, 10,000) and (1, 3) before any cluster run; on digits the
+neighbour-consistency z moved with a common vector (14.9 to 33.5), because its noise scale was
+`np.std(X)` over all entries, which includes the spread of the coordinate means. Fixed before
+the runs (the user, 2026-11-15): the scale is now the RMS per-coordinate sd, translation-invariant.
+- **Added after review, before the runs:** two unit-norm Gaussian families in `gauss`
+  (`flat_l2`, `power1_l2`; 180 cells, so 1,260 in all), because rows that arrive normalised are
+  not Gaussian and a first cell already flagged them (isotropic, n = 2,000, d = 256, Euclidean:
+  `distance_cv` z = -35.6); and a noise floor for E5: the clean report on 5 random 80% row
+  subsets. A property counts as detecting a damage only when it moves the expected way by more
+  than 3 times the spread over those subsets; a calibrated z, when it moves by more than 3 and
+  more than 3 times that spread.
+
 ## Open points for the next session
 
 All design decisions in this plan are confirmed.

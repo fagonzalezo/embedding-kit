@@ -7,6 +7,12 @@ null-calibrated statistics in the report; WP 4.2: intrinsic dimension per estima
 isotropy and spectrum statistics, reported as properties; WP 4.4: one metric in every analyzer
 and the centred kernel spectrum.
 
+### Changed (WP 4.5)
+- `NeighborConsistency` scales its perturbations by the RMS per-coordinate standard deviation,
+  `sqrt(mean_j var(X[:, j]))`, instead of `np.std(X)` over all entries, which also counted the
+  spread of the coordinate means: adding a common vector to digits moved the calibrated
+  neighbour-consistency z from 14.9 to 33.5. The statistic is now translation-invariant.
+
 ### Changed (WP 4.4)
 - **Breaking: `EmbedKitAnalyzer(metric=...)` accepts only `"euclidean"` and `"cosine"`**, and
   every analyzer honours it (defect 28: distance concentration, uniformity, the kernel and

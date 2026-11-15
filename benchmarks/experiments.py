@@ -469,5 +469,52 @@ def e8_methods(dataset) -> list[Method]:
     return m
 
 
-EXPERIMENTS: dict[str, Callable] = {"e1": e1_methods, "e6": e6_methods, "e7": e7_methods,
-                                    "e8": e8_methods}
+E5_DIM = 128
+E5_METRICS = ("knn_accuracy", "knn_accuracy_euclidean", "linear_probe_c1")
+
+
+def e5_methods(dataset) -> list[Method]:
+    """E5: the training-free baselines of phase 2 as repairs of a damaged embedding.
+
+    Run on ``<name>`` and its ``<name>__dmg_<kind><level>`` variants (``bench_datasets.damage``).
+    Fixed settings, no selection (run with ``--stages test``): PCA, whitening and the reduced
+    all-but-the-top at ``E5_DIM`` dimensions, all-but-the-top with 1, 3 and d / 100 components.
+    Only kNN accuracy (cosine and Euclidean) and the C = 1 probe are scored, which keeps a
+    CIFAR-100 run under a few minutes (E1's trustworthiness and continuity dominated its cost).
+    """
+    d = dataset.X_train.shape[1]
+    k = min(E5_DIM, d)
+    m = [
+        Method("raw", lambda s, ds, dev: B.Identity(), family="raw"),
+        Method("center_l2", lambda s, ds, dev: B.CenterNormalize(), family="center_l2"),
+        Method("standardize", lambda s, ds, dev: B.Standardize(), family="standardize"),
+        Method("zca", lambda s, ds, dev: B.ZCAWhiten(), family="zca"),
+        Method("conceptor", lambda s, ds, dev: B.ConceptorNegation(alpha=2.0),
+               family="conceptor", params=dict(alpha=2.0)),
+        Method(f"pca-{k}", lambda s, ds, dev: B.PCAReduce(k), family="pca",
+               params=dict(n_components=k)),
+        Method(f"pca_whiten-{k}", lambda s, ds, dev: B.PCAReduce(k, whiten=True),
+               family="pca_whiten", params=dict(n_components=k)),
+        Method(f"abtt_reduce-{k}", lambda s, ds, dev: B.AllButTheTop(7, n_components=k),
+               family="abtt_reduce", params=dict(n_remove=7, n_components=k)),
+    ]
+    for D in sorted({1, 3, max(1, d // 100)}):
+        m.append(Method(f"abtt-{D}", lambda s, ds, dev, D=D: B.AllButTheTop(D),
+                        family="abtt", params=dict(n_remove=D)))
+    from embedkit.hubness_reduction import CSLS, MutualProximity
+
+    for short, red in [("mp", MutualProximity()), ("csls", CSLS())]:
+        m.append(Method(f"raw+{short}", lambda s, ds, dev: B.Identity(), family=f"hub_{short}",
+                        params=dict(hubness_reduction=repr(red)), hubness_reduction=red,
+                        metrics=("knn_accuracy", "knn_accuracy_euclidean")))
+    return [x if x.metrics else _with_metrics(x, E5_METRICS) for x in m]
+
+
+def _with_metrics(method: Method, metrics: tuple) -> Method:
+    from dataclasses import replace
+
+    return replace(method, metrics=metrics)
+
+
+EXPERIMENTS: dict[str, Callable] = {"e1": e1_methods, "e5": e5_methods, "e6": e6_methods,
+                                    "e7": e7_methods, "e8": e8_methods}

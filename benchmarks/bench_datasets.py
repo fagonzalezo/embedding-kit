@@ -279,12 +279,85 @@ def row_subset(ds: Dataset, n: int, seed: int = 0) -> Dataset:
                    ds.y_test, meta)
 
 
+# Controlled damage of a good embedding (E5, review section 5). ``<name>__dmg_<kind><level>``.
+DAMAGE_KINDS = {
+    # kind: (levels, what the level means)
+    "mean": ((1, 5), "a common vector whose norm is <level> x the mean row norm"),
+    "nuis": ((3, 10), "noise along 3 random directions, sd <level> x the top principal sd"),
+    "aniso": ((100, 10_000), "a random linear map with condition number <level>"),
+    "noise": ((1, 3), "isotropic noise whose norm is <level> x the RMS centred row norm"),
+    "pad": ((1, 4), "<level> x d extra noise coordinates with the data's mean coordinate sd"),
+    "domain": ((1, 3), "half the rows shifted by a vector of <level> x the RMS centred norm"),
+}
+
+
+def damage_names(base: str) -> list[str]:
+    """Every damaged variant of ``base``, in a fixed order."""
+    return [f"{base}__dmg_{kind}{lvl:g}" for kind, (levels, _) in DAMAGE_KINDS.items()
+            for lvl in levels]
+
+
+def damage(ds: Dataset, kind: str, level: float, seed: int = 0) -> Dataset:
+    """Apply a known damage to both splits of ``ds`` (E5).
+
+    The damage parameters (directions, scales, the linear map, the shift) are drawn once from
+    ``seed`` and scaled with statistics of the training rows only; both splits get the same
+    map. Per-row randomness (noise, domain membership) is drawn independently for the two
+    splits. Labels are unchanged, and domain membership is independent of them.
+    """
+    if kind not in DAMAGE_KINDS:
+        raise KeyError(f"Unknown damage {kind!r}; expected one of {sorted(DAMAGE_KINDS)}")
+    Xtr = ds.X_train.astype(np.float64)
+    n, d = Xtr.shape
+    rng = np.random.default_rng(seed)
+    mu = Xtr.mean(0)
+    rms_centred = float(np.sqrt(np.mean(np.sum((Xtr - mu) ** 2, axis=1))))
+    split_rngs = (np.random.default_rng(seed + 1), np.random.default_rng(seed + 2))
+
+    def unit(v):
+        return v / np.linalg.norm(v)
+
+    if kind == "mean":
+        shift = level * float(np.linalg.norm(Xtr, axis=1).mean()) * unit(rng.standard_normal(d))
+        f = lambda X, r: X + shift  # noqa: E731
+    elif kind == "nuis":
+        top_sd = float(np.sqrt(np.linalg.eigvalsh(np.cov(Xtr[:20_000].T))[-1]))
+        U, _ = np.linalg.qr(rng.standard_normal((d, 3)))
+        f = lambda X, r: X + (r.standard_normal((len(X), 3)) * level * top_sd) @ U.T  # noqa: E731
+    elif kind == "aniso":
+        Q, _ = np.linalg.qr(rng.standard_normal((d, d)))
+        # Singular values log-uniform in [level^-1/2, level^1/2] (geometric mean about 1, so
+        # the overall scale is kept), with both ends set so the condition number is exact.
+        half = 0.5 * np.log(level)
+        sv = np.exp(rng.uniform(-half, half, d))
+        sv[0], sv[1] = np.exp(half), np.exp(-half)
+        A = (Q * sv) @ Q.T
+        f = lambda X, r: (X - mu) @ A + mu  # noqa: E731
+    elif kind == "noise":
+        sd = level * rms_centred / np.sqrt(d)
+        f = lambda X, r: X + sd * r.standard_normal(X.shape)  # noqa: E731
+    elif kind == "pad":
+        p = int(round(level * d))
+        sd = float(np.sqrt(np.mean(Xtr.var(0))))
+        f = lambda X, r: np.hstack([X, sd * r.standard_normal((len(X), p))])  # noqa: E731
+    else:  # domain
+        shift = level * rms_centred * unit(rng.standard_normal(d))
+        f = lambda X, r: X + (r.random(len(X)) < 0.5)[:, None] * shift  # noqa: E731
+
+    X_train = f(Xtr, split_rngs[0]).astype(np.float32)
+    X_test = f(ds.X_test.astype(np.float64), split_rngs[1]).astype(np.float32)
+    meta = dict(ds.meta, damage=kind, damage_level=level, base_dataset=ds.name,
+                damage_description=DAMAGE_KINDS[kind][1].replace("<level>", f"{level:g}"))
+    return Dataset(f"{ds.name}__dmg_{kind}{level:g}", X_train, ds.y_train, X_test, ds.y_test,
+                   meta)
+
+
 def load(name: str, root: str | os.PathLike | None = None) -> Dataset:
     """Load a benchmark dataset by name. Raises :class:`DatasetUnavailableError` if it is absent.
 
     ``<name>__lpc<k>`` is the classification set ``<name>`` with ``k`` labelled training rows
     per class (:func:`label_subset`); ``<name>__n<k>`` keeps ``k`` training rows of any set
-    (:func:`row_subset`).
+    (:func:`row_subset`); ``<name>__dmg_<kind><level>`` is a damaged copy (:func:`damage`, E5).
     """
     base, sep, variant = name.partition("__")
     if sep:
@@ -295,8 +368,13 @@ def load(name: str, root: str | os.PathLike | None = None) -> Dataset:
             return label_subset(ds, int(variant[3:]))
         if variant.startswith("n") and variant[1:].isdigit():
             return row_subset(load(base, root), int(variant[1:]))
+        if variant.startswith("dmg_"):
+            spec = variant[4:]
+            kind = spec.rstrip("0123456789.")
+            if kind in DAMAGE_KINDS and spec[len(kind):]:
+                return damage(load(base, root), kind, float(spec[len(kind):]))
         raise KeyError(f"Unknown dataset variant {variant!r} in {name!r} "
-                       "(expected lpc<k> or n<k>)")
+                       "(expected lpc<k>, n<k> or dmg_<kind><level>)")
     if name not in LOADERS:
         raise KeyError(f"Unknown dataset {name!r}. Available: {sorted(LOADERS)}")
     return LOADERS[name](data_root(root))

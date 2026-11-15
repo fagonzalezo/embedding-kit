@@ -168,7 +168,7 @@ print(f"Effective rank:    {result.effective_rank:.1f}")
 
 ### 1.5 Neighbor Consistency
 
-*Neighbor consistency* measures how stable the k-NN graph is under small Gaussian perturbations. For each point, a perturbed copy of the dataset is generated with noise scaled to `noise_std × std(X)`, and the fraction of original neighbors that survive in the perturbed graph is recorded.
+*Neighbor consistency* measures how stable the k-NN graph is under small Gaussian perturbations. For each point, a perturbed copy of the dataset is generated with noise of standard deviation `noise_std × s`, where `s` is the RMS per-coordinate standard deviation `sqrt(mean_j var(X[:, j]))` (translation-invariant; before 0.5 it was the standard deviation over all entries, which also counted the spread of the coordinate means), and the fraction of original neighbors that survive in the perturbed graph is recorded.
 
 **Why it matters.** An unstable kNN graph means that tiny changes in input (e.g., measurement noise, model updates) can completely reorganize the neighborhood structure. Downstream tasks that rely on kNN will be unreliable in such spaces.
 
