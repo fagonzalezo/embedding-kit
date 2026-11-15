@@ -159,7 +159,8 @@ class AnalysisPlotter:
         axes[1, 2].text(
             0.1, 0.9,
             f"Outside the null: {outside}\n"
-            f"ID: {self.report.intrinsic_dim.consensus:.1f}\n"
+            f"ID ({self.report.intrinsic_dim.reference_method}): "
+            f"{self.report.intrinsic_dim.reference_estimate:.1f}\n"
             f"Uniformity: {self.report.geometry.uniformity.uniformity:.3f}\n\n"
             + "\n".join(f"• {r[:60]}..." if len(r) > 60 else f"• {r}"
                         for r in self.report.recommendations[:4]),

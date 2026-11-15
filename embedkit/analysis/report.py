@@ -55,8 +55,11 @@ class EmbedKitReport(BaseResult):
         dc = self.geometry.distance_concentration
         nc = self.geometry.neighbor_consistency
         rows = [
-            ("ID", "consensus", self.intrinsic_dim.consensus),
-            ("ID", "uncertainty", self.intrinsic_dim.uncertainty),
+            *[(("ID", m, v)) for m, v in self.intrinsic_dim.estimates.items()],
+            *[("ID", f"{m}_se", s) for m, s in self.intrinsic_dim.standard_errors.items()],
+            ("ID", "between_method_spread", self.intrinsic_dim.between_method_spread),
+            ("ID", "reference_method", self.intrinsic_dim.reference_method),
+            ("ID", "scale_plateau", self.intrinsic_dim.scale_plateau),
             ("Hubness", "k_skewness", self.hubness.k_skewness),
             ("Hubness", "robinhood_index", self.hubness.robinhood_index),
             ("Hubness", "antihub_ratio", self.hubness.antihub_ratio),
@@ -107,9 +110,15 @@ class EmbedKitReport(BaseResult):
         print(f"{'='*60}")
         print("\n[Intrinsic Dimension]")
         id_res = self.intrinsic_dim
-        print(f"  consensus ID     : {id_res.consensus:.2f}  (±{id_res.uncertainty:.2f})")
-        for m, v in self.intrinsic_dim.estimates.items():
-            print(f"  {m:<14}: {v:.2f}")
+        for m, v in id_res.estimates.items():
+            lo, hi = id_res.intervals.get(m, (float("nan"), float("nan")))
+            ci = f"  [{lo:.2f}, {hi:.2f}]" if not np.isnan(lo) else ""
+            print(f"  {m:<14}: {v:.2f}{ci}")
+        if id_res.scale_curve:
+            curve = ", ".join(f"{v:.1f} (n={k})" for k, v in id_res.scale_curve.items())
+            print(f"  TwoNN by scale: {curve}; plateau: {id_res.scale_plateau}")
+        print(f"  (intervals: sampling error only; k-NN estimators read low at high ID; "
+              f"target dim from {id_res.reference_method})")
         print("\n[Hubness]")
         print(f"  k-skewness       : {self.hubness.k_skewness:.3f}")
         print(f"  Robin Hood index : {self.hubness.robinhood_index:.3f}")
@@ -164,6 +173,11 @@ class EmbedKitAnalyzer(BaseAnalyzer):
         (``|z| > z_threshold`` in the direction each recommendation names), and
         ``report.n_outside_null`` counts the statistics with ``|z| > z_threshold``. With
         ``calibrate=False`` the report makes no recommendation about them.
+    id_bootstrap, id_scale_curve:
+        Passed to :class:`IntrinsicDimensionEstimator` as ``n_bootstrap`` and ``scale_curve``.
+        ``suggested_target_dim`` is ``1.5 x`` the reference estimate (TwoNN, or the first method
+        of ``id_methods`` that succeeded), clipped to ``[max(4, ID), d]``; ``max(2, d // 4)``
+        stands in for the ID when every method failed.
     """
 
     def __init__(
@@ -179,6 +193,8 @@ class EmbedKitAnalyzer(BaseAnalyzer):
         n_null_draws: int = 20,
         n_calibration: int = 2_000,
         z_threshold: float = 3.0,
+        id_bootstrap: int = 20,
+        id_scale_curve: bool = True,
     ):
         self.k = k
         self.id_methods = id_methods or ["TwoNN", "MLE", "lPCA", "MOM"]
@@ -191,6 +207,8 @@ class EmbedKitAnalyzer(BaseAnalyzer):
         self.n_null_draws = n_null_draws
         self.n_calibration = n_calibration
         self.z_threshold = z_threshold
+        self.id_bootstrap = id_bootstrap
+        self.id_scale_curve = id_scale_curve
 
     def fit(self, X, y=None) -> EmbedKitReport:
         X = self._prepare(X, min_n=5)
@@ -198,7 +216,9 @@ class EmbedKitAnalyzer(BaseAnalyzer):
         k = self.k or max(5, round(np.sqrt(min(n, self.n_max)) / 2))
 
         id_est = IntrinsicDimensionEstimator(
-            methods=self.id_methods, n_max=min(5_000, self.n_max), random_state=self.random_state
+            methods=self.id_methods, n_max=min(5_000, self.n_max),
+            n_bootstrap=self.id_bootstrap, scale_curve=self.id_scale_curve,
+            random_state=self.random_state,
         )
         id_result = id_est.fit(X)
 
@@ -234,8 +254,10 @@ class EmbedKitAnalyzer(BaseAnalyzer):
 
         suggested_k = k
         suggested_sigma = kernel_result.sigma
-        consensus_id = id_result.consensus if not np.isnan(id_result.consensus) else max(2, d // 4)
-        suggested_target_dim = int(np.clip(round(1.5 * consensus_id), max(4, int(consensus_id)), d))
+        ref_id = id_result.reference_estimate
+        if np.isnan(ref_id):
+            ref_id = max(2, d // 4)
+        suggested_target_dim = int(np.clip(round(1.5 * ref_id), max(4, int(ref_id)), d))
 
         calibration = self._calibrate(X, k) if self.calibrate else None
         n_outside = (
@@ -320,17 +342,19 @@ def _recommendations(
         )
 
     # ID / D ratio (curse of dimensionality)
-    consensus_id = id_result.consensus
-    if not np.isnan(consensus_id) and d > 0:
-        id_d_ratio = consensus_id / d
+    ref_id = id_result.reference_estimate
+    if not np.isnan(ref_id) and d > 0:
+        id_d_ratio = ref_id / d
         if id_d_ratio < 0.1:
             recs.append(
-                f"Low intrinsic-to-ambient ratio (ID/D ≈ {id_d_ratio:.2f}): "
+                f"Low intrinsic-to-ambient ratio ({id_result.reference_method} ID/D ≈ "
+                f"{id_d_ratio:.2f}): "
                 "the embedding is very sparse — strong dimensionality reduction is advised."
             )
         elif id_d_ratio < 0.3:
             recs.append(
-                f"Moderate intrinsic-to-ambient ratio (ID/D ≈ {id_d_ratio:.2f}): "
+                f"Moderate intrinsic-to-ambient ratio ({id_result.reference_method} ID/D ≈ "
+                f"{id_d_ratio:.2f}): "
                 "dimensionality reduction may improve downstream tasks."
             )
 

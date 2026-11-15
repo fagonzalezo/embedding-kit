@@ -76,7 +76,7 @@ report = analyzer.fit(X, y=None)    # y enables centered_kernel_alignment
 
 | Attribute | Type | What it holds |
 |---|---|---|
-| `report.intrinsic_dim` | `IntrinsicDimensionResult` | Per-method ID estimates, consensus, uncertainty |
+| `report.intrinsic_dim` | `IntrinsicDimensionResult` | Per-method ID estimates with bootstrap intervals, TwoNN scale curve, reference estimate |
 | `report.hubness` | `HubnessResult` | k-occurrence distribution, skewness, hub/antihub ratios |
 | `report.geometry` | `GeometryBundle` | Distance concentration, isotropy, neighbor consistency, uniformity |
 | `report.kernel` | `KernelDiagnosticsResult` | RBF kernel rank, spectral gap, condition number |
@@ -85,7 +85,7 @@ report = analyzer.fit(X, y=None)    # y enables centered_kernel_alignment
 | `report.recommendations` | `list[str]` | Actionable suggestions |
 | `report.suggested_k` | `int` | Recommended kNN size |
 | `report.suggested_sigma` | `float` | Recommended RBF sigma |
-| `report.suggested_target_dim` | `int` | Recommended output dimension (≈ 1.5 × ID) |
+| `report.suggested_target_dim` | `int` | Recommended output dimension (≈ 1.5 × TwoNN ID) |
 
 ---
 
@@ -98,7 +98,7 @@ report.to_dataframe()            # pandas table for logging / CSV export
 # Access sub-results directly
 print(report.hubness.k_skewness)
 print(report.geometry.isotropy.participation_ratio)
-print(report.intrinsic_dim.consensus)
+print(report.intrinsic_dim.estimates)    # per method; no consensus
 print(report.recommendations)
 print(report.n_outside_null)     # calibrated statistics with |z| > 3
 ```
@@ -142,7 +142,7 @@ ek = EmbedKit(
     mode="self_supervised",     # or "supervised"
     augmentation="auto",        # or pass an augmentation object
     loss="auto",                # or pass a loss object
-    target_dim="auto",          # or int; auto = 1.5 × intrinsic dim
+    target_dim="auto",          # or int; auto = 1.5 × TwoNN intrinsic dim
     hidden_dim=256,
     n_layers=2,
     epochs=200,

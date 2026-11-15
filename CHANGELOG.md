@@ -3,7 +3,29 @@
 ## Unreleased
 
 Phase 6 of `docs/IMPLEMENTATION_PLAN.md`: supervised and regression modes. Phase 4, WP 4.1:
-null-calibrated statistics in the report.
+null-calibrated statistics in the report; WP 4.2: intrinsic dimension per estimator.
+
+### Changed (WP 4.2)
+- **Breaking: `IntrinsicDimensionResult.consensus` and the `aggregate` argument are removed.** The
+  estimators measure different things and are no longer combined (review 3.3). `uncertainty` is
+  renamed `between_method_spread`, which says what it is.
+- **`suggested_target_dim` is `1.5 x` the TwoNN estimate** instead of the median across
+  estimators (the user's choice; no benchmark supports either). If `id_methods` omits TwoNN or it
+  fails, the first method of `id_methods` that succeeded is used (`reference_method`). The ID / D
+  recommendation uses the same number. The auto d moves slightly: Pets 22 to 24, digits 12 to 13.
+- `print_summary()` shows each estimator with its interval, and the scale curve.
+- `EmbedKit.fit` skips the ID bootstrap and scale curve (it reads only `suggested_target_dim`).
+
+### Added (WP 4.2)
+- Bootstrap standard errors and intervals per estimator (`IntrinsicDimensionEstimator(n_bootstrap=20)`,
+  `standard_errors`, `intervals`). They cover sampling error only: on spheres and cubes they match
+  the spread over independent draws (ratios 0.95-1.19), but the k-NN estimators read low at high
+  ID (a 20-sphere gives 15-17 at n = 5,000), which no interval covers. `ESS` and `DANCo` (50-110 s
+  per fit) are not resampled.
+- `scale_curve` and `scale_plateau`: TwoNN on nested subsamples of n, n/2, n/4 and n/8 rows, and
+  whether all levels are within `plateau_tolerance` (10%) of the full-sample value.
+- `ESS` (expected simplex skewness) among the supported methods; about 100 s per fit at n = 5,000.
+- `EmbedKitAnalyzer(id_bootstrap=20, id_scale_curve=True)`.
 
 ### Changed (WP 4.1)
 - **Breaking: `EmbedKitReport.severity` is removed.** It was a sum of fixed-threshold crossings

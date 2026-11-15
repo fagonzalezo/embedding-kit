@@ -29,7 +29,7 @@ The *intrinsic dimension* (ID) of a dataset is the minimum number of coordinates
 
 **Why it matters.** Knowing the ID sets a principled lower bound for `target_dim`: projecting below the ID loses information, projecting far above it wastes capacity and amplifies the curse of dimensionality. A large gap between ID and ambient dimension D also signals that the embedding space is poorly utilized.
 
-EmbedKit supports seven estimators, each making different geometric assumptions:
+EmbedKit supports eight estimators, each making different geometric assumptions. They measure different things and are reported separately; nothing combines them:
 
 | Method | Approach |
 |--------|----------|
@@ -40,28 +40,32 @@ EmbedKit supports seven estimators, each making different geometric assumptions:
 | `CorrInt` | Correlation integral scaling (Grassberger & Procaccia, 1983) |
 | `MOM` | Method of moments on nearest-neighbor distances (Amsaleg et al., 2015) |
 | `FisherS` | Separability-based estimate using Fisher information (Albergante et al., 2019) |
+| `ESS` | Expected simplex skewness (Johnsson et al., 2015); the most accurate at high ID in our tests, but about 100 s per fit at n = 5,000 |
 
-**Class:** `IntrinsicDimensionEstimator(methods, aggregate, random_state)`
+**Class:** `IntrinsicDimensionEstimator(methods, n_max, n_bootstrap, scale_curve, plateau_tolerance, random_state)`
 
 **Result fields:**
-- `estimates` — per-method ID values.
-- `consensus` — aggregate across methods (median by default).
-- `uncertainty` — standard deviation of per-method estimates.
+- `estimates` — per-method ID values (NaN when a method failed, with a warning).
+- `standard_errors`, `intervals` — bootstrap standard error (`n_bootstrap = 20` resamples of the rows; repeated rows are dropped, as in `fit`) and the interval `estimate ± 1.96 se`. Against the spread over independent draws of spheres and cubes, these standard errors were within about 30% of the true sampling error. `ESS` and `DANCo` are too slow to resample and get NaN.
+- `between_method_spread` — standard deviation of the estimates across methods (formerly `uncertainty`). It is not a sampling uncertainty.
+- `scale_curve`, `scale_plateau` — TwoNN on nested subsamples of n, n/2, n/4 and n/8 rows (fewer rows probe larger scales), and whether every level is within 10% of the full-sample value. Noise inflates the ID at short scales, so a curve that rises with n points to noise (Denti et al., 2022).
+- `reference_method`, `reference_estimate` — the one estimate the report uses for `suggested_target_dim` and the ID/D recommendation: TwoNN when requested and successful, otherwise the first method in `methods` that succeeded.
 - `local_estimates` — per-point local ID for methods that support it (TwoNN, MLE, lPCA).
 - `n_duplicates_removed` — exact duplicate rows dropped before estimation (duplicates make TwoNN divide by zero and MLE return 0).
 
-A method whose estimate is not finite or not positive is reported as NaN, with a warning, and left out of the consensus. Methods run one after another; running them in threads made results vary between runs with the same `random_state`.
+Methods run one after another; running them in threads made results vary between runs with the same `random_state`.
 
 **Ranges & interpretation:**
-- `consensus`: positive float in `[1, D]`. A value close to D means the embedding fills the ambient space. Values much smaller than D reveal an under-utilized, low-dimensional manifold. The library flags `ID/D < 0.1` as a strong signal for dimensionality reduction and `ID/D < 0.3` as a moderate signal.
-- `uncertainty`: `[0, ∞)`. Near 0 means all methods agree. Large values (> 5) suggest ambiguous geometry; prefer a conservative `target_dim` in that case.
+- **The intervals cover sampling error only, not bias.** The k-NN estimators (TwoNN, MLE, MOM) read low at high ID: on a 20-sphere with n = 5,000 they give 15 to 17. `lPCA` counts linear dimensions, so it returns d + 1 for a d-sphere and is exact only for flat manifolds.
+- The library flags `ID/D < 0.1` (reference estimate) as a strong signal for dimensionality reduction and `ID/D < 0.3` as a moderate one.
 
 ```python
 from embedkit.analysis.intrinsic_dim import IntrinsicDimensionEstimator
 
 result = IntrinsicDimensionEstimator(methods=["TwoNN", "MLE", "lPCA"]).fit(X)
-print(f"Consensus ID: {result.consensus:.1f}  ± {result.uncertainty:.1f}")
-print(f"Per-method:   {result.estimates}")
+for m, est in result.estimates.items():
+    print(m, est, result.intervals[m])
+print(result.scale_curve, result.scale_plateau)
 ```
 
 ---
@@ -250,9 +254,9 @@ print(f"Condition number: {result.condition_number:.2e}")
 |-------|---------|
 | `suggested_k` | kNN neighborhood size, set to `max(5, √n / 2)` |
 | `suggested_sigma` | RBF bandwidth from median-distance heuristic |
-| `suggested_target_dim` | `clip(1.5 × ID, ID, D)` — a dimensionality target that preserves the manifold with headroom |
+| `suggested_target_dim` | `clip(1.5 × ID, max(4, ID), D)` with ID the reference estimate (TwoNN by default). No benchmark supports the factor 1.5 (E1, E6); WP 7.2 replaces it with selection |
 
-**Class:** `EmbedKitAnalyzer(k, id_methods, metric, random_state, calibrate, null_model, n_null_draws, n_calibration, z_threshold)`
+**Class:** `EmbedKitAnalyzer(k, id_methods, metric, random_state, calibrate, null_model, n_null_draws, n_calibration, z_threshold, id_bootstrap, id_scale_curve)`
 
 ```python
 from embedkit import EmbedKitAnalyzer
@@ -796,6 +800,8 @@ Conneau, A., Lample, G., Ranzato, M., Denoyer, L., & Jégou, H. (2018). Word tra
 
 Cristianini, N., Shawe-Taylor, J., Elisseeff, A., & Kandola, J. S. (2001). On kernel-target alignment. In *Advances in Neural Information Processing Systems* (Vol. 14, pp. 367–373). MIT Press.
 
+Denti, F., Doimo, D., Laio, A., & Mira, A. (2022). The generalized ratios intrinsic dimension estimator. *Scientific Reports*, 12, 20005.
+
 DeVries, T., & Taylor, G. W. (2017). Improved regularization of convolutional neural networks with Cutout. *arXiv preprint arXiv:1708.04552*.
 
 Feldbauer, R., & Flexer, A. (2019). A comprehensive empirical comparison of hubness reduction in high-dimensional spaces. *Knowledge and Information Systems*, 59, 137–166.
@@ -807,6 +813,8 @@ Gao, T., Yao, X., & Chen, D. (2021). SimCSE: Simple contrastive learning of sent
 Grassberger, P., & Procaccia, I. (1983). Measuring the strangeness of strange attractors. *Physica D: Nonlinear Phenomena*, 9(1–2), 189–208.
 
 Hara, K., Suzuki, I., Kobayashi, K., Fukumizu, K., & Radovanović, M. (2016). Flattening the density gradient for eliminating spatial centrality to reduce hubness. In *Proceedings of the 30th AAAI Conference on Artificial Intelligence (AAAI 2016)* (pp. 1659–1665).
+
+Johnsson, K., Soneson, C., & Fontes, M. (2015). Low bias local intrinsic dimension estimation from expected simplex skewness. *IEEE Transactions on Pattern Analysis and Machine Intelligence*, 37(1), 196–202.
 
 Khosla, P., Tian, Y., Wang, X., Liu, C., Isola, P., & others (2020). Supervised contrastive learning. In *Advances in Neural Information Processing Systems* (Vol. 33, pp. 18661–18673). Curran Associates.
 

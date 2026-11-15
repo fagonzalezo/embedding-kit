@@ -137,11 +137,14 @@ class EmbedKit:
                     UserWarning, stacklevel=2)
 
         # Step 1: analyze
-        # Only suggested_target_dim is read here, so the null calibration is skipped.
+        # Only suggested_target_dim is read here, so the null calibration, the ID bootstrap and
+        # the ID scale curve are skipped.
         analyzer = EmbedKitAnalyzer(
             id_methods=self.id_methods,
             random_state=self.random_state,
             calibrate=False,
+            id_bootstrap=0,
+            id_scale_curve=False,
         )
         self.analysis_report = analyzer.fit(X_np, y)
         report = self.analysis_report

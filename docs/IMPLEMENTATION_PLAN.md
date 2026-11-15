@@ -631,7 +631,7 @@ Release as 0.6.0.
 | 3.2 | Run E2 | done (2026-11-11; cluster array 3077451) |
 | 3.3 | Write up and gate | done (2026-11-11; `docs/BENCHMARK_E1_E2.md`; gate outcome C plus WP 5.3) |
 | 4.1 | Null models | done (2026-11-14): moment-matched Gaussian null; acceptance met in all 32 cells; `severity` replaced by `n_outside_null` |
-| 4.2 | Intrinsic dimension | not started |
+| 4.2 | Intrinsic dimension | done (2026-11-14): per-estimator bootstrap intervals, TwoNN scale curve, ESS; acceptance revised with the user (bias at ID 10 and 20 goes to E3); target dim from TwoNN |
 | 4.3 | Isotropy and spectrum | not started |
 | 4.4 | Metric consistency, kernel spectrum | not started |
 | 4.5 | Run E3 and E5 | not started |
@@ -936,16 +936,56 @@ Release as 0.6.0.
   The frozen 0.1.2 review scripts in `benchmarks/review_2026_11/` (`verify2.py` reads `severity`)
   are left as they are; the benchmark harness does not call `EmbedKitAnalyzer`.
 
+### WP 4.2 notes (2026-11-14)
+
+- **Measured first** (n = 5,000, spheres S^m from `skdim.datasets.hyperSphere(n, m)`, which
+  returns m + 1 coordinates, and cubes [0, 1]^m, embedded linearly in 256 dimensions):
+
+  | | S^5 | cube 5 | S^10 | cube 10 | S^20 | cube 20 | s per fit |
+  |---|---|---|---|---|---|---|---|
+  | TwoNN | 5.0 | 4.6 | 9.5 | 8.7 | 17.2 | 16.3 | 0.3 |
+  | MLE | 4.9 | 4.6 | 9.2 | 8.3 | 16.1 | 14.9 | 0.1 |
+  | MOM | 4.9 | 4.5 | 8.9 | 8.1 | 15.2 | 14.1 | 0.1 |
+  | lPCA | 6.0 | 5.0 | 11.0 | 10.0 | 21.0 | 20.0 | 0.0 |
+  | ESS | 5.1 | 4.7 | 10.1 | 9.4 | 20.2 | 19.3 | ~100 |
+  | DANCo | 5.0 | 5.1 | 14.0 | 10.0 | 19.0 | 22.0 | ~55 |
+  | CorrInt | 4.9 | 4.6 | 9.1 | 8.1 | 15.8 | 14.2 | 0.2 |
+  | FisherS | 6.0 | 4.8 | 11.0 | 9.4 | 21.0 | 19.1 | 0.7 |
+
+  The k-NN estimators read low at high ID; lPCA counts linear dimensions (d + 1 on a d-sphere).
+- **Bootstrap.** The plan's row bootstrap (with replacement; repeated rows dropped, so about 63%
+  of the rows) gives standard errors that match the spread over 40 independent draws: TwoNN 0.20
+  vs 0.19 (S^10), 0.30 vs 0.28 (S^20), 0.15 vs 0.16 (cube 10); MLE and MOM similar. Half-sampling
+  without replacement did no better. True sampling errors are 0.02-0.3; the bias at ID 20 is 3-5.
+- **Acceptance revised with the user (2026-11-14).** The planned criterion (an interval of a
+  default estimator contains the true ID at 5, 10 and 20) cannot hold: the intervals measure
+  sampling error, the bias is larger, and lPCA passes cubes only because the embedding is linear.
+  New criterion: the bootstrap se matches the across-draw sd (tested: ratios 1.19, 1.02, 0.95 for
+  TwoNN, MLE, MOM on S^10, n = 2,000) and an interval contains the truth at ID 5 (TwoNN on S^5,
+  lPCA on the 5-cube). The per-estimator bias at ID 10 and 20 goes into E3 (WP 4.5).
+- **Scale curve.** TwoNN on n, n/2, n/4, n/8 (levels under 20 rows skipped). It drifts down on
+  clean high-ID data (S^20: 17.1 to 15.8; S^5: 5.03 to 4.66), so the plateau test is a 10%
+  relative tolerance, not a significance test. Isotropic noise of 0.01 on S^3 gives 6.8 (n/8) to
+  17.0 (n): no plateau.
+- **Reference estimate (the user's choice, 2026-11-14).** `suggested_target_dim` and the ID / D
+  rule use TwoNN, or the first method of `id_methods` that succeeded. Candidates on Pets / digits:
+  median 22 / 12 (old), TwoNN 24 / 13, largest estimate 57 / 34. No benchmark supports any.
+- `ESS` and `DANCo` are supported but not resampled (50-110 s per fit).
+- **Cost.** On Pets (3,680 x 2,048, four default methods) the ID step takes 35 s instead of 7 s with
+  the bootstrap and the curve; with the WP 4.1 calibration the default report takes about 95 s.
+  Pets: TwoNN 16.2 [15.3, 17.0], MLE 12.9, lPCA 38.0, MOM 9.4; scale curve 16.1, 17.0, 15.3, 14.0
+  (n to n/8), no plateau.
+
 ## Open points for the next session
 
 All design decisions in this plan are confirmed.
 
 1. **Phases 5 and 6 are done** (0.4.0 tagged locally on 2026-11-13; phase 6 is unreleased).
-2. **Phase 4 is in progress** (started 2026-11-14). WP 4.1 is done (see the phase 4 notes); next are
-   WP 4.2 (intrinsic dimension: per-estimator reports, bootstrap intervals, ID against scale; it
-   also needs a new source for `suggested_target_dim` once `consensus` goes), WP 4.3, WP 4.4 and
-   E3/E5 in WP 4.5. Phases 4 and 6 ship together as 0.5.0, and phase 7 as 0.6.0 (the user's
-   decision, 2026-11-14). The user also kept calibration on by default with 20 draws.
+2. **Phase 4 is in progress** (started 2026-11-14). WP 4.1 and WP 4.2 are done (see the phase 4
+   and WP 4.2 notes); next are WP 4.3 (isotropy and spectrum), WP 4.4 and E3/E5 in WP 4.5. E3 must
+   include the per-estimator bias table that WP 4.2's revised acceptance hands over. Phases 4 and
+   6 ship together as 0.5.0, and phase 7 as 0.6.0 (the user's decision, 2026-11-14). The user
+   also kept calibration on by default with 20 draws.
 3. **Phase 7** follows phase 4.
 4. **Benchmark results:** new experiments commit only their reports and summaries, as E8 does;
    per-run JSON stays on the cluster. E8's per-run files exist only on Occidata

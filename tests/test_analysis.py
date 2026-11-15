@@ -8,13 +8,15 @@ class TestIntrinsicDim:
         from embedkit.analysis.intrinsic_dim import IntrinsicDimensionEstimator
         result = IntrinsicDimensionEstimator(methods=["TwoNN"]).fit(small_X)
         assert "TwoNN" in result.estimates
-        assert isinstance(result.consensus, float)
-        assert result.uncertainty >= 0
+        assert result.reference_method == "TwoNN"
+        assert result.reference_estimate == result.estimates["TwoNN"]
+        assert result.between_method_spread == 0.0
 
-    def test_consensus_positive(self, small_X):
+    def test_reference_positive(self, small_X):
         from embedkit.analysis.intrinsic_dim import IntrinsicDimensionEstimator
         result = IntrinsicDimensionEstimator(methods=["TwoNN", "MLE"]).fit(small_X)
-        assert result.consensus > 0
+        assert result.reference_estimate > 0
+        assert result.between_method_spread >= 0
 
     def test_multiple_methods_dict(self, small_X):
         from embedkit.analysis.intrinsic_dim import IntrinsicDimensionEstimator
@@ -25,7 +27,7 @@ class TestIntrinsicDim:
         from embedkit.analysis.intrinsic_dim import IntrinsicDimensionEstimator
         result = IntrinsicDimensionEstimator(methods=["TwoNN"]).fit(small_X)
         d = result.to_dict()
-        assert "consensus" in d
+        assert "reference_estimate" in d and "intervals" in d and "consensus" not in d
 
 
 class TestHubness:

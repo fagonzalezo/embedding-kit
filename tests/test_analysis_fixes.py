@@ -276,7 +276,7 @@ class TestDistanceConcentrationD10:
         from embedkit.analysis.report import _recommendations
 
         bundle = NS(isotropy=NS(participation_ratio_normalized=1.0))
-        idr = NS(consensus=float("nan"))
+        idr = NS(reference_estimate=float("nan"), reference_method=None)
         hub = NS(antihub_ratio=0.0)
         null = np.array([0.05, 0.051, 0.049, 0.05])
 
@@ -321,7 +321,8 @@ class TestIntrinsicDimensionD14:
         for r in runs:
             assert all(np.isfinite(v) and v > 0 for v in r.estimates.values()), r.estimates
             assert r.estimates == runs[0].estimates
-            assert r.consensus == runs[0].consensus
+            assert r.standard_errors == runs[0].standard_errors
+            assert r.scale_curve == runs[0].scale_curve
 
     def test_digits_with_duplicates_gives_identical_finite_estimates(self, digits_dup):
         from embedkit.analysis.intrinsic_dim import IntrinsicDimensionEstimator
@@ -383,7 +384,8 @@ class TestIntrinsicDimensionD14:
             r = mod.IntrinsicDimensionEstimator(methods=["TwoNN", "MLE", "lPCA"]).fit(_iid(50, 8))
         assert np.isnan(r.estimates["TwoNN"]) and np.isnan(r.estimates["MLE"])
         assert r.estimates["lPCA"] == 4.0
-        assert r.consensus == 4.0  # failures excluded from the consensus
+        # Failures are skipped: TwoNN failed, so the reference is the next method that worked.
+        assert r.reference_method == "lPCA" and r.reference_estimate == 4.0
 
 
 def test_old_field_aliases_do_not_warn_on_new_names():
