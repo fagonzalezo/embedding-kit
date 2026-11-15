@@ -633,7 +633,7 @@ Release as 0.6.0.
 | 4.1 | Null models | done (2026-11-14): moment-matched Gaussian null; acceptance met in all 32 cells; `severity` replaced by `n_outside_null` |
 | 4.2 | Intrinsic dimension | done (2026-11-14): per-estimator bootstrap intervals, TwoNN scale curve, ESS; acceptance revised with the user (bias at ID 10 and 20 goes to E3); target dim from TwoNN |
 | 4.3 | Isotropy and spectrum | done (2026-11-14): IsoScore, PC and coordinate shares, spectrum alpha, mean direction; `report.properties` replaces the anisotropy recommendations |
-| 4.4 | Metric consistency, kernel spectrum | not started |
+| 4.4 | Metric consistency, kernel spectrum | done (2026-11-15): metric limited to euclidean/cosine and honoured by every analyzer (cosine = normalised rows); centred kernel, trace-ratio effective rank, `top_k_eigen_ratio` |
 | 4.5 | Run E3 and E5 | not started |
 | 5.1 | Residual adapter | done (2026-11-12): accepted in E6; `EmbedKit` default is now `architecture="linear"` |
 | 5.2 | Positives and negatives | rejected (2026-11-13): no arm wins against `linear` on half the datasets in E6; options stay in the library |
@@ -1001,15 +1001,52 @@ Release as 0.6.0.
 - `skills/embedkit/SKILL.md`: the anisotropy and clustering rows of the quick-reference table are
   removed, with a note that the remaining fixed-threshold rows await E4 (full rewrite in WP 7.4).
 
+### WP 4.4 notes (2026-11-15)
+
+- **Decisions (the user, 2026-11-15):** metrics other than `"euclidean"` and `"cosine"` raise
+  `ValueError` in `EmbedKitAnalyzer` and `calibration_statistics`; with cosine, the isotropy
+  statistics are also computed on the normalised rows (one rule: the report describes the
+  normalised rows).
+- **Cosine null.** Two constructions were compared on Gaussian data (n = 1,000, 3 seeds, 10
+  draws). A null fitted to the normalised rows, with normalised draws, came out more isotropic
+  than the data, because the draws are normalised a second time: `distance_cv` and uniformity
+  z up to 9 with an `i^-1` spectrum at d = 32, 128 and 512. A null fitted to the rows as given,
+  with normalised draws, behaves like the Euclidean calibration. The report uses the second, so
+  the null mean, spread and z depend on the row norms; every other number in a cosine report is
+  invariant to rescaling rows (tested). Acceptance: 20 repetitions at n = 300, d = 32, at least
+  18 inside ±3 for each statistic.
+- **Found for E3 (not caused by WP 4.4).** The Gaussian null is not calibrated everywhere: with
+  an axis-aligned `i^-0.5` spectrum at n = 1,000, d = 512, uniformity z was up to 11.5 under
+  both metrics; at d = 128, k-skewness, neighbour consistency and uniformity
+  reached 4.4-4.9. With a rotated
+  `i^-1` spectrum and a mean at n = 1,000, d = 128, k-skewness was inside ±3 in 29 of 30 runs
+  (Euclidean, max 4.3) and 27 of 30 (cosine, max 4.7). WP 4.1's acceptance covered flat and `i^-1`
+  spectra at n = 300 and 3,000, d = 32 and 512 only. E3's Gaussian families must map this.
+- **Cosine kNN speed.** scikit-learn's generic cosine search was the bottleneck (calibration on
+  300 x 32: 58 s). The scikit-learn backend now searches the normalised rows with its Euclidean
+  reduction (2 s; neighbours identical to scikit-learn's cosine on the test data).
+- **Kernel.** Effective rank `tr(Kc)^2 / tr(Kc^2)` from traces in float64; eigenvalues of the
+  centred kernel by `eigsh(which="LA")` (dense `eigvalsh` up to 200 rows). On one isotropic
+  Gaussian (n = 800, d = 32) the uncentred kernel's `lambda_1 / lambda_2` exceeds 20 and the
+  centred gap is under 2; two separated clusters give a centred gap above 5.
+- **Pets** (train + test, 7,349 x 2,048; earlier notes used the 3,680 training rows), default
+  report: kernel effective rank 70 (Euclidean) and 64 (cosine), centred gap 1.5. The cosine
+  report (103 s) gives the same single recommendation (ID/D) as the Euclidean one (94 s). Under
+  cosine, k-skewness falls from 1.46 to 1.05 (z -5.0 to -13.6) and `distance_cv` from 0.138 to
+  0.086.
+- `skills/embedkit/references/metric_guide.md` still lists `condition_number`; it is rewritten
+  in WP 7.4 with the rest of that file.
+
 ## Open points for the next session
 
 All design decisions in this plan are confirmed.
 
 1. **Phases 5 and 6 are done** (0.4.0 tagged locally on 2026-11-13; phase 6 is unreleased).
 2. **Phase 4 is in progress** (started 2026-11-14). WP 4.1, 4.2 and 4.3 are done (see their
-   notes); next are WP 4.4 (one metric everywhere, kernel spectrum) and E3/E5 in WP 4.5. E3 must
+   notes); next are E3/E5 in WP 4.5. E3 must
    include the per-estimator bias table that WP 4.2's revised acceptance hands over. Phases 4 and
-   6 ship together as 0.5.0, and phase 7 as 0.6.0 (the user's decision, 2026-11-14). The user
+   6 ship together as 0.5.0, and phase 7 as 0.6.0 (the user's decision, 2026-11-14). WP 4.4 is
+   done (2026-11-15). The user
    also kept calibration on by default with 20 draws.
 3. **Phase 7** follows phase 4.
 4. **Benchmark results:** new experiments commit only their reports and summaries, as E8 does;

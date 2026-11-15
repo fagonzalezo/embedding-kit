@@ -1,4 +1,9 @@
-"""RBF kernel diagnostics: effective rank, spectral gap, centred kernel alignment."""
+"""RBF kernel diagnostics: effective rank, spectral gap, centred kernel alignment.
+
+The spectrum statistics come from the centred kernel ``HKH`` (``H = I - 11^T / n``): the
+uncentred RBF kernel has a large eigenvalue along the constant direction that says only that the
+kernel is positive, and dominated the old spectral gap (defect 29).
+"""
 
 from __future__ import annotations
 
@@ -14,13 +19,44 @@ from embedkit.utils.validation import encode_labels
 
 @dataclass(frozen=True)
 class KernelDiagnosticsResult(BaseResult):
+    """Spectrum of the centred RBF kernel on a subsample, and centred kernel alignment.
+
+    effective_rank:
+        ``tr(Kc)^2 / tr(Kc^2)`` of the centred kernel ``Kc`` (the participation ratio of its
+        eigenvalues), from traces, so it uses the whole spectrum and is not capped by
+        ``n_components``. Until 0.4 this was the entropy effective rank of the top 50
+        eigenvalues of the uncentred kernel, capped at 50.
+    spectral_gap:
+        ``lambda_1 / lambda_2`` of the centred kernel, in ``[1, inf)``.
+    top_k_eigen_ratio:
+        ``lambda_1 / lambda_k`` of the centred kernel, with ``k`` the number of eigenvalues in
+        ``eigenvalues`` (``n_components``, or fewer on small samples). Formerly
+        ``condition_number``: it is not a condition number of the kernel.
+    row_sum_skewness:
+        Skewness of the row sums of the uncentred kernel (the row sums of the centred kernel
+        are all zero): a continuous analogue of hubness.
+    eigenvalues:
+        The top ``n_components`` eigenvalues of the centred kernel, for plotting.
+    """
+
     effective_rank: float
     spectral_gap: float
-    condition_number: float
+    top_k_eigen_ratio: float
     row_sum_skewness: float
     eigenvalues: np.ndarray
     centered_kernel_alignment: float | None
     sigma: float
+
+    @property
+    def condition_number(self) -> float:
+        """Deprecated alias of ``top_k_eigen_ratio``."""
+        warnings.warn(
+            "KernelDiagnosticsResult.condition_number is deprecated; use top_k_eigen_ratio "
+            "(lambda_1 / lambda_k of the centred kernel, not a condition number).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.top_k_eigen_ratio
 
     @property
     def kernel_alignment(self) -> float | None:
@@ -83,25 +119,24 @@ class KernelDiagnostics(BaseAnalyzer):
 
         sigma = self._resolve_sigma(Xs)
         K = self._rbf_kernel(Xs, sigma)
+        Kc = _center(K)
+
+        # Effective rank from traces: the whole spectrum, no truncation.
+        sq = float(np.sum(Kc * Kc))
+        eff_rank = float(np.trace(Kc) ** 2 / sq) if sq > 1e-24 else 0.0
 
         ns = Xs.shape[0]
-        n_comp = min(self.n_components, ns - 1)
-        # Always use eigsh (top-k only) — never the full dense spectrum.
-        from scipy.sparse.linalg import eigsh
-        eigenvalues = eigsh(K, k=n_comp, which="LM", return_eigenvectors=False)
-        eigenvalues = np.sort(eigenvalues)[::-1]
-
-        eigenvalues = np.maximum(eigenvalues, 0.0).astype(np.float32)
-        total = eigenvalues.sum() + 1e-10
-        p = eigenvalues / total
-        p = p + 1e-10
-        p /= p.sum()
-        eff_rank = float(np.exp(-np.sum(p * np.log(p))))
-        if len(eigenvalues) > 1:
-            spectral_gap = float(eigenvalues[0] / (eigenvalues[1] + 1e-10))
+        # The centred kernel has rank at most ns - 1 (the constant vector is in its null space).
+        n_comp = max(1, min(self.n_components, ns - 2))
+        if ns <= 3 * n_comp or ns <= 200:
+            eigenvalues = np.linalg.eigvalsh(Kc)[::-1][:n_comp]
         else:
-            spectral_gap = float("inf")
-        condition_number = float(eigenvalues[0] / (eigenvalues[-1] + 1e-10))
+            from scipy.sparse.linalg import eigsh
+            eigenvalues = np.sort(eigsh(Kc, k=n_comp, which="LA", return_eigenvectors=False))[::-1]
+        eigenvalues = np.maximum(eigenvalues, 0.0)
+        spectral_gap = _ratio(eigenvalues[0], eigenvalues[1]) if len(eigenvalues) > 1 else float(
+            "inf")
+        top_k_eigen_ratio = _ratio(eigenvalues[0], eigenvalues[-1])
 
         row_sums = K.sum(axis=1)
         rs_mean = row_sums.mean()
@@ -115,7 +150,7 @@ class KernelDiagnostics(BaseAnalyzer):
         return KernelDiagnosticsResult(
             effective_rank=eff_rank,
             spectral_gap=spectral_gap,
-            condition_number=condition_number,
+            top_k_eigen_ratio=top_k_eigen_ratio,
             row_sum_skewness=row_sum_skewness,
             eigenvalues=eigenvalues,
             centered_kernel_alignment=cka,
@@ -142,7 +177,14 @@ class KernelDiagnostics(BaseAnalyzer):
     def _rbf_kernel(X: np.ndarray, sigma: float) -> np.ndarray:
         from sklearn.metrics import pairwise_distances
         dists = pairwise_distances(X, metric="euclidean")
-        return np.exp(-(dists ** 2) / (2 * sigma ** 2 + 1e-10)).astype(np.float32)
+        return np.exp(-(dists.astype(np.float64) ** 2) / (2 * sigma ** 2 + 1e-10))
+
+
+def _ratio(a: float, b: float) -> float:
+    """``a / b``, with ``inf`` for ``b == 0 < a`` and 1 for ``a == b == 0``."""
+    if b > 0:
+        return float(a / b)
+    return float("inf") if a > 0 else 1.0
 
 
 def _label_kernel(labels: np.ndarray, kind: str) -> np.ndarray:

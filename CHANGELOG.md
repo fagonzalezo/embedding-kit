@@ -4,7 +4,32 @@
 
 Phase 6 of `docs/IMPLEMENTATION_PLAN.md`: supervised and regression modes. Phase 4, WP 4.1:
 null-calibrated statistics in the report; WP 4.2: intrinsic dimension per estimator; WP 4.3:
-isotropy and spectrum statistics, reported as properties.
+isotropy and spectrum statistics, reported as properties; WP 4.4: one metric in every analyzer
+and the centred kernel spectrum.
+
+### Changed (WP 4.4)
+- **Breaking: `EmbedKitAnalyzer(metric=...)` accepts only `"euclidean"` and `"cosine"`**, and
+  every analyzer honours it (defect 28: distance concentration, uniformity, the kernel and
+  intrinsic dimension used to stay Euclidean). With `"cosine"` the rows are L2-normalised once
+  and the whole report, isotropy included, describes the normalised rows; rows with zero norm
+  raise `ValueError`. The calibration null is fitted to the rows as given and its draws are
+  normalised (a null fitted to the normalised rows came out too isotropic: z up to 9 on
+  Gaussian data). Other metrics raise `ValueError`; `HubnessAnalyzer` and
+  `NeighborConsistency` still accept any scikit-learn metric on their own.
+- **Kernel spectrum from the centred kernel** (defect 29). `KernelDiagnosticsResult.effective_rank`
+  is now `tr(Kc)^2 / tr(Kc^2)` of the centred kernel, over the whole spectrum (it was the
+  entropy rank of the top 50 eigenvalues of the uncentred kernel, capped at 50; on the Pets
+  ResNet features it is 70). `spectral_gap` and `eigenvalues` are of the centred kernel, so the
+  constant direction no longer dominates the gap. `row_sum_skewness` keeps the uncentred kernel.
+- `KernelDiagnosticsResult.condition_number` is renamed `top_k_eigen_ratio` (`lambda_1 / lambda_k`,
+  not a condition number); `condition_number` remains as a deprecated alias.
+- `knn(metric="cosine")` with the scikit-learn backend searches the L2-normalised rows with the
+  Euclidean reduction (same neighbours and distances; calibration on 300 x 32 rows went from
+  58 s to 2 s). Rows with zero norm keep the old path.
+
+### Added (WP 4.4)
+- `EmbedKitReport.metric`, in `to_dataframe()` and `print_summary()`.
+- `embedkit.analysis.report.l2_normalize` and `METRICS`.
 
 ### Changed (WP 4.3)
 - **Anisotropy and clustered directions are properties, not defects.** The participation-ratio

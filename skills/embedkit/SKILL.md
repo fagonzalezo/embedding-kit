@@ -65,7 +65,7 @@ from embedkit import EmbedKitAnalyzer
 analyzer = EmbedKitAnalyzer(
     k=10,                                    # kNN size; auto = sqrt(n)/2 if None
     id_methods=["TwoNN", "MLE", "lPCA", "MOM"],  # ID estimators (default)
-    metric="euclidean",                       # distance metric
+    metric="euclidean",                       # "euclidean" or "cosine" (normalised rows)
     random_state=42,
 )
 report = analyzer.fit(X, y=None)    # y enables centered_kernel_alignment

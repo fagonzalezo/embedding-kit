@@ -219,20 +219,19 @@ The RBF (Gaussian) kernel matrix `K(xᵢ, xⱼ) = exp(−‖xᵢ − xⱼ‖² /
 
 When `sigma="median"` (default), σ is set to the median pairwise distance — a standard heuristic.
 
-**Result fields:** `effective_rank`, `spectral_gap`, `condition_number`, `row_sum_skewness`, `eigenvalues`, `centered_kernel_alignment`, `sigma`
+**Result fields:** `effective_rank`, `spectral_gap`, `top_k_eigen_ratio`, `row_sum_skewness`, `eigenvalues`, `centered_kernel_alignment`, `sigma`
 
-**Ranges & interpretation:**
+The spectrum statistics come from the centred kernel `Kc = HKH` (`H = I − 11ᵀ/n`). The uncentred RBF kernel has a large eigenvalue along the constant direction, which says only that the kernel is positive; before 0.5 it dominated the spectral gap.
 
-| Metric | Range | Good | Concerning |
-|--------|-------|------|------------|
-| `effective_rank` | [1, subsample_size] | high | low (kernel dominated by 1 component) |
-| `spectral_gap` | [0, 1] | large | near 0 (no clear cluster structure) |
-| `condition_number` | [1, ∞) | near 1 | > 1e6 (numerically unstable) |
-| `centered_kernel_alignment` | [−1, 1] or None | near 1 | near 0 (kernel unrelated to labels) |
+| Metric | Range | Meaning |
+|--------|-------|---------|
+| `effective_rank` | [1, subsample − 1] | `tr(Kc)² / tr(Kc²)`: how many directions of the kernel feature space carry the variance. From traces, over the whole spectrum. |
+| `spectral_gap` | [1, ∞) | `λ₁ / λ₂` of `Kc`. Large when one direction dominates, for example two well-separated clusters. |
+| `top_k_eigen_ratio` | [1, ∞) | `λ₁ / λ_k`, with k the number of eigenvalues kept (`n_components`, default 50). Formerly `condition_number`, which is a deprecated alias. |
+| `row_sum_skewness` | (−∞, ∞) | Skewness of the row sums of the uncentred kernel: a continuous analogue of hubness. |
+| `centered_kernel_alignment` | [−1, 1] or None | See below. |
 
-- `effective_rank`: measures how many eigenvalues carry non-trivial weight. High effective rank = the kernel captures diverse structure in the data.
-- `spectral_gap`: ratio between adjacent leading eigenvalues. A large gap after the first k eigenvalues indicates k well-separated clusters that the kernel can discriminate.
-- `condition_number`: ratio of largest to smallest eigenvalue. Large values indicate numerical ill-conditioning that will destabilize kernel solvers and gradient computations.
+The effective rank depends on σ: a small bandwidth makes every point its own direction. With `sigma="median"` it is comparable between data sets of the same size. Before 0.5 `effective_rank` was the entropy rank of the top 50 eigenvalues of the uncentred kernel, capped at 50.
 - `centered_kernel_alignment`: populated only when labels `y` are passed to `fit(X, y)`. Centred alignment (both kernels centred, `HKH`) between the data kernel and a label kernel (Cristianini et al., 2001): the indicator kernel for class labels (integers, strings, booleans), an RBF kernel with a median-heuristic bandwidth for continuous labels (1-D floats or 2-D arrays). About 0 for labels independent of the data; near 1 means the RBF geometry reflects the labels. `kernel_alignment` is a deprecated alias (before 0.1.3 it was uncentred, and mostly measured class balance).
 
 ```python
@@ -241,7 +240,7 @@ from embedkit.analysis.kernel import KernelDiagnostics
 result = KernelDiagnostics(sigma="median").fit(X)
 print(f"Effective rank:   {result.effective_rank:.1f}")
 print(f"Spectral gap:     {result.spectral_gap:.3f}")
-print(f"Condition number: {result.condition_number:.2e}")
+print(f"lambda_1/lambda_k: {result.top_k_eigen_ratio:.3g}")
 ```
 
 ---
@@ -261,6 +260,8 @@ print(f"Condition number: {result.condition_number:.2e}")
 | `suggested_target_dim` | `clip(1.5 × ID, max(4, ID), D)` with ID the reference estimate (TwoNN by default). No benchmark supports the factor 1.5 (E1, E6); WP 7.2 replaces it with selection |
 
 **Class:** `EmbedKitAnalyzer(k, id_methods, metric, random_state, calibrate, null_model, n_null_draws, n_calibration, z_threshold, id_bootstrap, id_scale_curve)`
+
+**Metric.** `metric` is `"euclidean"` (default) or `"cosine"`; anything else raises `ValueError`. Every analyzer honours it. With `"cosine"` the rows are L2-normalised once and every number in the report describes the normalised rows, the geometry a cosine search sees: the kNN graph, distance concentration and the kernel use chord distances on the sphere (monotone in cosine distance), intrinsic dimension is estimated on the sphere, and the isotropy statistics describe the normalised rows. The calibration null is the exception: it is fitted to the rows as given and its draws are normalised before the statistics are computed, so the null mean and spread depend on the row norms. Rows with zero norm have no direction and raise `ValueError`.
 
 ```python
 from embedkit import EmbedKitAnalyzer

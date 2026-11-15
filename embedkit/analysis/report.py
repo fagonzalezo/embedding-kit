@@ -27,6 +27,34 @@ from embedkit.utils.neighbors import knn
 # The statistics compared with a null model when EmbedKitAnalyzer(calibrate=True).
 CALIBRATED_STATISTICS = ("k_skewness", "distance_cv", "neighbor_consistency", "uniformity")
 
+# The metrics every analyzer of the report can honour (D28): Euclidean, and cosine through
+# L2-normalised rows.
+METRICS = ("euclidean", "cosine")
+
+
+def _check_metric(metric: str) -> None:
+    if metric not in METRICS:
+        raise ValueError(
+            f"metric={metric!r} is not supported: the report honours only {METRICS} in every "
+            "analyzer (intrinsic dimension, distance concentration and the kernel have no other "
+            "version). HubnessAnalyzer and NeighborConsistency accept other scikit-learn "
+            "metrics when used on their own."
+        )
+
+
+def l2_normalize(X: np.ndarray) -> np.ndarray:
+    """Rows divided by their Euclidean norm. Raises ``ValueError`` on a zero row, which has no
+    cosine geometry."""
+    X = np.asarray(X)
+    norms = np.linalg.norm(X.astype(np.float64), axis=1)
+    zero = norms == 0
+    if zero.any():
+        raise ValueError(
+            f"metric='cosine': {int(zero.sum())} row(s) have zero norm and no direction; "
+            "remove them or use metric='euclidean'."
+        )
+    return (X / norms[:, None]).astype(X.dtype, copy=False)
+
 
 @dataclass(frozen=True)
 class GeometryBundle(BaseResult):
@@ -51,6 +79,7 @@ class EmbedKitReport(BaseResult):
     n_outside_null: int | None = None
     z_threshold: float = 3.0
     properties: list[str] = field(default_factory=list)
+    metric: str = "euclidean"
 
     def to_dataframe(self) -> pd.DataFrame:
         dc = self.geometry.distance_concentration
@@ -94,13 +123,14 @@ class EmbedKitReport(BaseResult):
             ("Geometry", "uniformity", self.geometry.uniformity.uniformity),
             ("Kernel", "effective_rank", self.kernel.effective_rank),
             ("Kernel", "spectral_gap", self.kernel.spectral_gap),
-            ("Kernel", "condition_number", self.kernel.condition_number),
+            ("Kernel", "top_k_eigen_ratio", self.kernel.top_k_eigen_ratio),
             ("Kernel", "sigma", self.kernel.sigma),
             ("Kernel", "centered_kernel_alignment", self.kernel.centered_kernel_alignment),
             ("Summary", "suggested_k", self.suggested_k),
             ("Summary", "suggested_sigma", self.suggested_sigma),
             ("Summary", "suggested_target_dim", self.suggested_target_dim),
             ("Summary", "n_outside_null", self.n_outside_null),
+            ("Summary", "metric", self.metric),
         ]
         for name, c in (self.calibration or {}).items():
             rows += [
@@ -115,8 +145,10 @@ class EmbedKitReport(BaseResult):
         n, d = self.input_shape
         dc = self.geometry.distance_concentration
         print(f"\n{'='*60}")
-        print(f"  EmbedKit Analysis Report  ({n} samples × {d} dims)")
+        print(f"  EmbedKit Analysis Report  ({n} samples × {d} dims, {self.metric})")
         print(f"{'='*60}")
+        if self.metric == "cosine":
+            print("  Every statistic below is computed on the L2-normalised rows.")
         print("\n[Intrinsic Dimension]")
         id_res = self.intrinsic_dim
         for m, v in id_res.estimates.items():
@@ -154,9 +186,9 @@ class EmbedKitReport(BaseResult):
         print(f"  uniformity          : {self.geometry.uniformity.uniformity:.4f}")
         print("\n[Kernel]")
         print(f"  sigma            : {self.kernel.sigma:.4f}")
-        print(f"  effective_rank   : {self.kernel.effective_rank:.2f}")
+        print(f"  effective_rank   : {self.kernel.effective_rank:.2f}  (centred kernel)")
         print(f"  spectral_gap     : {self.kernel.spectral_gap:.3f}")
-        print(f"  condition_number : {self.kernel.condition_number:.2e}")
+        print(f"  top_k_eigen_ratio: {self.kernel.top_k_eigen_ratio:.3g}")
         if self.kernel.centered_kernel_alignment is not None:
             print(f"  centered kernel alignment: {self.kernel.centered_kernel_alignment:.4f}")
         if self.calibration:
@@ -194,6 +226,18 @@ class EmbedKitAnalyzer(BaseAnalyzer):
         (``|z| > z_threshold`` in the direction each recommendation names), and
         ``report.n_outside_null`` counts the statistics with ``|z| > z_threshold``. With
         ``calibrate=False`` the report makes no recommendation about them.
+    metric:
+        ``"euclidean"`` or ``"cosine"`` (anything else raises ``ValueError``), honoured by every
+        analyzer. With ``"cosine"`` the rows are L2-normalised once and every statistic, the
+        isotropy ones included, describes the normalised rows: the geometry a cosine search
+        sees. Euclidean distances between unit vectors are monotone in cosine distance, so the
+        kNN graph is the cosine one; distance concentration, the kernel and intrinsic dimension
+        use chord distances on the sphere. The one exception is the null model of
+        ``calibrate``: it is fitted to the rows as given and its draws are normalised, so the
+        null mean, spread and z-scores depend on the row norms through the null's covariance.
+        A null fitted to the normalised rows was biased: on Gaussian data its draws, normalised
+        a second time, came out more isotropic than the data (z up to 9 for ``distance_cv``
+        and uniformity with an ``i^-1`` spectrum). Rows with zero norm raise ``ValueError``.
     id_bootstrap, id_scale_curve:
         Passed to :class:`IntrinsicDimensionEstimator` as ``n_bootstrap`` and ``scale_curve``.
         ``suggested_target_dim`` is ``1.5 x`` the reference estimate (TwoNN, or the first method
@@ -232,7 +276,11 @@ class EmbedKitAnalyzer(BaseAnalyzer):
         self.id_scale_curve = id_scale_curve
 
     def fit(self, X, y=None) -> EmbedKitReport:
+        _check_metric(self.metric)
         X = self._prepare(X, min_n=5)
+        X_given = X  # the null model of the calibration is fitted to the rows as given
+        if self.metric == "cosine":
+            X = l2_normalize(X)
         n, d = X.shape
         k = self.k or max(5, round(np.sqrt(min(n, self.n_max)) / 2))
 
@@ -280,7 +328,7 @@ class EmbedKitAnalyzer(BaseAnalyzer):
             ref_id = max(2, d // 4)
         suggested_target_dim = int(np.clip(round(1.5 * ref_id), max(4, int(ref_id)), d))
 
-        calibration = self._calibrate(X, k) if self.calibrate else None
+        calibration = self._calibrate(X_given, k) if self.calibrate else None
         n_outside = (
             None if calibration is None
             else int(sum(abs(c.z_score) > self.z_threshold for c in calibration.values()))
@@ -304,6 +352,7 @@ class EmbedKitAnalyzer(BaseAnalyzer):
             calibration=calibration,
             n_outside_null=n_outside,
             z_threshold=self.z_threshold,
+            metric=self.metric,
         )
 
     def _calibrate(self, X: np.ndarray, k: int) -> dict[str, CalibratedStatistic]:
@@ -328,8 +377,13 @@ def calibration_statistics(
     """The statistics in ``CALIBRATED_STATISTICS``, computed as the report computes them.
 
     One kNN graph is shared by k-skewness and neighbour consistency; ``X`` is used whole for
-    both, and ``DistanceConcentration`` and ``UniformityScore`` subsample it as usual.
+    both, and ``DistanceConcentration`` and ``UniformityScore`` subsample it as usual. With
+    ``metric="cosine"`` the rows are L2-normalised first, so that the observed rows and a null
+    draw (fitted to the rows as given) are both measured on the sphere.
     """
+    _check_metric(metric)
+    if metric == "cosine":
+        X = l2_normalize(X)
     _, graph = knn(X, k, metric=metric)
     return {
         "k_skewness": HubnessAnalyzer(k=k, metric=metric).fit(

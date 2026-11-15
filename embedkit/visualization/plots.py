@@ -55,7 +55,7 @@ class AnalysisPlotter:
         ax.set_xlabel("Component")
         ax.set_ylabel("Eigenvalue")
         ax.set_title(
-            f"Kernel Eigenvalue Spectrum  "
+            f"Centred Kernel Eigenvalue Spectrum  "
             f"(eff_rank={self.report.kernel.effective_rank:.1f})"
         )
         ax.set_yscale("log")
@@ -133,7 +133,7 @@ class AnalysisPlotter:
         # 4: kernel spectrum
         kev = self.report.kernel.eigenvalues
         axes[1, 0].plot(kev, marker="o", markersize=2)
-        axes[1, 0].set_title("Kernel Spectrum")
+        axes[1, 0].set_title("Centred Kernel Spectrum")
         axes[1, 0].set_yscale("log")
 
         # 5: summary metrics

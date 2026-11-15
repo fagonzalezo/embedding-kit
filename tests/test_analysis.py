@@ -101,7 +101,7 @@ class TestKernelDiagnostics:
         r = KernelDiagnostics().fit(small_X)
         assert r.effective_rank >= 1.0
         assert r.sigma > 0.0
-        assert r.condition_number >= 1.0
+        assert r.top_k_eigen_ratio >= 1.0
 
     def test_centered_kernel_alignment_with_labels(self, small_Xy):
         from embedkit.analysis.kernel import KernelDiagnostics
