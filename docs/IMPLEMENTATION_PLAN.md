@@ -1142,8 +1142,13 @@ neighbour-consistency z). The WP 4.1 bar (95% of null cells inside +-3) failed f
    normalised to that norm, under either metric.
 
 **Local pre-flight before the rerun** (every `gauss` family, n = 2,000, d = 256 and 1,024,
-k = 10, both metrics, 2 seeds; 64 cells). All families drawn from the null are inside +-3
-except one k-skewness of +3.3 (power0.5, cosine, d = 1,024). `flat_l2` is inside +-2.5 under
+k = 10, both metrics, 2 seeds; 64 cells; antihub z with the Poisson floor of that time,
+which understated some of them). The families drawn from the null are inside +-3 except
+k-skewness +3.3 (power0.5, cosine, d = 1,024), neighbour consistency -4.1 (spiked, Euclidean,
+d = 1,024, the open finding below) and the antihub ratio under cosine on `spiked` at
+d = 1,024: z +14.5 and +14.7, a false antihub recommendation in both seeds (the full gauss
+rerun gives the rate by metric; a high cosine rate reopens dropping the antihub rule).
+`flat_l2` is inside +-2.5 under
 both metrics. `power1_l2` is not calibrated: distance_cv and uniformity z +8 to +11 and the
 antihub z up to 4.5 (a false antihub recommendation in 2 of 4 cells per metric), under both
 metrics. This is the WP 4.4 finding: a null fitted to rows that are already normalised, with
@@ -1151,6 +1156,17 @@ draws normalised again, is more isotropic than the data. Decision 4 removed the 
 concentration recommendation (distance_cv z -35) but did not calibrate normalised rows with an
 anisotropic spectrum; a null for them (for instance a Gaussian whose covariance is fitted so
 that its normalised draws match the observed second moment) is the user's call.
+
+**Sphere null tried (the user's choice, 2026-11-16), not adopted.** A `gaussian_sphere` null
+fitted a Gaussian (diagonal in the eigenbasis, mean direction explicit, variance along the
+mean held at the Gaussian null's value) so that its normalised draws match the Gaussian
+null's mean and covariance, by a fixed-point iteration on antithetic Monte Carlo draws. Bar,
+fixed before the test: inside +-3 on the power-law families and no worse than the current
+null anywhere (n = 2,000, d = 256 and 1,024, 5 seeds, Euclidean). It failed: `power1_l2`
+distance_cv and uniformity z up to +22 in 2 of 5 seeds (a first version without the explicit
+mean direction was inside +-2.5 there but gave distance_cv z +9 on `mean_l2`), and with an
+`i^-1` spectrum plus a strong mean, normalised, the antihub z is -4 to -5 under both nulls.
+The code is on branch `wip/sphere-null`.
 
 **Pending.** The calibration tables of the committed reports describe the old code. Rerun
 `e3.py --part gauss`, `--part subsample` and the E5 detection half on Occidata, regenerate the
