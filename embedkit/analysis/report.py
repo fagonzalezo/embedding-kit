@@ -246,7 +246,10 @@ class EmbedKitAnalyzer(BaseAnalyzer):
         about them. Rows that arrive with a common norm (relative spread under 1e-3, for
         instance embeddings normalised upstream) are compared with null draws normalised to
         that norm, under either metric; a Gaussian null with varying norms made such rows look
-        concentrated (``distance_cv`` z down to -35 in E3).
+        concentrated (``distance_cv`` z down to -35 in E3). This calibrates normalised rows
+        with a flat spectrum only: with a power-law spectrum the null, fitted to rows already
+        on the sphere, is more isotropic than the data (``distance_cv`` and uniformity z of
+        +8 to +11, antihub z up to 4.5, at n = 2,000, d = 256 and 1,024).
     metric:
         ``"euclidean"`` or ``"cosine"`` (anything else raises ``ValueError``), honoured by every
         analyzer. With ``"cosine"`` the rows are L2-normalised once and every statistic, the

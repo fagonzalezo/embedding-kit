@@ -1141,6 +1141,17 @@ neighbour-consistency z). The WP 4.1 bar (95% of null cells inside +-3) failed f
 4. Rows with a common norm (relative spread under 1e-3) are compared with null draws
    normalised to that norm, under either metric.
 
+**Local pre-flight before the rerun** (every `gauss` family, n = 2,000, d = 256 and 1,024,
+k = 10, both metrics, 2 seeds; 64 cells). All families drawn from the null are inside +-3
+except one k-skewness of +3.3 (power0.5, cosine, d = 1,024). `flat_l2` is inside +-2.5 under
+both metrics. `power1_l2` is not calibrated: distance_cv and uniformity z +8 to +11 and the
+antihub z up to 4.5 (a false antihub recommendation in 2 of 4 cells per metric), under both
+metrics. This is the WP 4.4 finding: a null fitted to rows that are already normalised, with
+draws normalised again, is more isotropic than the data. Decision 4 removed the false
+concentration recommendation (distance_cv z -35) but did not calibrate normalised rows with an
+anisotropic spectrum; a null for them (for instance a Gaussian whose covariance is fitted so
+that its normalised draws match the observed second moment) is the user's call.
+
 **Pending.** The calibration tables of the committed reports describe the old code. Rerun
 `e3.py --part gauss`, `--part subsample` and the E5 detection half on Occidata, regenerate the
 reports, then write `docs/BENCHMARK_DIAGNOSTICS.md`. The ID part and E5 repair are unaffected
