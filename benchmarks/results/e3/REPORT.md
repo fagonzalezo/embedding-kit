@@ -117,12 +117,14 @@ Coverage is the share of (cell, seed) intervals containing the true ID; it mixes
 | TwoNN | 1.16 | 0.33 | 174 |
 | lPCA | 0.27 | 0.38 | 174 |
 
-### TwoNN scale plateau as a noise detector
+### TwoNN scale curve: largest relative deviation from the full sample, by noise
 
-| noisy | plateau_rate |
-|---|---|
-| False | 0.74 |
-| True | 0.44 |
+| noise | count | 10% | 50% | 90% |
+|---|---|---|---|---|
+| 0.0 | 870 | 0.0221 | 0.0583 | 0.152 |
+| 0.01 | 80 | 0.028 | 0.0737 | 0.241 |
+| 0.05 | 80 | 0.0353 | 0.095 | 0.696 |
+| 0.2 | 80 | 0.0602 | 0.228 | 0.564 |
 
 ### Median seconds per fit (bootstrap included where run)
 
@@ -143,112 +145,69 @@ All families except the `_l2` ones are drawn from the null family itself.
 
 By family:
 
-| family | k_skewness | distance_cv | neighbor_consistency | uniformity |
-|---|---|---|---|---|
-| flat | 1.00 | 0.97 | 1.00 | 0.31 |
-| flat_l2 | 0.57 | 0.48 | 0.90 | 0.29 |
-| mean | 0.99 | 0.97 | 1.00 | 1.00 |
-| power0.5 | 0.94 | 0.98 | 0.99 | 0.36 |
-| power1 | 1.00 | 1.00 | 0.97 | 1.00 |
-| power1_l2 | 0.97 | 0.00 | 0.83 | 0.09 |
-| power2 | 0.99 | 1.00 | 0.99 | 1.00 |
-| spiked | 0.98 | 1.00 | 0.84 | 0.67 |
+| family | k_skewness | antihub_ratio | distance_cv | neighbor_consistency | uniformity |
+|---|---|---|---|---|---|
+| flat | 1.00 | 0.98 | 0.98 | 1.00 | 0.98 |
+| flat_l2 | 1.00 | 1.00 | 1.00 | 1.00 | 0.98 |
+| mean | 0.99 | 0.98 | 0.97 | 1.00 | 1.00 |
+| power0.5 | 0.93 | 0.96 | 0.98 | 0.98 | 1.00 |
+| power1 | 1.00 | 0.98 | 1.00 | 0.97 | 1.00 |
+| power1_l2 | 0.96 | 0.51 | 0.00 | 0.97 | 0.00 |
+| power2 | 0.99 | 0.99 | 1.00 | 0.99 | 1.00 |
+| spiked | 0.99 | 0.87 | 1.00 | 0.84 | 1.00 |
 
 By n:
 
-| n | k_skewness | distance_cv | neighbor_consistency | uniformity |
-|---|---|---|---|---|
-| 500 | 0.99 | 0.99 | 0.97 | 0.71 |
-| 2000 | 0.99 | 0.99 | 0.96 | 0.73 |
-| 10000 | 0.98 | 0.97 | 0.97 | 0.72 |
+| n | k_skewness | antihub_ratio | distance_cv | neighbor_consistency | uniformity |
+|---|---|---|---|---|---|
+| 500 | 0.99 | 0.95 | 0.99 | 0.97 | 1.00 |
+| 2000 | 0.99 | 0.96 | 1.00 | 0.96 | 0.99 |
+| 10000 | 0.98 | 0.97 | 0.98 | 0.97 | 1.00 |
 
 By d:
 
-| d | k_skewness | distance_cv | neighbor_consistency | uniformity |
-|---|---|---|---|---|
-| 32 | 1.00 | 0.98 | 0.99 | 0.99 |
-| 256 | 0.99 | 0.99 | 0.99 | 0.68 |
-| 1024 | 0.97 | 0.99 | 0.91 | 0.50 |
+| d | k_skewness | antihub_ratio | distance_cv | neighbor_consistency | uniformity |
+|---|---|---|---|---|---|
+| 32 | 1.00 | 0.98 | 0.98 | 0.99 | 1.00 |
+| 256 | 0.99 | 0.96 | 0.99 | 0.99 | 1.00 |
+| 1024 | 0.96 | 0.94 | 1.00 | 0.91 | 0.99 |
 
 By k:
 
-| k | k_skewness | distance_cv | neighbor_consistency | uniformity |
-|---|---|---|---|---|
-| 5 | 0.99 | 0.99 | 0.97 | 0.72 |
-| 10 | 0.97 | 0.99 | 0.98 | 0.72 |
-| 30 | 1.00 | 0.99 | 0.94 | 0.72 |
+| k | k_skewness | antihub_ratio | distance_cv | neighbor_consistency | uniformity |
+|---|---|---|---|---|---|
+| 5 | 0.99 | 1.00 | 0.99 | 0.97 | 1.00 |
+| 10 | 0.97 | 0.93 | 0.99 | 0.98 | 1.00 |
+| 30 | 1.00 | 0.98 | 0.99 | 0.94 | 1.00 |
 
 By metric:
 
-| metric | k_skewness | distance_cv | neighbor_consistency | uniformity |
-|---|---|---|---|---|
-| cosine | 0.95 | 0.98 | 0.99 | 0.72 |
-| euclidean | 1.00 | 0.99 | 0.96 | 0.72 |
+| metric | k_skewness | antihub_ratio | distance_cv | neighbor_consistency | uniformity |
+|---|---|---|---|---|---|
+| cosine | 0.95 | 0.89 | 0.99 | 0.99 | 1.00 |
+| euclidean | 1.00 | 0.98 | 0.99 | 0.96 | 1.00 |
 
 ### Null-family cells where a statistic is inside +-3 in fewer than 4 of 5 seeds
 
-| family / n / d / k / metric | k_skewness | distance_cv | neighbor_consistency | uniformity |
-|---|---|---|---|---|
-| flat / 500 / 256 / 5 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| flat / 500 / 256 / 10 / cosine | 1.00 | 1.00 | 1.00 | 0.00 |
-| flat / 500 / 256 / 10 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| flat / 500 / 256 / 30 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| flat / 500 / 1024 / 5 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| flat / 500 / 1024 / 10 / cosine | 1.00 | 1.00 | 1.00 | 0.00 |
-| flat / 500 / 1024 / 10 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| flat / 500 / 1024 / 30 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| flat / 2000 / 256 / 5 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| flat / 2000 / 256 / 10 / cosine | 1.00 | 1.00 | 1.00 | 0.00 |
-| flat / 2000 / 256 / 10 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| flat / 2000 / 256 / 30 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| flat / 2000 / 1024 / 5 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| flat / 2000 / 1024 / 10 / cosine | 1.00 | 0.80 | 1.00 | 0.00 |
-| flat / 2000 / 1024 / 10 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| flat / 2000 / 1024 / 30 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| flat / 10000 / 256 / 5 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| flat / 10000 / 256 / 10 / cosine | 1.00 | 1.00 | 1.00 | 0.00 |
-| flat / 10000 / 256 / 10 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| flat / 10000 / 256 / 30 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| flat / 10000 / 1024 / 5 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| flat / 10000 / 1024 / 10 / cosine | 1.00 | 0.80 | 1.00 | 0.00 |
-| flat / 10000 / 1024 / 10 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| flat / 10000 / 1024 / 30 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| power0.5 / 500 / 256 / 5 / euclidean | 1.00 | 0.80 | 1.00 | 0.00 |
-| power0.5 / 500 / 256 / 10 / cosine | 0.80 | 1.00 | 1.00 | 0.00 |
-| power0.5 / 500 / 256 / 10 / euclidean | 1.00 | 0.80 | 1.00 | 0.00 |
-| power0.5 / 500 / 256 / 30 / euclidean | 1.00 | 0.80 | 1.00 | 0.00 |
-| power0.5 / 500 / 1024 / 5 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| power0.5 / 500 / 1024 / 10 / cosine | 0.40 | 1.00 | 1.00 | 0.00 |
-| power0.5 / 500 / 1024 / 10 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| power0.5 / 500 / 1024 / 30 / euclidean | 1.00 | 1.00 | 0.80 | 0.00 |
-| power0.5 / 2000 / 256 / 5 / euclidean | 1.00 | 1.00 | 1.00 | 0.20 |
-| power0.5 / 2000 / 256 / 10 / cosine | 1.00 | 1.00 | 1.00 | 0.20 |
-| power0.5 / 2000 / 256 / 10 / euclidean | 1.00 | 1.00 | 1.00 | 0.20 |
-| power0.5 / 2000 / 256 / 30 / euclidean | 1.00 | 1.00 | 1.00 | 0.20 |
-| power0.5 / 2000 / 1024 / 5 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| power0.5 / 2000 / 1024 / 10 / cosine | 0.40 | 1.00 | 1.00 | 0.00 |
-| power0.5 / 2000 / 1024 / 10 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| power0.5 / 2000 / 1024 / 30 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| power0.5 / 10000 / 256 / 5 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| power0.5 / 10000 / 256 / 10 / cosine | 0.80 | 1.00 | 1.00 | 0.00 |
-| power0.5 / 10000 / 256 / 10 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| power0.5 / 10000 / 256 / 30 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 |
-| power0.5 / 10000 / 1024 / 5 / euclidean | 0.80 | 1.00 | 1.00 | 0.00 |
-| power0.5 / 10000 / 1024 / 10 / cosine | 0.80 | 1.00 | 1.00 | 0.00 |
-| power0.5 / 10000 / 1024 / 10 / euclidean | 0.80 | 1.00 | 1.00 | 0.00 |
-| power0.5 / 10000 / 1024 / 30 / euclidean | 1.00 | 1.00 | 0.80 | 0.00 |
-| spiked / 500 / 1024 / 5 / euclidean | 1.00 | 1.00 | 0.60 | 0.00 |
-| spiked / 500 / 1024 / 10 / cosine | 0.80 | 1.00 | 1.00 | 0.00 |
-| spiked / 500 / 1024 / 10 / euclidean | 1.00 | 1.00 | 0.60 | 0.00 |
-| spiked / 500 / 1024 / 30 / euclidean | 1.00 | 1.00 | 0.40 | 0.00 |
-| spiked / 2000 / 1024 / 5 / euclidean | 1.00 | 1.00 | 0.40 | 0.00 |
-| spiked / 2000 / 1024 / 10 / cosine | 1.00 | 1.00 | 1.00 | 0.00 |
-| spiked / 2000 / 1024 / 10 / euclidean | 1.00 | 1.00 | 0.40 | 0.00 |
-| spiked / 2000 / 1024 / 30 / euclidean | 1.00 | 1.00 | 0.00 | 0.00 |
-| spiked / 10000 / 1024 / 5 / euclidean | 1.00 | 1.00 | 0.60 | 0.00 |
-| spiked / 10000 / 1024 / 10 / cosine | 0.80 | 1.00 | 1.00 | 0.00 |
-| spiked / 10000 / 1024 / 10 / euclidean | 1.00 | 1.00 | 0.40 | 0.00 |
-| spiked / 10000 / 1024 / 30 / euclidean | 1.00 | 1.00 | 0.20 | 0.00 |
+| family / n / d / k / metric | k_skewness | antihub_ratio | distance_cv | neighbor_consistency | uniformity |
+|---|---|---|---|---|---|
+| power0.5 / 500 / 1024 / 10 / cosine | 0.40 | 1.00 | 1.00 | 1.00 | 1.00 |
+| power0.5 / 2000 / 1024 / 10 / cosine | 0.20 | 0.40 | 1.00 | 1.00 | 1.00 |
+| power0.5 / 10000 / 1024 / 10 / cosine | 0.60 | 0.80 | 1.00 | 1.00 | 1.00 |
+| power1 / 500 / 1024 / 10 / cosine | 1.00 | 0.60 | 1.00 | 0.80 | 1.00 |
+| spiked / 500 / 256 / 10 / cosine | 1.00 | 0.20 | 1.00 | 1.00 | 1.00 |
+| spiked / 500 / 1024 / 5 / euclidean | 1.00 | 1.00 | 1.00 | 0.60 | 1.00 |
+| spiked / 500 / 1024 / 10 / cosine | 0.80 | 0.00 | 1.00 | 1.00 | 1.00 |
+| spiked / 500 / 1024 / 10 / euclidean | 1.00 | 0.60 | 1.00 | 0.60 | 1.00 |
+| spiked / 500 / 1024 / 30 / euclidean | 1.00 | 1.00 | 1.00 | 0.40 | 1.00 |
+| spiked / 2000 / 1024 / 5 / euclidean | 1.00 | 1.00 | 1.00 | 0.40 | 1.00 |
+| spiked / 2000 / 1024 / 10 / cosine | 1.00 | 0.00 | 1.00 | 1.00 | 1.00 |
+| spiked / 2000 / 1024 / 10 / euclidean | 1.00 | 1.00 | 1.00 | 0.40 | 1.00 |
+| spiked / 2000 / 1024 / 30 / euclidean | 1.00 | 1.00 | 1.00 | 0.00 | 1.00 |
+| spiked / 10000 / 1024 / 5 / euclidean | 1.00 | 1.00 | 1.00 | 0.60 | 1.00 |
+| spiked / 10000 / 1024 / 10 / cosine | 0.80 | 0.00 | 1.00 | 1.00 | 1.00 |
+| spiked / 10000 / 1024 / 10 / euclidean | 1.00 | 1.00 | 1.00 | 0.40 | 1.00 |
+| spiked / 10000 / 1024 / 30 / euclidean | 1.00 | 1.00 | 1.00 | 0.20 | 1.00 |
 
 ### Null table: isotropic Gaussian, k = 10, Euclidean (mean over 5 seeds)
 
@@ -281,26 +240,26 @@ How the raw statistics move with n and d on structureless data.
 
 | family / metric | antihub | concentration | consistency | hubness | id_low | id_moderate |
 |---|---|---|---|---|---|---|
-| flat / cosine | 0.00 | 0.04 | 0.00 | 0.00 | 0.00 | 0.33 |
-| flat / euclidean | 0.31 | 0.02 | 0.00 | 0.00 | 0.00 | 0.38 |
-| flat_l2 / cosine | 0.00 | 0.04 | 0.00 | 0.00 | 0.00 | 0.33 |
-| flat_l2 / euclidean | 0.00 | 1.00 | 0.20 | 0.00 | 0.00 | 0.33 |
-| mean / cosine | 0.24 | 0.02 | 0.00 | 0.02 | 0.00 | 0.36 |
-| mean / euclidean | 0.31 | 0.02 | 0.00 | 0.00 | 0.00 | 0.38 |
-| power0.5 / cosine | 0.00 | 0.00 | 0.00 | 0.20 | 0.00 | 0.51 |
-| power0.5 / euclidean | 0.19 | 0.02 | 0.01 | 0.01 | 0.00 | 0.58 |
-| power1 / cosine | 0.00 | 0.00 | 0.02 | 0.00 | 0.33 | 0.33 |
-| power1 / euclidean | 0.00 | 0.00 | 0.01 | 0.00 | 0.33 | 0.33 |
-| power1_l2 / cosine | 0.00 | 0.00 | 0.02 | 0.04 | 0.33 | 0.33 |
-| power1_l2 / euclidean | 0.00 | 1.00 | 0.00 | 0.00 | 0.33 | 0.33 |
+| flat / cosine | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.33 |
+| flat / euclidean | 0.01 | 0.02 | 0.00 | 0.00 | 0.00 | 0.38 |
+| flat_l2 / cosine | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.33 |
+| flat_l2 / euclidean | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.33 |
+| mean / cosine | 0.00 | 0.02 | 0.00 | 0.02 | 0.00 | 0.36 |
+| mean / euclidean | 0.01 | 0.02 | 0.00 | 0.00 | 0.00 | 0.38 |
+| power0.5 / cosine | 0.11 | 0.00 | 0.00 | 0.24 | 0.00 | 0.51 |
+| power0.5 / euclidean | 0.01 | 0.02 | 0.01 | 0.01 | 0.00 | 0.58 |
+| power1 / cosine | 0.04 | 0.00 | 0.02 | 0.00 | 0.33 | 0.33 |
+| power1 / euclidean | 0.01 | 0.00 | 0.01 | 0.00 | 0.33 | 0.33 |
+| power1_l2 / cosine | 0.49 | 0.00 | 0.02 | 0.04 | 0.33 | 0.33 |
+| power1_l2 / euclidean | 0.49 | 0.00 | 0.02 | 0.04 | 0.33 | 0.33 |
 | power2 / cosine | 0.00 | 0.00 | 0.00 | 0.00 | 0.67 | 0.00 |
 | power2 / euclidean | 0.00 | 0.00 | 0.00 | 0.01 | 0.67 | 0.00 |
-| spiked / cosine | 0.00 | 0.00 | 0.00 | 0.07 | 0.00 | 0.67 |
-| spiked / euclidean | 0.14 | 0.00 | 0.21 | 0.00 | 0.00 | 0.58 |
+| spiked / cosine | 0.44 | 0.00 | 0.00 | 0.04 | 0.00 | 0.67 |
+| spiked / euclidean | 0.01 | 0.00 | 0.21 | 0.00 | 0.00 | 0.58 |
 
 ## Subsampling stability (part `subsample`; phase 4 exit criterion)
 
-Reading = majority over the 5 subsets of: each recommendation type, the sign of each calibrated z beyond +-3, and the TwoNN plateau flag. `yelp_mpnet` has exactly 20,000 training rows, so its five 20k subsets are identical (fluorescence, 21,446 rows, nearly so).
+Reading = majority over the 5 subsets of: each recommendation type, the sign of each calibrated z beyond +-3 (the plateau flag was dropped from the report after the first run; its replacement, `ID/scale_max_deviation`, is in the tables below). `yelp_mpnet` has exactly 20,000 training rows, so its five 20k subsets are identical (fluorescence, 21,446 rows, nearly so).
 
 ### n = 2,000 against n = 20,000
 
@@ -308,39 +267,39 @@ Reading = majority over the 5 subsets of: each recommendation type, the sign of 
 |---|---|---|
 | cifar100_dinov2 | True | - |
 | fluorescence_esm2 | True | - |
-| gist960 | False | sign_neighbor_consistency |
-| glove100 | False | rec_antihub, plateau |
-| sift128 | False | plateau |
-| yelp_mpnet | False | plateau |
+| gist960 | True | - |
+| glove100 | True | - |
+| sift128 | True | - |
+| yelp_mpnet | True | - |
 
 ### Majority reading by dataset and n
 
-|  | rec_antihub | rec_concentration | rec_consistency | rec_hubness | rec_id_low | rec_id_moderate | sign_k_skewness | sign_distance_cv | sign_neighbor_consistency | sign_uniformity | plateau |
+|  | rec_antihub | rec_concentration | rec_consistency | rec_hubness | rec_id_low | rec_id_moderate | sign_k_skewness | sign_antihub_ratio | sign_distance_cv | sign_neighbor_consistency | sign_uniformity |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| cifar100_dinov2 / 1000 | False | False | False | False | True | False | 0 | 1 | 1 | 1 | False |
-| cifar100_dinov2 / 2000 | False | False | False | True | True | False | 1 | 1 | 1 | 1 | False |
-| cifar100_dinov2 / 5000 | False | False | False | True | True | False | 1 | 1 | 1 | 1 | False |
-| cifar100_dinov2 / 20000 | False | False | False | True | True | False | 1 | 1 | 1 | 1 | False |
-| fluorescence_esm2 / 1000 | False | False | False | False | True | False | 0 | 1 | 0 | 0 | False |
-| fluorescence_esm2 / 2000 | False | False | False | True | True | False | 1 | 1 | 0 | 0 | False |
-| fluorescence_esm2 / 5000 | False | False | False | True | True | False | 1 | 1 | 0 | 0 | False |
-| fluorescence_esm2 / 20000 | False | False | False | True | True | False | 1 | 1 | 0 | 0 | False |
-| gist960 / 1000 | False | False | False | False | True | False | 0 | 1 | 0 | 1 | False |
-| gist960 / 2000 | False | False | False | False | True | False | 0 | 1 | 0 | 1 | False |
-| gist960 / 5000 | False | False | False | False | True | False | 0 | 1 | 0 | 1 | False |
-| gist960 / 20000 | False | False | False | False | True | False | 0 | 1 | 1 | 1 | False |
-| glove100 / 1000 | True | False | False | True | False | False | 1 | 1 | 1 | 1 | False |
-| glove100 / 2000 | True | False | False | True | False | False | 1 | 1 | 1 | 1 | False |
-| glove100 / 5000 | False | False | False | True | False | False | 1 | 1 | 1 | 1 | False |
-| glove100 / 20000 | False | False | False | True | False | False | 1 | 1 | 1 | 1 | True |
-| sift128 / 1000 | False | True | False | False | False | True | 0 | -1 | 1 | 1 | False |
-| sift128 / 2000 | False | True | False | False | False | True | -1 | -1 | 1 | 1 | False |
-| sift128 / 5000 | False | True | False | False | False | True | -1 | -1 | 1 | 1 | False |
-| sift128 / 20000 | False | True | False | False | False | True | -1 | -1 | 1 | 1 | True |
-| yelp_mpnet / 1000 | False | False | False | False | True | False | 0 | 1 | 1 | 1 | False |
-| yelp_mpnet / 2000 | False | False | False | False | True | False | 0 | 1 | 1 | 1 | False |
-| yelp_mpnet / 5000 | False | False | False | False | True | False | 0 | 1 | 1 | 1 | False |
-| yelp_mpnet / 20000 | False | False | False | False | True | False | 0 | 1 | 1 | 1 | True |
+| cifar100_dinov2 / 1000 | False | False | False | False | True | False | 0 | -1 | 1 | 1 | 1 |
+| cifar100_dinov2 / 2000 | False | False | False | True | True | False | 1 | -1 | 1 | 1 | 1 |
+| cifar100_dinov2 / 5000 | False | False | False | True | True | False | 1 | -1 | 1 | 1 | 1 |
+| cifar100_dinov2 / 20000 | False | False | False | True | True | False | 1 | -1 | 1 | 1 | 1 |
+| fluorescence_esm2 / 1000 | False | False | False | False | True | False | 0 | 0 | 1 | 0 | 0 |
+| fluorescence_esm2 / 2000 | False | False | False | True | True | False | 1 | 0 | 1 | 0 | 0 |
+| fluorescence_esm2 / 5000 | False | False | False | True | True | False | 1 | 0 | 1 | 0 | 0 |
+| fluorescence_esm2 / 20000 | False | False | False | True | True | False | 1 | 0 | 1 | 0 | 0 |
+| gist960 / 1000 | True | False | False | False | True | False | 0 | 1 | 1 | 0 | 1 |
+| gist960 / 2000 | True | False | False | False | True | False | 0 | 1 | 1 | 0 | 1 |
+| gist960 / 5000 | True | False | False | False | True | False | 0 | 1 | 1 | 0 | 1 |
+| gist960 / 20000 | True | False | False | False | True | False | 0 | 1 | 1 | 0 | 1 |
+| glove100 / 1000 | True | False | False | True | False | False | 1 | 1 | 1 | 1 | 1 |
+| glove100 / 2000 | True | False | False | True | False | False | 1 | 1 | 1 | 1 | 1 |
+| glove100 / 5000 | True | False | False | True | False | False | 1 | 1 | 1 | 1 | 1 |
+| glove100 / 20000 | True | False | False | True | False | False | 1 | 1 | 1 | 1 | 1 |
+| sift128 / 1000 | False | True | False | False | False | True | 0 | 0 | -1 | 1 | 1 |
+| sift128 / 2000 | False | True | False | False | False | True | -1 | -1 | -1 | 1 | 1 |
+| sift128 / 5000 | False | True | False | False | False | True | -1 | -1 | -1 | 1 | 1 |
+| sift128 / 20000 | False | True | False | False | False | True | -1 | -1 | -1 | 1 | 1 |
+| yelp_mpnet / 1000 | False | False | False | False | True | False | 0 | 0 | 1 | 1 | 1 |
+| yelp_mpnet / 2000 | False | False | False | False | True | False | 0 | 0 | 1 | 1 | 1 |
+| yelp_mpnet / 5000 | False | False | False | False | True | False | 0 | 0 | 1 | 1 | 1 |
+| yelp_mpnet / 20000 | False | False | False | False | True | False | 0 | 0 | 1 | 1 | 1 |
 
 ### Relative change from n = 20,000 to n = 2,000 (median over subsets)
 
@@ -367,6 +326,7 @@ Reading = majority over the 5 subsets of: each recommendation type, the sign of 
 | ID/MLE | -0.15 | 0.06 | -0.11 | -0.07 | -0.09 | -0.03 | -0.08 |
 | ID/lPCA | 0.01 | 0.00 | 0.00 | 0.00 | -0.09 | 0.04 | 0.00 |
 | ID/MOM | 0.19 | -0.04 | -0.16 | -0.15 | -0.12 | -0.06 | -0.09 |
+| ID/scale_max_deviation | 0.24 | -0.08 | 0.37 | 1.34 | 0.78 | 1.67 | 0.58 |
 | Summary/suggested_k | -0.69 | -0.69 | -0.69 | -0.69 | -0.69 | -0.69 | -0.69 |
 | Summary/suggested_target_dim | -0.07 | 0.07 | -0.08 | 0.02 | -0.04 | 0.00 | -0.02 |
 
@@ -395,6 +355,7 @@ Reading = majority over the 5 subsets of: each recommendation type, the sign of 
 | ID/MLE | 0.68 | 0.316 | 0.124 | 0.211 | 0.134 | 0.234 | 0.164 | 0.119 | 0.444 | 0.364 | 0.124 | 0.134 | 1.09 | 0.477 | 0.57 | 0.394 | 0.349 | 0.163 | 0.181 | 0.103 | 0.706 | 0.428 | 0.202 | 0.202 |
 | ID/lPCA | 6.28 | 3.78 | 5.63 | 5.17 | 1.22 | 0.548 | 0.447 | 0.548 | 0.548 | 0.447 | 0 | 0 | 0 | 0 | 0 | 0 | 0.707 | 0.548 | 0.447 | 0.447 | 2.51 | 2.49 | 0.837 | 0.837 |
 | ID/MOM | 0.811 | 0.526 | 0.241 | 0.316 | 0.169 | 0.123 | 0.0987 | 0.0603 | 0.187 | 0.243 | 0.192 | 0.0828 | 0.84 | 0.431 | 0.378 | 0.557 | 0.155 | 0.12 | 0.0738 | 0.0576 | 0.337 | 0.309 | 0.145 | 0.145 |
+| ID/scale_max_deviation | 0.0516 | 0.0146 | 0.0561 | 0.0237 | 0.0612 | 0.0996 | 0.0568 | 0.0441 | 0.0496 | 0.0604 | 0.0396 | 0.0234 | 0.064 | 0.0704 | 0.0333 | 0.0419 | 0.0669 | 0.0746 | 0.0456 | 0.0139 | 0.0604 | 0.056 | 0.0362 | 0.0294 |
 | Summary/suggested_k | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | Summary/suggested_target_dim | 0.837 | 0.548 | 0.837 | 0.707 | 1 | 0.447 | 0.707 | 0 | 1.87 | 1.58 | 0.837 | 0.837 | 1.67 | 1.82 | 1.58 | 1.58 | 1.3 | 1.14 | 0.447 | 0.707 | 1.48 | 1.52 | 1.14 | 1.14 |
 

@@ -634,7 +634,7 @@ Release as 0.6.0.
 | 4.2 | Intrinsic dimension | done (2026-11-14): per-estimator bootstrap intervals, TwoNN scale curve, ESS; acceptance revised with the user (bias at ID 10 and 20 goes to E3); target dim from TwoNN |
 | 4.3 | Isotropy and spectrum | done (2026-11-14): IsoScore, PC and coordinate shares, spectrum alpha, mean direction; `report.properties` replaces the anisotropy recommendations |
 | 4.4 | Metric consistency, kernel spectrum | done (2026-11-15): metric limited to euclidean/cosine and honoured by every analyzer (cosine = normalised rows); centred kernel, trace-ratio effective rank, `top_k_eigen_ratio` |
-| 4.5 | Run E3 and E5 | in progress (2026-11-16): first run done (exit criterion failed); calibration fixed; rerun of gauss, subsample and E5 detection pending |
+| 4.5 | Run E3 and E5 | done (2026-11-16; `docs/BENCHMARK_DIAGNOSTICS.md`): calibration fixed after the first run; rerun (arrays 3080075-7) meets the phase 4 exit criterion on all six datasets; normalised anisotropic rows documented as uncalibrated |
 | 5.1 | Residual adapter | done (2026-11-12): accepted in E6; `EmbedKit` default is now `architecture="linear"` |
 | 5.2 | Positives and negatives | rejected (2026-11-13): no arm wins against `linear` on half the datasets in E6; options stay in the library |
 | 5.3 | Matryoshka output | done (2026-11-13): non-inferior in E6; opt-in `EmbedKit(nested_dims=...)` |
@@ -1180,6 +1180,23 @@ Even with k fixed, a sign reading with |z| near 3 can flip on 20-draw noise (cif
 fluorescence k-skewness z 3.9 and 4.2 at 2k, glove100 3.4, sift128 -3.4): the rerun reports the
 per-seed flip rate, and the exit criterion may still fail on such items.
 
+**Rerun (2026-11-16, arrays 3080075 gauss, 3080076 subsample, 3080077 E5 detection; commit
+`27b8421`; all 30 tasks completed).** The first run's per-run files are kept as `*_run1/` on the
+cluster and locally.
+- Exit criterion: the majority reading at 2,000 rows equals the one at 20,000 on all six
+  datasets (four failed before). Per subset, 12 of 30 differ on at least one item (22 of 330
+  items), almost all k-skewness or antihub signs near +-3.
+- Null calibration: uniformity inside +-3 in at least 98% of cells of every null family (flat
+  was 31%); the antihub false-alarm rate on flat Euclidean cells fell from 31% to 1%. Below the
+  95% bar: `spiked` (neighbour consistency 0.84, antihub 0.87), `power0.5` k-skewness 0.93
+  (cosine, d = 1,024) and `power1_l2` (not modelled). False antihub recommendations under
+  cosine: `spiked` 44%, `power0.5` 11%, `power1_l2` 49%. The calibrated antihub rule is in the
+  code as decided; whether these cosine false alarms justify dropping it is open for the user.
+- E5 detection is unchanged from the first run (131 and 130 of 136 expected signals); the
+  recommendations a damage adds are still mostly side effects.
+- Normalised anisotropic rows: documented as a limitation (the user's decision, 2026-11-16,
+  after the sphere null failed its bar).
+
 **Open findings (not blocking).**
 - Neighbour consistency in the `spiked` family at d = 1,024, Euclidean: inside +-3 in 0 to 60%
   of seeds (max |z| 4.4 at n = 2,000); not touched by the mean fix.
@@ -1193,9 +1210,10 @@ All design decisions in this plan are confirmed.
 
 1. **Phases 5 and 6 are done** (0.4.0 tagged locally on 2026-11-13; phase 6 is unreleased).
 2. **Phase 4 is in progress** (started 2026-11-14). WP 4.1, 4.2 and 4.3 are done (see their
-   notes). WP 4.5: the first E3/E5 run is done and the calibration was fixed (2026-11-16, see
-   "WP 4.5 first run and calibration fixes"); next is the rerun of E3 gauss and subsample and
-   E5 detection on Occidata, then `docs/BENCHMARK_DIAGNOSTICS.md`. Phases 4 and
+   notes). WP 4.5 is done (2026-11-16): the phase 4 exit criterion holds after the
+   calibration fixes (`docs/BENCHMARK_DIAGNOSTICS.md`), so phase 4 is complete. Its open
+   findings (normalised anisotropic rows, spiked spectra at d = 1,024, near-threshold flips)
+   go to phase 7. Phases 4 and
    6 ship together as 0.5.0, and phase 7 as 0.6.0 (the user's decision, 2026-11-14). WP 4.4 is
    done (2026-11-15). The user
    also kept calibration on by default with 20 draws.
