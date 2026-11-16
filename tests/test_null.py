@@ -302,3 +302,5 @@ class TestReportCalibration:
         many = _calibrated_recommendations(cal(0.4), 3.0)
         assert any("More antihubs than the null" in r for r in many)
         assert not _calibrated_recommendations(cal(0.0), 3.0)  # fewer antihubs: no action
+        # Under cosine the antihub ratio is not calibrated (E3): no recommendation from it.
+        assert not _calibrated_recommendations(cal(0.4), 3.0, metric="cosine")

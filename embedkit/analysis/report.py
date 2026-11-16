@@ -361,7 +361,7 @@ class EmbedKitAnalyzer(BaseAnalyzer):
         )
         properties = _properties(geo_bundle, calibration)
         recommendations = _recommendations(
-            id_result, hub_result, geo_bundle, calibration, d, self.z_threshold
+            id_result, hub_result, geo_bundle, calibration, d, self.z_threshold, self.metric
         )
 
         return EmbedKitReport(
@@ -455,7 +455,8 @@ def calibration_statistics(
 
 
 def _recommendations(
-    id_result, hub_result, geo_bundle, calibration, d, z_threshold: float = 3.0
+    id_result, hub_result, geo_bundle, calibration, d, z_threshold: float = 3.0,
+    metric: str = "euclidean",
 ) -> list[str]:
     """Recommendations from the report.
 
@@ -468,7 +469,7 @@ def _recommendations(
     recs = []
 
     if calibration is not None:
-        recs.extend(_calibrated_recommendations(calibration, z_threshold))
+        recs.extend(_calibrated_recommendations(calibration, z_threshold, metric))
 
     # ID / D ratio (curse of dimensionality)
     ref_id = id_result.reference_estimate
@@ -522,8 +523,16 @@ def _properties(geo_bundle, calibration) -> list[str]:
     return props
 
 
-def _calibrated_recommendations(calibration, z_threshold: float) -> list[str]:
-    """One recommendation per calibrated statistic that is beyond the null in its direction."""
+def _calibrated_recommendations(
+    calibration, z_threshold: float, metric: str = "euclidean"
+) -> list[str]:
+    """One recommendation per calibrated statistic that is beyond the null in its direction.
+
+    The antihub recommendation is made under ``metric="euclidean"`` only. Under cosine the
+    antihub ratio of Gaussian data is not calibrated (inside +-3 in 89% of E3 null cells; a false
+    recommendation in 44% of cells with a spiked spectrum), so its z-score is reported in
+    ``report.calibration`` but raises nothing (the user's decision, 2026-11-16).
+    """
 
     def describe(c) -> str:
         return (f"{c.observed:.3g} against {c.null_mean:.3g} ± {c.null_std:.2g} under the "
@@ -538,7 +547,7 @@ def _calibrated_recommendations(calibration, z_threshold: float) -> list[str]:
             "embedkit.hubness_reduction.MutualProximity."
         )
     c = calibration.get("antihub_ratio")
-    if c is not None and c.z_score > z_threshold:
+    if c is not None and metric == "euclidean" and c.z_score > z_threshold:
         recs.append(
             f"More antihubs than the null (antihub_ratio {describe(c)}): more points are "
             "never retrieved as a neighbour than in a Gaussian with the same covariance "

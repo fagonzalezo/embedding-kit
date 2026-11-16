@@ -1166,9 +1166,9 @@ null anywhere (n = 2,000, d = 256 and 1,024, 5 seeds, Euclidean). It failed: `po
 distance_cv and uniformity z up to +22 in 2 of 5 seeds (a first version without the explicit
 mean direction was inside +-2.5 there but gave distance_cv z +9 on `mean_l2`), and with an
 `i^-1` spectrum plus a strong mean, normalised, the antihub z is -4 to -5 under both nulls.
-The code is on branch `wip/sphere-null`.
+The code is on the local branch `wip/sphere-null` (not pushed).
 
-**Pending.** The calibration tables of the committed reports describe the old code. Rerun
+**Rerun plan (done 2026-11-16, see "Rerun" below).** The calibration tables of the first reports described the old code. Rerun
 `e3.py --part gauss`, `--part subsample` and the E5 detection half on Occidata, regenerate the
 reports, then write `docs/BENCHMARK_DIAGNOSTICS.md`. The ID part and E5 repair are unaffected
 (`report_e3.py` computes the scale deviation of the as-run `id` records from their stored
@@ -1184,14 +1184,16 @@ per-seed flip rate, and the exit criterion may still fail on such items.
 `27b8421`; all 30 tasks completed).** The first run's per-run files are kept as `*_run1/` on the
 cluster and locally.
 - Exit criterion: the majority reading at 2,000 rows equals the one at 20,000 on all six
-  datasets (four failed before). Per subset, 12 of 30 differ on at least one item (22 of 330
-  items), almost all k-skewness or antihub signs near +-3.
+  datasets (four failed before; plateau item dropped). The z items agree largely by design: both
+  sizes calibrate 2,000 rows with k = 22; for yelp_mpnet the rows are the same, so its z-scores
+  are identical. Per subset, 12 of 30 differ on at least one item (22 of 330 items), almost all
+  k-skewness or antihub signs with z between about 2 and 4.
 - Null calibration: uniformity inside +-3 in at least 98% of cells of every null family (flat
   was 31%); the antihub false-alarm rate on flat Euclidean cells fell from 31% to 1%. Below the
   95% bar: `spiked` (neighbour consistency 0.84, antihub 0.87), `power0.5` k-skewness 0.93
   (cosine, d = 1,024) and `power1_l2` (not modelled). False antihub recommendations under
-  cosine: `spiked` 44%, `power0.5` 11%, `power1_l2` 49%. The calibrated antihub rule is in the
-  code as decided; whether these cosine false alarms justify dropping it is open for the user.
+  cosine: `spiked` 44%, `power0.5` 11%, `power1_l2` 49%. Decision (the user, 2026-11-16): the
+  antihub recommendation is made under Euclidean only; under cosine its z is still reported.
 - E5 detection is unchanged from the first run (131 and 130 of 136 expected signals); the
   recommendations a damage adds are still mostly side effects.
 - Normalised anisotropic rows: documented as a limitation (the user's decision, 2026-11-16,

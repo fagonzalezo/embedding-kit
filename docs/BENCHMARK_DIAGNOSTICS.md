@@ -20,14 +20,19 @@ rerun after the fixes below). Full tables: `benchmarks/results/e3/REPORT.md` and
 
 - **The phase 4 exit criterion holds after the fixes.** On all six real datasets the report reads the
   same at 2,000 and at 20,000 rows (majority over five subsets of each recommendation type and of the
-  sign of each calibrated z beyond +-3). In the first run it failed on four of six. Single subsets are
-  noisier: 12 of 30 subsets at 2,000 rows differ from the 20,000-row reading on at least one item
-  (22 of 330 items), almost all k-skewness or antihub signs near +-3.
+  sign of each calibrated z beyond +-3; the plateau flag was dropped from the reading after the first
+  run). In the first run it failed on four of six. Two caveats. The z items now agree largely by
+  design: at both sizes the calibration uses 2,000 rows with k = 22, so only the rows differ; for
+  Yelp (exactly 20,000 rows) they do not even differ, the 2k subset being the 20k report's
+  calibration sample, and its z-scores are identical. And single subsets are noisy: 12 of 30
+  subsets at 2,000 rows differ from the 20,000-row majority on at least one item (22 of 330
+  items), almost all k-skewness or antihub signs with z between about 2 and 4; Yelp's antihub z
+  ranges from 0.7 to 5.2 across subsets.
 - **On data drawn from the null family the calibrated statistics meet the WP 4.1 bar (95% inside
-  +-3) in most families, with three exceptions:** the spiked spectrum at d = 1,024 (neighbour
-  consistency under Euclidean; antihub ratio under cosine), the `i^-0.5` spectrum at d = 1,024 under
-  cosine (k-skewness), and rows normalised upstream with a power-law spectrum (`power1_l2`), which
-  the null does not model.
+  +-3) under Euclidean distance except neighbour consistency on spiked spectra at d = 1,024.
+  Under cosine the antihub ratio misses it (0.89 of cells inside +-3; spiked at d = 256 and 1,024,
+  `i^-0.5` and `i^-1` at d = 1,024), as does k-skewness on `i^-0.5` at d = 1,024.** Rows normalised
+  upstream with a power-law spectrum (`power1_l2`) are not modelled by the null.
 - **The report's properties detect every kind of damage, its recommendations rarely name it.** In E5
   the expected property moved beyond the noise floor in 131 of 136 (cosine) and 130 of 136
   (Euclidean) cases. The misses: `scale_max_deviation` under noise on CIFAR-100 and STL-10 (and
@@ -36,7 +41,8 @@ rerun after the fixes below). Full tables: `benchmarks/results/e3/REPORT.md` and
   STL-10 CLIP under Euclidean; antihubs after a mean shift under cosine). Which properties predict that
   an intervention helps is E4's question (phase 7).
 - **Intrinsic dimension:** the k-NN estimators (TwoNN, MLE, MOM) read 14 to 29% low at ID 20 even
-  at n = 5,000 and noise-free. ESS is within 0.7 of the true ID at 10 and 20 but runs only up to
+  at n = 5,000 and noise-free. ESS is within 0.7 of the true ID on the 10- and 20-dimensional
+  spheres and cubes but reads 34% and 58% high on two curved manifolds (M6, M8; centre cell), runs only up to
   n = 5,000 and costs minutes; DANCo is erratic (+3.8 on the 10-sphere, NaN on the 2-cube); lPCA
   counts linear dimensions and overshoots on curved manifolds. Bootstrap intervals
   describe sampling error well (se / sd 0.9 to 1.2) but cover the true ID in 1 to 33% of cells,
@@ -56,7 +62,11 @@ All five are in commits `f4e5fa8` and `27b8421`; the decisions on items 2 to 5 a
    the same 2,000 Pets rows had grown from 9 (k = 11) to 23 (k = 71).
 3. **The antihub ratio is calibrated** (a fifth statistic on the same kNN graph, null sd floored at
    one count); the fixed rule `antihub_ratio > 0.3` fired on 31% of flat Gaussian cells and flipped
-   between 2,000 and 20,000 rows on GloVe.
+   between 2,000 and 20,000 rows on GloVe. After the rerun its recommendation was restricted to
+   Euclidean distance (the user's decision): under cosine the antihub z is reported but raises
+   nothing, because of the false alarms below. The rerun's reports predate this restriction, so
+   their cosine antihub recommendations would no longer be made; the subsample part (the exit
+   criterion) is Euclidean and unaffected.
 4. **`scale_max_deviation` replaces the plateau flag** (TwoNN on n, n/2, n/4, n/8 rows within 10%),
    which flipped between subsets of one dataset and separated noisy from clean manifolds only weakly.
 5. **Rows with a common norm** are compared with null draws on the same sphere, under either metric.
@@ -147,7 +157,7 @@ five 80% row subsets of each clean set.
 | nuisance directions | 32/32, 32/32 | `abtt-3`; recovered on all four |
 | anisotropic rescaling | 16/16, 16/16 | ZCA or CSLS; recovered except STL-10 at condition 10,000 |
 | isotropic noise | 28/32, 27/32 | CSLS or PCA; recovered at the lower level on all four, at the higher level on none (PCA best) |
-| zero padding | 24/24, 24/24 | PCA; recovered except Banking77 at 4 x padding |
+| zero padding | 24/24, 24/24 | several (CSLS, MP, PCA, PCA-whitening, standardisation); recovered except Banking77 at 4 x padding |
 | domain offset | 15/16, 15/16 | ABTT (1 or 3 directions); recovered on all four |
 
 ## Limitations and open findings
@@ -157,7 +167,7 @@ five 80% row subsets of each clean set.
   `distance_cv` and uniformity z of +8 to +11 and a false antihub recommendation in about half of the
   `power1_l2` cells. A moment-matched sphere null was tried (branch `wip/sphere-null`) and failed the
   bar fixed before the test: one version fixed the power-law case and broke data with a strong mean,
-  the other the reverse. Documented in the `EmbedKitAnalyzer` docstring; revisit in phase 7 (the
+  the other the reverse. (The branch is local, not pushed.) Documented in the `EmbedKitAnalyzer` docstring; revisit in phase 7 (the
   user's decision, 2026-11-16). Embeddings that arrive normalised (many sentence encoders) are
   affected. The four E5 sets are not normalised (their Euclidean and cosine reports differ); the
   subsample sets were not checked, which does not affect the exit criterion (row norms are a
