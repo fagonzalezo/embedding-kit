@@ -78,6 +78,19 @@ def md(df: pd.DataFrame, floatfmt: str = ".2f") -> str:
 
 
 # ------------------------------------------------------------------------------------------ id
+def scale_deviation(r: dict) -> float:
+    """``scale_max_deviation`` of a record; computed from ``scale_curve`` for records written
+    before it existed (the first E3 run, which stored ``scale_plateau``)."""
+    if r.get("scale_max_deviation") is not None:
+        return float(r["scale_max_deviation"])
+    curve = {int(k): v for k, v in (r.get("scale_curve") or {}).items()
+             if v is not None and v == v}
+    if len(curve) < 2:
+        return float("nan")
+    ref = curve[max(curve)]
+    return float(max(abs(v / ref - 1.0) for v in curve.values()))
+
+
 def id_frame(records) -> pd.DataFrame:
     rows = []
     for r in records:
@@ -89,7 +102,7 @@ def id_frame(records) -> pd.DataFrame:
                 D=s["D"], noise=s["noise"], map=s["map"], seed=s["seed"], method=m,
                 estimate=est, se=r["standard_errors"][m], lo=lo, hi=hi,
                 covered=(lo <= s["true_id"] <= hi) if lo == lo else np.nan,
-                scale_dev=r.get("scale_max_deviation"), seconds=r["seconds"][m]))
+                scale_dev=scale_deviation(r), seconds=r["seconds"][m]))
     df = pd.DataFrame(rows)
     df["rel_bias"] = (df.estimate - df.true_id) / df.true_id
     return df

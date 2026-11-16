@@ -1131,8 +1131,10 @@ neighbour-consistency z). The WP 4.1 bar (95% of null cells inside +-3) failed f
 1. Calibration k is `k` when given, else `max(5, round(sqrt(rows) / 2))` on the calibration
    rows (`report.calibration_k`), so the z-scores depend on the calibration sample only.
 2. The antihub ratio is a fifth calibrated statistic on the same kNN graph; the fixed rule is
-   removed. Its null sd is floored at the Poisson value `sqrt(max(null count, 1)) / rows`
-   (antihubs are often absent from every null draw at low d).
+   removed. Its null sd is floored at one count, `1 / rows` (antihubs are often absent
+   from every null draw at low d). A Poisson floor, `sqrt(null count) / rows`, was tried
+   first and bound in about 60% of the pre-flight cells (n = 2,000), shrinking ordinary
+   z-scores.
 3. `scale_plateau` and `plateau_tolerance` are replaced by `scale_max_deviation` (largest
    relative deviation of the curve from the full sample), with no threshold; the plateau
    item is dropped from the exit criterion's reading.
@@ -1141,7 +1143,12 @@ neighbour-consistency z). The WP 4.1 bar (95% of null cells inside +-3) failed f
 
 **Pending.** The calibration tables of the committed reports describe the old code. Rerun
 `e3.py --part gauss`, `--part subsample` and the E5 detection half on Occidata, regenerate the
-reports, then write `docs/BENCHMARK_DIAGNOSTICS.md`. The ID part and E5 repair are unaffected.
+reports, then write `docs/BENCHMARK_DIAGNOSTICS.md`. The ID part and E5 repair are unaffected
+(`report_e3.py` computes the scale deviation of the as-run `id` records from their stored
+curves). Both scripts skip existing cells, so the rerun needs `--overwrite`. In the E5
+signature table, "plateau lost" for `noise` is now `scale_dev` up. None of the four E5 base
+sets has a common row norm (their Euclidean and cosine `distance_cv` differ), so the
+unit-norm switch does not change the null between clean and damaged variants.
 Even with k fixed, a sign reading with |z| near 3 can flip on 20-draw noise (cifar100 and
 fluorescence k-skewness z 3.9 and 4.2 at 2k, glove100 3.4, sift128 -3.4): the rerun reports the
 per-seed flip rate, and the exit criterion may still fail on such items.

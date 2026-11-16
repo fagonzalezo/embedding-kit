@@ -237,15 +237,16 @@ class EmbedKitAnalyzer(BaseAnalyzer):
         sample only and not on the size of ``X``: reusing the report's ``k`` (71 at 20,000
         rows) made the neighbour-consistency z on the same 2,000 rows grow from 9 to 23 (E3,
         WP 4.5). The antihub ratio is a proportion of a count, often zero in every null draw
-        at low dimension, so its null standard deviation is floored at the Poisson value
-        ``sqrt(max(null count, 1)) / rows``. The recommendations for these statistics come
-        from the z-scores (``|z| > z_threshold`` in the direction each recommendation names),
-        and ``report.n_outside_null`` counts the statistics with ``|z| > z_threshold``. With
-        ``calibrate=False`` the report makes no recommendation about them. Rows that arrive
-        with a common norm (relative spread under 1e-3, for instance embeddings normalised
-        upstream) are compared with null draws normalised to that norm, under either metric;
-        a Gaussian null with varying norms made such rows look concentrated (``distance_cv``
-        z down to -35 in E3).
+        at low dimension, so its null standard deviation is floored at one count,
+        ``1 / rows``. (A Poisson floor, ``sqrt(null count) / rows``, bound in about 60% of
+        ordinary Gaussian cells and shrank their z-scores.) The recommendations for these
+        statistics come from the z-scores (``|z| > z_threshold`` in the direction each
+        recommendation names), and ``report.n_outside_null`` counts the statistics with
+        ``|z| > z_threshold``. With ``calibrate=False`` the report makes no recommendation
+        about them. Rows that arrive with a common norm (relative spread under 1e-3, for
+        instance embeddings normalised upstream) are compared with null draws normalised to
+        that norm, under either metric; a Gaussian null with varying norms made such rows look
+        concentrated (``distance_cv`` z down to -35 in E3).
     metric:
         ``"euclidean"`` or ``"cosine"`` (anything else raises ``ValueError``), honoured by every
         analyzer. With ``"cosine"`` the rows are L2-normalised once and every statistic, the
@@ -409,8 +410,8 @@ def common_norm(X: np.ndarray, rtol: float = _UNIT_NORM_RTOL) -> float | None:
 
 
 def _floor_proportion_std(c: CalibratedStatistic, rows: int) -> CalibratedStatistic:
-    """Floor the null sd of a proportion of ``rows`` at the Poisson sd of its count."""
-    floor = float(np.sqrt(max(c.null_mean * rows, 1.0)) / rows)
+    """Floor the null sd of a proportion of ``rows`` at one count, ``1 / rows``."""
+    floor = 1.0 / rows
     if c.null_std >= floor:
         return c
     return replace(c, null_std=floor, z_score=float((c.observed - c.null_mean) / floor))
