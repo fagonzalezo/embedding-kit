@@ -630,7 +630,7 @@ Release as 0.6.0.
 | 3.1 | Run E1 | done (2026-11-11; cluster array 3077382) |
 | 3.2 | Run E2 | done (2026-11-11; cluster array 3077451) |
 | 3.3 | Write up and gate | done (2026-11-11; `docs/BENCHMARK_E1_E2.md`; gate outcome C plus WP 5.3) |
-| 4.1 | Null models | done (2026-11-14): moment-matched Gaussian null; acceptance met in all 32 cells; `severity` replaced by `n_outside_null` |
+| 4.1 | Null models | done (2026-11-14): moment-matched Gaussian null; acceptance met in all 32 cells; `severity` replaced by `n_outside_null`. Mean shrinkage added in WP 4.5; acceptance rerun 2026-11-16 on the fixed code, 40 cells with the antihub ratio, every one at 0.975 or above |
 | 4.2 | Intrinsic dimension | done (2026-11-14): per-estimator bootstrap intervals, TwoNN scale curve, ESS; acceptance revised with the user (bias at ID 10 and 20 goes to E3); target dim from TwoNN |
 | 4.3 | Isotropy and spectrum | done (2026-11-14): IsoScore, PC and coordinate shares, spectrum alpha, mean direction; `report.properties` replaces the anisotropy recommendations |
 | 4.4 | Metric consistency, kernel spectrum | done (2026-11-15): metric limited to euclidean/cosine and honoured by every analyzer (cosine = normalised rows); centred kernel, trace-ratio effective rank, `top_k_eigen_ratio` |
