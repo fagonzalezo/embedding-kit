@@ -18,12 +18,13 @@ import numpy as np
 import pandas as pd
 
 HERE = Path(__file__).resolve().parent
-CALIBRATED = ("k_skewness", "distance_cv", "neighbor_consistency", "uniformity")
+CALIBRATED = ("k_skewness", "antihub_ratio", "distance_cv", "neighbor_consistency",
+              "uniformity")
 REC_TYPES = {
     "More hubness than the null": "hubness",
     "Distances are more concentrated": "concentration",
     "The kNN graph is less stable": "consistency",
-    "Many antihubs": "antihub",
+    "More antihubs than the null": "antihub",
     "Low intrinsic-to-ambient": "id_low",
     "Moderate intrinsic-to-ambient": "id_moderate",
 }
@@ -36,6 +37,7 @@ TRACKED = [
     "Geometry/top_10_variance_share", "Geometry/mean_vector_ratio", "Geometry/mean_cosine",
     "Geometry/neighbor_consistency", "Geometry/uniformity", "Kernel/effective_rank",
     "Kernel/spectral_gap", "ID/TwoNN", "ID/MLE", "ID/lPCA", "ID/MOM",
+    "ID/scale_max_deviation",
     "Summary/suggested_k", "Summary/suggested_target_dim",
 ]
 
@@ -87,7 +89,7 @@ def id_frame(records) -> pd.DataFrame:
                 D=s["D"], noise=s["noise"], map=s["map"], seed=s["seed"], method=m,
                 estimate=est, se=r["standard_errors"][m], lo=lo, hi=hi,
                 covered=(lo <= s["true_id"] <= hi) if lo == lo else np.nan,
-                plateau=r.get("scale_plateau"), seconds=r["seconds"][m]))
+                scale_dev=r.get("scale_max_deviation"), seconds=r["seconds"][m]))
     df = pd.DataFrame(rows)
     df["rel_bias"] = (df.estimate - df.true_id) / df.true_id
     return df
@@ -131,9 +133,10 @@ def id_report(df: pd.DataFrame) -> list[str]:
             "sampling error with bias, which the intervals do not include.", "", md(t), ""]
 
     plat = df.drop_duplicates(["manifold", "sweep", "n", "D", "noise", "map", "seed"])
-    t = plat.assign(noisy=plat.noise > 0).groupby(["noisy"]).plateau.mean().to_frame(
-        "plateau_rate")
-    out += ["### TwoNN scale plateau as a noise detector", "", md(t), ""]
+    t = plat.groupby("noise").scale_dev.describe(percentiles=[0.1, 0.5, 0.9])[
+        ["count", "10%", "50%", "90%"]]
+    out += ["### TwoNN scale curve: largest relative deviation from the full sample, by noise",
+            "", md(t, ".3g"), ""]
     t = df.groupby(["method", "n"]).seconds.median().unstack()
     out += ["### Median seconds per fit (bootstrap included where run)", "", md(t, ".1f"), ""]
     return out, cells
@@ -192,8 +195,7 @@ def subsample_frame(records) -> pd.DataFrame:
     for r in records:
         s = r["settings"]
         row = dict(dataset=s["dataset"], n=s["n"], seed=s["seed"],
-                   recs=",".join(rec_types(r["recommendations"])) or "none",
-                   plateau=r["id"]["scale_plateau"])
+                   recs=",".join(rec_types(r["recommendations"])) or "none")
         for k, c in r["calibration"].items():
             row[f"z_{k}"] = c["z"]
             row[f"sign_{k}"] = int(np.sign(c["z"])) if abs(c["z"]) > 3 else 0
@@ -211,14 +213,15 @@ def reading(group: pd.DataFrame) -> dict:
         out[f"rec_{t}"] = bool(group.recs.str.contains(t).mean() > 0.5)
     for k in CALIBRATED:
         out[f"sign_{k}"] = int(group[f"sign_{k}"].mode().iloc[0])
-    out["plateau"] = bool(group.plateau.fillna(False).astype(bool).mean() > 0.5)
     return out
 
 
 def subsample_report(df: pd.DataFrame) -> list[str]:
     out = ["## Subsampling stability (part `subsample`; phase 4 exit criterion)", "",
            "Reading = majority over the 5 subsets of: each recommendation type, the sign of each "
-           "calibrated z beyond +-3, and the TwoNN plateau flag. `yelp_mpnet` has exactly 20,000 "
+           "calibrated z beyond +-3 (the plateau flag was dropped from the report after the "
+           "first run; its replacement, `ID/scale_max_deviation`, is in the tables below). "
+           "`yelp_mpnet` has exactly 20,000 "
            "training rows, so its five 20k subsets are identical (fluorescence, 21,446 rows, "
            "nearly so).", ""]
     readings = {(ds, n): reading(g) for (ds, n), g in df.groupby(["dataset", "n"])}

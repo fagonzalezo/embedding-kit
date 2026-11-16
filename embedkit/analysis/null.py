@@ -8,13 +8,18 @@ value falls in the null distribution, as a z-score.
 Two null models:
 
 ``"gaussian"`` (:func:`spectrum_matched_gaussian`)
-    A Gaussian with the mean of ``X`` and covariance ``alpha C + beta I``, where ``C`` is the
-    sample covariance. ``beta`` keeps the trace, and ``alpha`` makes ``tr(Sigma^2)`` equal its
-    unbiased (Wishart) estimate. A Gaussian with ``C`` itself is the wrong null: the sample
-    spectrum is more spread than the population one by about ``1 + d / n``, so data drawn from
-    a Gaussian look *more* isotropic than their own null (distance CV z-scores of -8 at
-    n = 3,000, d = 512, and -19 at n = 300, d = 512, for iid data). With the correction, data
-    drawn from a Gaussian with a flat or power-law spectrum give z-scores within +-3.
+    A Gaussian with the (shrunk) mean of ``X`` and covariance ``alpha C + beta I``, where ``C``
+    is the sample covariance. ``beta`` keeps the trace, and ``alpha`` makes ``tr(Sigma^2)``
+    equal its unbiased (Wishart) estimate. A Gaussian with ``C`` itself is the wrong null: the
+    sample spectrum is more spread than the population one by about ``1 + d / n``, so data
+    drawn from a Gaussian look *more* isotropic than their own null (distance CV z-scores of
+    -8 at n = 3,000, d = 512, and -19 at n = 300, d = 512, for iid data). With the correction,
+    data drawn from a Gaussian with a flat or power-law spectrum give z-scores within +-3.
+    The mean is the sample mean shrunk by :func:`mean_shrinkage`, so that its squared norm is
+    unbiased: the sample mean of zero-mean data has squared norm ``tr(Sigma) / n``, and a
+    null centred on it, whose own draws add the same amount again, made zero-mean data look
+    more spread on the sphere than their null (uniformity z of -6 to -19 at n = 300 to
+    2,000, d = 256 to 1,024; found in E3, WP 4.5).
 ``"permuted"`` (:func:`column_permuted`)
     Each column permuted independently: the marginals are kept and every dependence between
     columns is removed.
@@ -77,12 +82,24 @@ class _GaussianNull:
         self.beta = (1.0 - self.alpha) * t1 / d
         self.scale = np.sqrt(self.alpha) * S / np.sqrt(m)
         self.Vt = Vt
+        self.mean = self.mean * mean_shrinkage(float(self.mean @ self.mean), t1, n)
 
     def draw(self, n: int, rng: np.random.Generator) -> np.ndarray:
         Y = (rng.standard_normal((n, len(self.scale))) * self.scale) @ self.Vt
         if self.beta > 0:
             Y += np.sqrt(self.beta) * rng.standard_normal((n, self.d))
         return Y + self.mean
+
+
+def mean_shrinkage(mean_sq: float, t1: float, n: int) -> float:
+    """Factor that scales the sample mean ``m`` so that its squared norm is unbiased.
+
+    ``E ||m||^2 = ||mu||^2 + tr(Sigma) / n``, so ``||m||^2 - tr(C) / n`` estimates ``||mu||^2``
+    without bias. Returns ``sqrt(max(0, 1 - tr(C) / (n ||m||^2)))`` (0 when ``m = 0``).
+    """
+    if mean_sq <= 0:
+        return 0.0
+    return float(np.sqrt(max(0.0, 1.0 - t1 / (n * mean_sq))))
 
 
 def shrinkage_weight(t1: float, t2: float, m: int, d: int) -> float:
@@ -109,7 +126,7 @@ def spectrum_matched_gaussian(
 ) -> np.ndarray:
     """Draw ``n`` rows (default: as many as ``X``) from the Gaussian null of ``X``.
 
-    The null has the mean of ``X`` and the covariance ``alpha C + beta I`` described in the
+    The null has the shrunk mean and the covariance ``alpha C + beta I`` described in the
     module docstring. Returns an array of shape ``(n, d)`` with the dtype of ``X`` when it is
     floating point.
     """

@@ -9,6 +9,7 @@ from embedkit.analysis.null import (
     calibrate,
     calibrated_statistic,
     column_permuted,
+    mean_shrinkage,
     null_distribution,
     shrinkage_weight,
     spectrum_matched_gaussian,
@@ -163,6 +164,25 @@ def test_gaussian_null_is_calibrated_small():
     assert not bad, bad
 
 
+def test_gaussian_null_is_calibrated_without_a_mean():
+    """Zero-mean data (E3, WP 4.5): the null's mean must not add the sample mean's noise.
+
+    Centred on the raw sample mean, the null gave uniformity z of -8 to -15 here.
+    """
+    zs = []
+    for r in range(10):
+        X = np.random.default_rng(2000 + r).standard_normal((300, 512)).astype(np.float32)
+        zs.append(_z_scores(X, "gaussian", 20, r))
+    for s in CALIBRATED_STATISTICS:
+        assert np.mean([abs(z[s]) <= 3 for z in zs]) >= 0.8, (s, [z[s] for z in zs])
+
+
+def test_mean_shrinkage():
+    assert mean_shrinkage(0.0, 1.0, 10) == 0.0
+    assert mean_shrinkage(1.0, 20.0, 10) == 0.0  # ||m||^2 below tr(C) / n: clipped
+    assert mean_shrinkage(1.0, 5.0, 20) == pytest.approx(np.sqrt(0.75))
+
+
 def test_permutation_null_is_calibrated_small():
     share = _share_within([(300, 32, "independent")], reps=10, model="permuted")
     bad = {key: v for key, v in share.items() if v < 0.8}
@@ -224,3 +244,61 @@ class TestReportCalibration:
                                   metric="cosine", n_null_draws=5).fit(_gaussian(300, 16,
                                                                                  "flat", 0))
         assert report.calibration["uniformity"].null_model == "permuted"
+
+    def test_calibration_k_depends_on_the_calibration_rows_only(self):
+        # E3 (WP 4.5): reusing the report's k (sqrt(n) / 2 on all rows) made the z-scores of
+        # k-dependent statistics grow with n although the calibration rows were fixed.
+        from embedkit.analysis.report import EmbedKitAnalyzer
+
+        kw = dict(id_methods=["TwoNN"], id_bootstrap=0, id_scale_curve=False,
+                  n_calibration=300, n_null_draws=3)
+        small = EmbedKitAnalyzer(**kw).fit(_gaussian(600, 16, "flat", 0))
+        large = EmbedKitAnalyzer(**kw).fit(_gaussian(2400, 16, "flat", 0))
+        assert small.suggested_k == 12 and large.suggested_k == 24
+        assert small.calibration_k == large.calibration_k == 9  # round(sqrt(300) / 2)
+        fixed = EmbedKitAnalyzer(k=7, **kw).fit(_gaussian(600, 16, "flat", 0))
+        assert fixed.calibration_k == 7
+
+    def test_rows_normalised_upstream_are_inside_the_euclidean_null(self):
+        # E3 (WP 4.5): unit rows against a Gaussian null with varying norms gave distance_cv
+        # z down to -35 and a concentration recommendation in every cell.
+        from embedkit.analysis.report import EmbedKitAnalyzer, l2_normalize
+
+        kw = dict(id_methods=["TwoNN"], id_bootstrap=0, id_scale_curve=False)
+        for seed in range(3):
+            X = 2.0 * l2_normalize(_gaussian(800, 128, "flat", seed))
+            report = EmbedKitAnalyzer(**kw).fit(X)
+            c = report.calibration["distance_cv"]
+            assert abs(c.z_score) < 3, report.calibration
+            assert not any("concentrated" in r for r in report.recommendations)
+
+    def test_common_norm(self):
+        from embedkit.analysis.report import common_norm
+
+        X = np.random.default_rng(0).standard_normal((50, 8))
+        assert common_norm(X) is None
+        U = 3.0 * X / np.linalg.norm(X, axis=1, keepdims=True)
+        assert common_norm(U) == pytest.approx(3.0)
+        assert common_norm(np.zeros((5, 3))) is None
+
+    def test_antihub_null_spread_is_floored(self):
+        # At low dimension antihubs are rare, and often absent from every null draw; the floor
+        # keeps one or two observed antihubs from giving an infinite z.
+        from embedkit.analysis.report import EmbedKitAnalyzer
+
+        X = np.random.default_rng(0).standard_normal((1000, 3)).astype(np.float32)
+        report = EmbedKitAnalyzer(id_methods=["TwoNN"], id_bootstrap=0,
+                                  id_scale_curve=False).fit(X)
+        c = report.calibration["antihub_ratio"]
+        assert c.null_std >= 1 / 1000 and np.isfinite(c.z_score)
+
+    def test_antihub_recommendation_comes_from_the_z_score(self):
+        from embedkit.analysis.report import _calibrated_recommendations
+
+        def cal(observed):
+            null = np.array([0.10, 0.11, 0.12])
+            return {"antihub_ratio": calibrated_statistic(observed, null, "gaussian", 100)}
+
+        many = _calibrated_recommendations(cal(0.4), 3.0)
+        assert any("More antihubs than the null" in r for r in many)
+        assert not _calibrated_recommendations(cal(0.0), 3.0)  # fewer antihubs: no action

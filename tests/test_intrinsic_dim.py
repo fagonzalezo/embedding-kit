@@ -94,20 +94,20 @@ def test_ess_is_supported():
 # Scale curve
 # --------------------------------------------------------------------------------------
 class TestScaleCurve:
-    def test_levels_and_plateau_on_a_clean_manifold(self):
+    def test_levels_and_small_deviation_on_a_clean_manifold(self):
         r = IntrinsicDimensionEstimator(methods=["TwoNN"], n_bootstrap=0).fit(
             _manifold("sphere", 5, 4000, seed=0))
         assert list(r.scale_curve) == [4000, 2000, 1000, 500]
         assert r.scale_curve[4000] == r.estimates["TwoNN"]
-        assert r.scale_plateau is True
+        assert r.scale_max_deviation < 0.1, r.scale_curve
 
-    def test_noise_breaks_the_plateau(self):
+    def test_noise_makes_the_curve_drift(self):
         # Small isotropic noise in all 256 dimensions inflates TwoNN at short scales (many
         # rows) far more than at long scales (Denti et al. 2022).
         X = _manifold("sphere", 3, 4000, seed=0)
         X = X + 0.01 * np.random.default_rng(1).standard_normal(X.shape).astype(np.float32)
         r = IntrinsicDimensionEstimator(methods=["TwoNN"], n_bootstrap=0).fit(X)
-        assert r.scale_plateau is False, r.scale_curve
+        assert r.scale_max_deviation > 0.1, r.scale_curve
 
     def test_small_samples_skip_tiny_levels(self, small_X):
         r = IntrinsicDimensionEstimator(methods=["TwoNN"], n_bootstrap=0).fit(small_X)
@@ -115,7 +115,7 @@ class TestScaleCurve:
 
     def test_disabled(self, small_X):
         r = IntrinsicDimensionEstimator(methods=["MLE"], scale_curve=False).fit(small_X)
-        assert r.scale_curve == {} and r.scale_plateau is None
+        assert r.scale_curve == {} and np.isnan(r.scale_max_deviation)
 
     def test_computed_without_twonn_in_methods(self, small_X):
         r = IntrinsicDimensionEstimator(methods=["MLE"], n_bootstrap=0).fit(small_X)

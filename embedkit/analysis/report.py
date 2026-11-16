@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 import pandas as pd
@@ -25,7 +25,13 @@ from embedkit.analysis.null import CalibratedStatistic, NullModel, calibrate
 from embedkit.utils.neighbors import knn
 
 # The statistics compared with a null model when EmbedKitAnalyzer(calibrate=True).
-CALIBRATED_STATISTICS = ("k_skewness", "distance_cv", "neighbor_consistency", "uniformity")
+CALIBRATED_STATISTICS = (
+    "k_skewness", "antihub_ratio", "distance_cv", "neighbor_consistency", "uniformity"
+)
+
+# Rows whose norms differ by less than this (relative to the median norm) count as already
+# normalised: the calibration null then normalises its draws to that norm too.
+_UNIT_NORM_RTOL = 1e-3
 
 # The metrics every analyzer of the report can honour (D28): Euclidean, and cosine through
 # L2-normalised rows.
@@ -80,6 +86,7 @@ class EmbedKitReport(BaseResult):
     z_threshold: float = 3.0
     properties: list[str] = field(default_factory=list)
     metric: str = "euclidean"
+    calibration_k: int | None = None
 
     def to_dataframe(self) -> pd.DataFrame:
         dc = self.geometry.distance_concentration
@@ -89,7 +96,7 @@ class EmbedKitReport(BaseResult):
             *[("ID", f"{m}_se", s) for m, s in self.intrinsic_dim.standard_errors.items()],
             ("ID", "between_method_spread", self.intrinsic_dim.between_method_spread),
             ("ID", "reference_method", self.intrinsic_dim.reference_method),
-            ("ID", "scale_plateau", self.intrinsic_dim.scale_plateau),
+            ("ID", "scale_max_deviation", self.intrinsic_dim.scale_max_deviation),
             ("Hubness", "k_skewness", self.hubness.k_skewness),
             ("Hubness", "robinhood_index", self.hubness.robinhood_index),
             ("Hubness", "antihub_ratio", self.hubness.antihub_ratio),
@@ -131,6 +138,7 @@ class EmbedKitReport(BaseResult):
             ("Summary", "suggested_target_dim", self.suggested_target_dim),
             ("Summary", "n_outside_null", self.n_outside_null),
             ("Summary", "metric", self.metric),
+            ("Summary", "calibration_k", self.calibration_k),
         ]
         for name, c in (self.calibration or {}).items():
             rows += [
@@ -157,7 +165,8 @@ class EmbedKitReport(BaseResult):
             print(f"  {m:<14}: {v:.2f}{ci}")
         if id_res.scale_curve:
             curve = ", ".join(f"{v:.1f} (n={k})" for k, v in id_res.scale_curve.items())
-            print(f"  TwoNN by scale: {curve}; plateau: {id_res.scale_plateau}")
+            print(f"  TwoNN by scale: {curve}; max deviation: "
+                  f"{id_res.scale_max_deviation:.0%}")
         print(f"  (intervals: sampling error only; k-NN estimators read low at high ID; "
               f"target dim from {id_res.reference_method})")
         print("\n[Hubness]")
@@ -194,7 +203,7 @@ class EmbedKitReport(BaseResult):
         if self.calibration:
             c0 = next(iter(self.calibration.values()))
             print(f"\n[Calibration]  {c0.null_model} null, {c0.n_draws} draws of "
-                  f"{c0.n_samples} rows")
+                  f"{c0.n_samples} rows, k = {self.calibration_k}")
             for name, c in self.calibration.items():
                 print(f"  {name:<20}: {c.observed:.4f}  null {c.null_mean:.4f} "
                       f"± {c.null_std:.4f}  z = {c.z_score:+.1f}")
@@ -217,15 +226,26 @@ class EmbedKitAnalyzer(BaseAnalyzer):
     """Run every analyzer and summarise the results in an :class:`EmbedKitReport`.
 
     calibrate:
-        Compare k-skewness, ``distance_cv``, neighbour consistency and uniformity with their
-        distribution under ``null_model`` (see :mod:`embedkit.analysis.null`), in
-        ``report.calibration``. The comparison runs on a subsample of ``n_calibration`` rows
-        with the report's ``k`` and metric, against ``n_null_draws`` null data sets of the same
-        size, so it costs ``n_null_draws + 1`` evaluations of the four statistics on that
-        subsample. The recommendations for these four statistics come from the z-scores
-        (``|z| > z_threshold`` in the direction each recommendation names), and
-        ``report.n_outside_null`` counts the statistics with ``|z| > z_threshold``. With
-        ``calibrate=False`` the report makes no recommendation about them.
+        Compare k-skewness, the antihub ratio, ``distance_cv``, neighbour consistency and
+        uniformity with their distribution under ``null_model`` (see
+        :mod:`embedkit.analysis.null`), in ``report.calibration``. The comparison runs on a
+        subsample of ``n_calibration`` rows with the report's metric, against ``n_null_draws``
+        null data sets of the same size, so it costs ``n_null_draws + 1`` evaluations of the
+        five statistics on that subsample. Its ``k`` (``report.calibration_k``) is ``k`` when
+        given, and otherwise the default rule applied to the calibration rows,
+        ``max(5, round(sqrt(rows) / 2))``, so that the z-scores depend on the calibration
+        sample only and not on the size of ``X``: reusing the report's ``k`` (71 at 20,000
+        rows) made the neighbour-consistency z on the same 2,000 rows grow from 9 to 23 (E3,
+        WP 4.5). The antihub ratio is a proportion of a count, often zero in every null draw
+        at low dimension, so its null standard deviation is floored at the Poisson value
+        ``sqrt(max(null count, 1)) / rows``. The recommendations for these statistics come
+        from the z-scores (``|z| > z_threshold`` in the direction each recommendation names),
+        and ``report.n_outside_null`` counts the statistics with ``|z| > z_threshold``. With
+        ``calibrate=False`` the report makes no recommendation about them. Rows that arrive
+        with a common norm (relative spread under 1e-3, for instance embeddings normalised
+        upstream) are compared with null draws normalised to that norm, under either metric;
+        a Gaussian null with varying norms made such rows look concentrated (``distance_cv``
+        z down to -35 in E3).
     metric:
         ``"euclidean"`` or ``"cosine"`` (anything else raises ``ValueError``), honoured by every
         analyzer. With ``"cosine"`` the rows are L2-normalised once and every statistic, the
@@ -328,7 +348,9 @@ class EmbedKitAnalyzer(BaseAnalyzer):
             ref_id = max(2, d // 4)
         suggested_target_dim = int(np.clip(round(1.5 * ref_id), max(4, int(ref_id)), d))
 
-        calibration = self._calibrate(X_given, k) if self.calibrate else None
+        calibration, calibration_k = (
+            self._calibrate(X_given) if self.calibrate else (None, None)
+        )
         n_outside = (
             None if calibration is None
             else int(sum(abs(c.z_score) > self.z_threshold for c in calibration.values()))
@@ -353,42 +375,73 @@ class EmbedKitAnalyzer(BaseAnalyzer):
             n_outside_null=n_outside,
             z_threshold=self.z_threshold,
             metric=self.metric,
+            calibration_k=calibration_k,
         )
 
-    def _calibrate(self, X: np.ndarray, k: int) -> dict[str, CalibratedStatistic]:
-        """The calibrated statistics on a subsample of ``X``, against the null model."""
+    def _calibrate(self, X: np.ndarray) -> tuple[dict[str, CalibratedStatistic], int]:
+        """The calibrated statistics on a subsample of ``X``, against the null model, and the
+        ``k`` they used."""
         n = X.shape[0]
         if n > self.n_calibration:
             rng = np.random.default_rng(self.random_state)
             X = X[np.sort(rng.choice(n, self.n_calibration, replace=False))]
-        k = min(k, X.shape[0] - 1)
-        return calibrate(
-            lambda Z: calibration_statistics(Z, k, self.metric, self.random_state),
+        rows = X.shape[0]
+        k = min(self.k or max(5, round(np.sqrt(rows) / 2)), rows - 1)
+        norm = common_norm(X)
+        cal = calibrate(
+            lambda Z: calibration_statistics(Z, k, self.metric, self.random_state, norm=norm),
             X,
             model=self.null_model,
             n_draws=self.n_null_draws,
             random_state=self.random_state,
         )
+        cal["antihub_ratio"] = _floor_proportion_std(cal["antihub_ratio"], rows)
+        return cal, k
+
+
+def common_norm(X: np.ndarray, rtol: float = _UNIT_NORM_RTOL) -> float | None:
+    """The median row norm of ``X`` when every row norm is within ``rtol`` of it, else None."""
+    norms = np.linalg.norm(np.asarray(X, dtype=np.float64), axis=1)
+    med = float(np.median(norms))
+    if med > 0 and float(np.max(np.abs(norms - med))) <= rtol * med:
+        return med
+    return None
+
+
+def _floor_proportion_std(c: CalibratedStatistic, rows: int) -> CalibratedStatistic:
+    """Floor the null sd of a proportion of ``rows`` at the Poisson sd of its count."""
+    floor = float(np.sqrt(max(c.null_mean * rows, 1.0)) / rows)
+    if c.null_std >= floor:
+        return c
+    return replace(c, null_std=floor, z_score=float((c.observed - c.null_mean) / floor))
 
 
 def calibration_statistics(
-    X: np.ndarray, k: int, metric: str = "euclidean", random_state: int | None = 42
+    X: np.ndarray,
+    k: int,
+    metric: str = "euclidean",
+    random_state: int | None = 42,
+    norm: float | None = None,
 ) -> dict[str, float]:
     """The statistics in ``CALIBRATED_STATISTICS``, computed as the report computes them.
 
-    One kNN graph is shared by k-skewness and neighbour consistency; ``X`` is used whole for
-    both, and ``DistanceConcentration`` and ``UniformityScore`` subsample it as usual. With
-    ``metric="cosine"`` the rows are L2-normalised first, so that the observed rows and a null
-    draw (fitted to the rows as given) are both measured on the sphere.
+    One kNN graph is shared by k-skewness, the antihub ratio and neighbour consistency; ``X`` is
+    used whole for them, and ``DistanceConcentration`` and ``UniformityScore`` subsample it as
+    usual. With ``metric="cosine"`` the rows are L2-normalised first, so that the observed rows
+    and a null draw (fitted to the rows as given) are both measured on the sphere. With
+    ``norm``, every row is first rescaled to that norm (the report passes the common norm of
+    rows normalised upstream, so that null draws are compared on the same sphere).
     """
     _check_metric(metric)
+    if norm is not None:
+        X = (norm * l2_normalize(X)).astype(X.dtype, copy=False)
     if metric == "cosine":
         X = l2_normalize(X)
     _, graph = knn(X, k, metric=metric)
+    hub = HubnessAnalyzer(k=k, metric=metric).fit(X, neighbor_index=graph)
     return {
-        "k_skewness": HubnessAnalyzer(k=k, metric=metric).fit(
-            X, neighbor_index=graph
-        ).k_skewness,
+        "k_skewness": hub.k_skewness,
+        "antihub_ratio": hub.antihub_ratio,
         "distance_cv": DistanceConcentration(random_state=random_state).fit(X).distance_cv,
         "neighbor_consistency": NeighborConsistency(
             k=k, metric=metric, random_state=random_state
@@ -402,21 +455,16 @@ def _recommendations(
 ) -> list[str]:
     """Recommendations from the report.
 
-    Hubness, distance concentration, neighbour consistency and uniformity are judged only
-    through ``calibration`` (z-scores against the null model); without it nothing is said about
-    them. The antihub, ID / D and participation-ratio rules are fixed thresholds that WP 4.2
-    and 4.3 revisit.
+    Hubness, antihubs, distance concentration, neighbour consistency and uniformity are judged
+    only through ``calibration`` (z-scores against the null model); without it nothing is said
+    about them. The ID / D rule is a fixed threshold. The fixed antihub rule
+    (``antihub_ratio > 0.3``) was replaced by the calibrated one: it fired on 31% of isotropic
+    Gaussian cells and flipped with the sample size through ``k`` (E3, WP 4.5).
     """
     recs = []
 
     if calibration is not None:
         recs.extend(_calibrated_recommendations(calibration, z_threshold))
-
-    if hub_result.antihub_ratio > 0.3:
-        recs.append(
-            "Many antihubs (antihub_ratio > 0.3): a significant fraction of points "
-            "are never retrieved as neighbors."
-        )
 
     # ID / D ratio (curse of dimensionality)
     ref_id = id_result.reference_estimate
@@ -484,6 +532,13 @@ def _calibrated_recommendations(calibration, z_threshold: float) -> list[str]:
             f"More hubness than the null (k-skewness {describe(c)}): a few points dominate "
             "the neighbour lists. Try a hubness-reducing neighbour search such as "
             "embedkit.hubness_reduction.MutualProximity."
+        )
+    c = calibration.get("antihub_ratio")
+    if c is not None and c.z_score > z_threshold:
+        recs.append(
+            f"More antihubs than the null (antihub_ratio {describe(c)}): more points are "
+            "never retrieved as a neighbour than in a Gaussian with the same covariance "
+            "spectrum."
         )
     c = calibration.get("distance_cv")
     if c is not None and c.z_score < -z_threshold:

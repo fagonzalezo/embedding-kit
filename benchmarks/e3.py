@@ -172,7 +172,7 @@ def run_id_cell(c: dict) -> dict:
         out["intervals"][m] = list(r.intervals[m])
         if m == "TwoNN":
             out["scale_curve"] = {str(k): v for k, v in r.scale_curve.items()}
-            out["scale_plateau"] = r.scale_plateau
+            out["scale_max_deviation"] = r.scale_max_deviation
             out["n_duplicates_removed"] = r.n_duplicates_removed
     return out
 
@@ -236,8 +236,10 @@ def report_record(report) -> dict:
         id=dict(estimates=idr.estimates, standard_errors=idr.standard_errors,
                 intervals={m: list(v) for m, v in idr.intervals.items()},
                 scale_curve={str(k): v for k, v in idr.scale_curve.items()},
-                scale_plateau=idr.scale_plateau, reference_method=idr.reference_method),
+                scale_max_deviation=idr.scale_max_deviation,
+                reference_method=idr.reference_method),
         suggested_k=report.suggested_k, suggested_target_dim=report.suggested_target_dim,
+        calibration_k=report.calibration_k,
     )
 
 

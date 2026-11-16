@@ -123,8 +123,9 @@ class TestEmbedKitAnalyzer:
         assert report.suggested_k > 0
         assert report.suggested_target_dim > 0
         assert set(report.calibration) == {
-            "k_skewness", "distance_cv", "neighbor_consistency", "uniformity"}
-        assert 0 <= report.n_outside_null <= 4
+            "k_skewness", "antihub_ratio", "distance_cv", "neighbor_consistency", "uniformity"}
+        assert 0 <= report.n_outside_null <= 5
+        assert report.calibration_k == max(5, round(np.sqrt(len(small_X)) / 2))
         assert len(report.recommendations) > 0
 
     def test_to_dict(self, small_X):

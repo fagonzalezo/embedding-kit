@@ -42,13 +42,13 @@ EmbedKit supports eight estimators, each making different geometric assumptions.
 | `FisherS` | Separability-based estimate using Fisher information (Albergante et al., 2019) |
 | `ESS` | Expected simplex skewness (Johnsson et al., 2015); the most accurate at high ID in our tests, but about 100 s per fit at n = 5,000 |
 
-**Class:** `IntrinsicDimensionEstimator(methods, n_max, n_bootstrap, scale_curve, plateau_tolerance, random_state)`
+**Class:** `IntrinsicDimensionEstimator(methods, n_max, n_bootstrap, scale_curve, random_state)`
 
 **Result fields:**
 - `estimates` — per-method ID values (NaN when a method failed, with a warning).
 - `standard_errors`, `intervals` — bootstrap standard error (`n_bootstrap = 20` resamples of the rows; repeated rows are dropped, as in `fit`) and the interval `estimate ± 1.96 se`. Against the spread over independent draws of spheres and cubes, these standard errors were within about 30% of the true sampling error. `ESS` and `DANCo` are too slow to resample and get NaN.
 - `between_method_spread` — standard deviation of the estimates across methods (formerly `uncertainty`). It is not a sampling uncertainty.
-- `scale_curve`, `scale_plateau` — TwoNN on nested subsamples of n, n/2, n/4 and n/8 rows (fewer rows probe larger scales), and whether every level is within 10% of the full-sample value. Noise inflates the ID at short scales, so a curve that rises with n points to noise (Denti et al., 2022).
+- `scale_curve`, `scale_max_deviation` — TwoNN on nested subsamples of n, n/2, n/4 and n/8 rows (fewer rows probe larger scales), and the largest relative deviation of a level from the full-sample value. Noise inflates the ID at short scales, so a curve that rises with n points to noise (Denti et al., 2022). No threshold is applied: a boolean plateau flag (within 10%) flipped between random subsets of one dataset in E3, and even clean manifolds drift by about 8% at ID 20.
 - `reference_method`, `reference_estimate` — the one estimate the report uses for `suggested_target_dim` and the ID/D recommendation: TwoNN when requested and successful, otherwise the first method in `methods` that succeeded.
 - `local_estimates` — per-point local ID for methods that support it (TwoNN, MLE, lPCA).
 - `n_duplicates_removed` — exact duplicate rows dropped before estimation (duplicates make TwoNN divide by zero and MLE return 0).
@@ -65,7 +65,7 @@ from embedkit.analysis.intrinsic_dim import IntrinsicDimensionEstimator
 result = IntrinsicDimensionEstimator(methods=["TwoNN", "MLE", "lPCA"]).fit(X)
 for m, est in result.estimates.items():
     print(m, est, result.intervals[m])
-print(result.scale_curve, result.scale_plateau)
+print(result.scale_curve, result.scale_max_deviation)
 ```
 
 ---
@@ -86,13 +86,13 @@ print(result.scale_curve, result.scale_plateau)
 |--------|-------|------|------------|
 | `k_skewness` | (−∞, ∞) | near 0 | > 2 (moderate), > 5 (severe) |
 | `robinhood_index` | [0, 1] | near 0 | > 0.3 |
-| `antihub_ratio` | [0, 1] | < 0.05 | > 0.3 |
+| `antihub_ratio` | [0, 1] | depends on n, d, k | above the null (see below) |
 | `hub_ratio` | [0, 1] | < 0.05 | > 0.1 |
 | `hub_contamination` | [0, 1] | near 0 | > 0.3 |
 
 - `k_skewness`: skewness of the k-occurrence distribution N_k (how many times each point is a kNN of someone else). Gaussian distributions have zero skewness; positive skew means a fat tail of highly popular hubs.
 - `robinhood_index`: Gini-like inequality measure over N_k values. 0 = every point is equally popular; near 1 = a few points dominate the entire neighbor graph.
-- `antihub_ratio`: fraction of points with N_k = 0 (never retrieved). Above 0.3, a significant portion of your dataset is effectively invisible to similarity search.
+- `antihub_ratio`: fraction of points with N_k = 0 (never retrieved). It depends strongly on n, d, k and the row norms (an isotropic Gaussian at d = 1,024 has 0.21 to 0.39 under Euclidean distance and none under cosine), so the report judges it against the null model instead of a fixed threshold.
 - `hub_ratio`: fraction of points classified as hubs (N_k > `hub_threshold` × mean N_k). Should be small.
 - `hub_contamination`: fraction of a hub's own kNN that are also hubs. High values indicate that hubs cluster together, further compounding retrieval skew.
 
@@ -247,9 +247,9 @@ print(f"lambda_1/lambda_k: {result.top_k_eigen_ratio:.3g}")
 
 ### 1.8 Unified Analysis Report
 
-`EmbedKitAnalyzer` runs all seven analyzers in a single call and assembles the results into an `EmbedKitReport`. The report also holds a null-model calibration, a list of **properties** (descriptive statements about the spectrum, the dominant coordinates, the mean direction and, when calibrated, uniformity against the null; no thresholds) and a list of **recommendations** (actions: hubness, concentration and neighbour consistency beyond the null, many antihubs, a low ID/D).
+`EmbedKitAnalyzer` runs all seven analyzers in a single call and assembles the results into an `EmbedKitReport`. The report also holds a null-model calibration, a list of **properties** (descriptive statements about the spectrum, the dominant coordinates, the mean direction and, when calibrated, uniformity against the null; no thresholds) and a list of **recommendations** (actions: hubness, antihubs, concentration and neighbour consistency beyond the null, a low ID/D).
 
-**Null-model calibration** (`calibrate=True`, the default). k-skewness, `distance_cv`, neighbour consistency and uniformity depend on n, d, k and the covariance spectrum, so a fixed threshold means something different on every dataset. The analyzer recomputes these four statistics on `n_null_draws` (default 20) data sets drawn from a null model of the same size as a subsample of `n_calibration` rows (default 2,000), with the same k and metric. `report.calibration[name]` holds the observed value, the null mean and standard deviation, and the z-score. `report.n_outside_null` counts the statistics with `|z| > z_threshold` (default 3); it replaces the old `severity`. The default `null_model="gaussian"` is a Gaussian with the data's mean and a covariance whose trace and `tr(Σ²)` match unbiased estimates from the data (`embedkit.analysis.null`); `"permuted"` permutes each column independently. The recommendations about these four statistics come from the z-scores, and with `calibrate=False` none is made. Calibration costs `n_null_draws + 1` evaluations of the four statistics: about 50 s for 3,680 × 2,048 ResNet features on a laptop.
+**Null-model calibration** (`calibrate=True`, the default). k-skewness, the antihub ratio, `distance_cv`, neighbour consistency and uniformity depend on n, d, k and the covariance spectrum, so a fixed threshold means something different on every dataset. The analyzer recomputes these five statistics on `n_null_draws` (default 20) data sets drawn from a null model of the same size as a subsample of `n_calibration` rows (default 2,000), with the same metric. The k of the calibration (`report.calibration_k`) is `k` when given, and otherwise the default rule applied to the calibration rows (22 for 2,000 rows), so that the z-scores do not change with the size of the data. Rows that arrive with a common norm (normalised upstream) are compared with null draws normalised to the same norm. `report.calibration[name]` holds the observed value, the null mean and standard deviation, and the z-score. `report.n_outside_null` counts the statistics with `|z| > z_threshold` (default 3); it replaces the old `severity`. The default `null_model="gaussian"` is a Gaussian with the data's mean (shrunk so that its squared norm is unbiased) and a covariance whose trace and `tr(Σ²)` match unbiased estimates from the data (`embedkit.analysis.null`); `"permuted"` permutes each column independently. The recommendations about these statistics come from the z-scores, and with `calibrate=False` none is made. Calibration costs `n_null_draws + 1` evaluations of the five statistics: about 50 s for 3,680 × 2,048 ResNet features on a laptop.
 
 **Auto-configuration outputs.** The report exposes three suggested hyperparameters consumed by `EmbedKit`:
 

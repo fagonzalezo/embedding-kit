@@ -634,7 +634,7 @@ Release as 0.6.0.
 | 4.2 | Intrinsic dimension | done (2026-11-14): per-estimator bootstrap intervals, TwoNN scale curve, ESS; acceptance revised with the user (bias at ID 10 and 20 goes to E3); target dim from TwoNN |
 | 4.3 | Isotropy and spectrum | done (2026-11-14): IsoScore, PC and coordinate shares, spectrum alpha, mean direction; `report.properties` replaces the anisotropy recommendations |
 | 4.4 | Metric consistency, kernel spectrum | done (2026-11-15): metric limited to euclidean/cosine and honoured by every analyzer (cosine = normalised rows); centred kernel, trace-ratio effective rank, `top_k_eigen_ratio` |
-| 4.5 | Run E3 and E5 | not started |
+| 4.5 | Run E3 and E5 | in progress (2026-11-16): first run done (exit criterion failed); calibration fixed; rerun of gauss, subsample and E5 detection pending |
 | 5.1 | Residual adapter | done (2026-11-12): accepted in E6; `EmbedKit` default is now `architecture="linear"` |
 | 5.2 | Positives and negatives | rejected (2026-11-13): no arm wins against `linear` on half the datasets in E6; options stay in the library |
 | 5.3 | Matryoshka output | done (2026-11-13): non-inferior in E6; opt-in `EmbedKit(nested_dims=...)` |
@@ -1094,14 +1094,74 @@ the runs (the user, 2026-11-15): the scale is now the RMS per-coordinate sd, tra
   than 3 times the spread over those subsets; a calibrated z, when it moves by more than 3 and
   more than 3 times that spread.
 
+### WP 4.5 first run and calibration fixes (2026-11-16)
+
+First E3 and E5 run on Occidata; reports as run in commit 7eca9b2 (`benchmarks/results/e3/` and
+`e5/`). The phase 4 exit criterion failed on four of six datasets (n = 2,000 against 20,000):
+glove100 (antihub rule, plateau), sift128 and yelp_mpnet (plateau), gist960 (sign of the
+neighbour-consistency z). The WP 4.1 bar (95% of null cells inside +-3) failed for uniformity
+(flat 0.31, power0.5 0.36, spiked 0.67) and for the unit-norm families under Euclidean.
+
+**Causes, tested before any change.**
+- *Null mean (bug in WP 4.1).* The Gaussian null was centred on the sample mean, whose squared
+  norm is `||mu||^2 + tr(Sigma) / n`; each null draw then adds the same noise again. Zero-mean
+  data looked more spread on the sphere than the null: uniformity z of -6 to -19 at n = 300 to
+  2,000, d = 256 to 1,024 (10 seeds per cell, all outside +-3). WP 4.1's acceptance missed it
+  because its test data had a mean of 0.5 N(0, 1) per coordinate, far larger than that noise.
+  Fix: the mean is shrunk by `sqrt(max(0, 1 - tr(C) / (n ||m||^2)))`
+  (`null.mean_shrinkage`). In the same four cells 39 of 40 z-scores are then inside +-3 (worst
+  -3.2, mean about -0.6); in seven failing E3 cells (3 seeds, n = 2,000) uniformity is within
+  about +-3. Cells with a real mean are unchanged. Regression test on zero-mean data.
+- *k reused in calibration.* The report's k (`sqrt(n) / 2` on all rows: 22 at 2,000, 71 at
+  20,000) was used on the fixed 2,000-row calibration subsample. From 2k to 20k rows the
+  k-free z-scores (distance_cv, uniformity) stayed flat and the k-dependent ones rose
+  (neighbour consistency on cifar100 25 to 34, glove100 7 to 14, sift128 13 to 17). On Pets,
+  the same 2,000 rows: neighbour-consistency z 9 (k = 11) to 23-25 (k = 71); k-skewness not
+  monotone in k.
+- *Antihub rule* (`antihub_ratio > 0.3`): a fixed threshold on a statistic that falls with k
+  (glove100 0.33 at 2k, 0.21 at 20k) and fired on 31% of flat Gaussian cells (Euclidean).
+- *Plateau flag* (TwoNN scale curve within 10%): flips between subsets of one dataset (rates
+  0.2 to 1.0 per (dataset, n)); a weak noise detector (plateau in 74% of noise-free cells,
+  44% of noisy ones).
+- *Unit-norm rows under Euclidean* (`flat_l2`, `power1_l2`): the Gaussian null has varying
+  norms, so distances in the data look concentrated (distance_cv z down to -35, the
+  concentration recommendation in 100% of cells).
+
+**Decisions (the user, 2026-11-16).**
+1. Calibration k is `k` when given, else `max(5, round(sqrt(rows) / 2))` on the calibration
+   rows (`report.calibration_k`), so the z-scores depend on the calibration sample only.
+2. The antihub ratio is a fifth calibrated statistic on the same kNN graph; the fixed rule is
+   removed. Its null sd is floored at the Poisson value `sqrt(max(null count, 1)) / rows`
+   (antihubs are often absent from every null draw at low d).
+3. `scale_plateau` and `plateau_tolerance` are replaced by `scale_max_deviation` (largest
+   relative deviation of the curve from the full sample), with no threshold; the plateau
+   item is dropped from the exit criterion's reading.
+4. Rows with a common norm (relative spread under 1e-3) are compared with null draws
+   normalised to that norm, under either metric.
+
+**Pending.** The calibration tables of the committed reports describe the old code. Rerun
+`e3.py --part gauss`, `--part subsample` and the E5 detection half on Occidata, regenerate the
+reports, then write `docs/BENCHMARK_DIAGNOSTICS.md`. The ID part and E5 repair are unaffected.
+Even with k fixed, a sign reading with |z| near 3 can flip on 20-draw noise (cifar100 and
+fluorescence k-skewness z 3.9 and 4.2 at 2k, glove100 3.4, sift128 -3.4): the rerun reports the
+per-seed flip rate, and the exit criterion may still fail on such items.
+
+**Open findings (not blocking).**
+- Neighbour consistency in the `spiked` family at d = 1,024, Euclidean: inside +-3 in 0 to 60%
+  of seeds (max |z| 4.4 at n = 2,000); not touched by the mean fix.
+- DANCo returns NaN on `cube2` at n = 5,000 (it works at n = 500).
+- Under cosine, an isotropic Gaussian has no antihubs; under Euclidean 17% (n = 500, d = 256):
+  antihubs there come from the spread of row norms.
+
 ## Open points for the next session
 
 All design decisions in this plan are confirmed.
 
 1. **Phases 5 and 6 are done** (0.4.0 tagged locally on 2026-11-13; phase 6 is unreleased).
 2. **Phase 4 is in progress** (started 2026-11-14). WP 4.1, 4.2 and 4.3 are done (see their
-   notes); next are E3/E5 in WP 4.5. E3 must
-   include the per-estimator bias table that WP 4.2's revised acceptance hands over. Phases 4 and
+   notes). WP 4.5: the first E3/E5 run is done and the calibration was fixed (2026-11-16, see
+   "WP 4.5 first run and calibration fixes"); next is the rerun of E3 gauss and subsample and
+   E5 detection on Occidata, then `docs/BENCHMARK_DIAGNOSTICS.md`. Phases 4 and
    6 ship together as 0.5.0, and phase 7 as 0.6.0 (the user's decision, 2026-11-14). WP 4.4 is
    done (2026-11-15). The user
    also kept calibration on by default with 20 draws.

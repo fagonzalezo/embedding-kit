@@ -37,6 +37,7 @@ PROPS = {
     "top3_share": "Geometry/top_3_variance_share",
     "pr_normalized": "Geometry/participation_ratio_normalized",
     "spectrum_alpha": "Geometry/spectrum_alpha",
+    "scale_dev": "ID/scale_max_deviation",
     "twonn": "ID/TwoNN",
     "distance_cv": "Geometry/distance_cv",
     "neighbor_consistency": "Geometry/neighbor_consistency",
@@ -49,7 +50,7 @@ EXPECTED = {
     "mean": {"mean_vector_ratio": +1, "mean_cosine": +1},
     "nuis": {"top1_share": +1, "top3_share": +1, "pr_normalized": -1, "spectrum_alpha": +1},
     "aniso": {"pr_normalized": -1, "spectrum_alpha": +1},
-    "noise": {"twonn": +1, "distance_cv": -1, "neighbor_consistency": -1, "plateau": -1},
+    "noise": {"twonn": +1, "distance_cv": -1, "neighbor_consistency": -1, "scale_dev": +1},
     "pad": {"twonn": +1, "top1_share": -1, "top3_share": -1},
     "domain": {"kernel_gap": +1, "top1_share": +1},
 }
@@ -67,8 +68,7 @@ def detect_frame(root: Path) -> pd.DataFrame:
         variant = r["dataset"].partition("__")[2]
         row = dict(base=r["base"], metric=r["metric"], variant=variant or "clean",
                    damage=r.get("damage"), level=r.get("damage_level"),
-                   recs=",".join(rec_types(r["recommendations"])) or "none",
-                   plateau=float(bool(r["id"]["scale_plateau"])))
+                   recs=",".join(rec_types(r["recommendations"])) or "none")
         for k, c in r["calibration"].items():
             row[f"z_{k}"] = c["z"]
         for name, key in PROPS.items():
@@ -78,7 +78,7 @@ def detect_frame(root: Path) -> pd.DataFrame:
 
 
 def detection(df: pd.DataFrame) -> pd.DataFrame:
-    stats = [f"z_{k}" for k in CALIBRATED] + list(PROPS) + ["plateau"]
+    stats = [f"z_{k}" for k in CALIBRATED] + list(PROPS)
     out = []
     for (base, metric), g in df.groupby(["base", "metric"]):
         clean = g[g.variant == "clean"]

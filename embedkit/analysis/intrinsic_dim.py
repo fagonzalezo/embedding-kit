@@ -38,10 +38,14 @@ class IntrinsicDimensionResult(BaseResult):
         TwoNN on nested subsamples of ``n``, ``n/2``, ``n/4`` and ``n/8`` rows (levels with fewer
         than 20 rows are left out), as ``{n_rows: estimate}``. Fewer rows probe larger scales.
         Empty when disabled.
-    scale_plateau:
-        Whether every level is within ``plateau_tolerance`` (relative) of the full-sample value;
-        None without a curve. On clean data the curve still drifts down at high ID (a 20-sphere
-        reads 17.1 at n = 5,000 and 15.8 at n = 625), so the tolerance defaults to 10%.
+    scale_max_deviation:
+        Largest relative deviation of a level from the full-sample value,
+        ``max |curve[m] / curve[n] - 1|``; NaN without a curve. A flat curve (a plateau) gives a
+        small value. On clean data the curve still drifts down at high ID (a 20-sphere reads
+        17.1 at n = 5,000 and 15.8 at n = 625, a deviation of 0.08). It replaces the boolean
+        ``scale_plateau`` (within 10%), which flipped between random subsets of one dataset in
+        E3 (WP 4.5) and separated noisy from noise-free manifolds only weakly (plateau in 44%
+        and 74% of cells); no threshold is applied to it.
     reference_method, reference_estimate:
         The single estimate the report uses for ``suggested_target_dim`` and the ID / D
         recommendation: TwoNN when it was requested and succeeded, otherwise the first method of
@@ -54,7 +58,7 @@ class IntrinsicDimensionResult(BaseResult):
     local_estimates: dict[str, np.ndarray]
     between_method_spread: float
     scale_curve: dict[int, float]
-    scale_plateau: bool | None
+    scale_max_deviation: float
     reference_method: str | None
     reference_estimate: float
     n_samples: int = 0
@@ -80,14 +84,12 @@ class IntrinsicDimensionEstimator(BaseAnalyzer):
         n_max: int = 5_000,
         n_bootstrap: int = 20,
         scale_curve: bool = True,
-        plateau_tolerance: float = 0.1,
         random_state: int | None = 42,
     ):
         self.methods = methods or ["TwoNN", "MLE", "lPCA"]
         self.n_max = n_max
         self.n_bootstrap = n_bootstrap
         self.scale_curve = scale_curve
-        self.plateau_tolerance = plateau_tolerance
         self.random_state = random_state
 
     def fit(self, X, y=None) -> IntrinsicDimensionResult:
@@ -123,9 +125,9 @@ class IntrinsicDimensionEstimator(BaseAnalyzer):
         valid = [v for v in estimates.values() if not np.isnan(v)]
         spread = float(np.std(valid)) if len(valid) > 1 else (0.0 if valid else float("nan"))
 
-        curve, plateau = {}, None
+        curve, deviation = {}, float("nan")
         if self.scale_curve:
-            curve, plateau = self._scale_curve(X, estimates.get("TwoNN"), rng)
+            curve, deviation = self._scale_curve(X, estimates.get("TwoNN"), rng)
 
         reference = next(
             (m for m in (["TwoNN"] if "TwoNN" in estimates else []) + list(self.methods)
@@ -139,7 +141,7 @@ class IntrinsicDimensionEstimator(BaseAnalyzer):
             local_estimates=local_estimates,
             between_method_spread=spread,
             scale_curve=curve,
-            scale_plateau=plateau,
+            scale_max_deviation=deviation,
             reference_method=reference,
             reference_estimate=estimates[reference] if reference else float("nan"),
             n_samples=n,
@@ -185,10 +187,9 @@ class IntrinsicDimensionEstimator(BaseAnalyzer):
                                           warn=False)
         finite = {k: v for k, v in curve.items() if not np.isnan(v)}
         if n not in finite or len(finite) < 2:
-            return curve, None
+            return curve, float("nan")
         ref = finite[n]
-        plateau = all(abs(v / ref - 1.0) <= self.plateau_tolerance for v in finite.values())
-        return curve, bool(plateau)
+        return curve, float(max(abs(v / ref - 1.0) for v in finite.values()))
 
 
 def _fit_one(method: str, X: np.ndarray, random_state, warn: bool):

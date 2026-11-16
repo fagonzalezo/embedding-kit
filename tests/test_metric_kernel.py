@@ -7,7 +7,12 @@ import pandas as pd
 import pytest
 
 from embedkit.analysis.kernel import KernelDiagnostics, _center
-from embedkit.analysis.report import EmbedKitAnalyzer, calibration_statistics, l2_normalize
+from embedkit.analysis.report import (
+    CALIBRATED_STATISTICS,
+    EmbedKitAnalyzer,
+    calibration_statistics,
+    l2_normalize,
+)
 
 
 def _gauss(n, d, alpha=0.0, seed=0, mean=0.0):
@@ -45,7 +50,7 @@ class TestMetric:
         a = _numbers(EmbedKitAnalyzer(**kw).fit(X))
         b = _numbers(EmbedKitAnalyzer(**kw).fit(X * scale))
         keep = ~a.index.str.contains("_null_|_z$|n_outside_null", regex=True)
-        assert a.index.str.endswith("_observed").sum() == 4
+        assert a.index.str.endswith("_observed").sum() == len(CALIBRATED_STATISTICS)
         pd.testing.assert_series_equal(a[keep], b[keep], rtol=1e-3, atol=1e-5)
 
     def test_euclidean_report_depends_on_row_norms(self):
