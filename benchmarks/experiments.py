@@ -515,6 +515,86 @@ def _with_metrics(method: Method, metrics: tuple) -> Method:
 
     return replace(method, metrics=metrics)
 
+E4_AUTO_SEED = 42  # EmbedKit's default random_state, which its analysis step uses
 
-EXPERIMENTS: dict[str, Callable] = {"e1": e1_methods, "e5": e5_methods, "e6": e6_methods,
-                                    "e7": e7_methods, "e8": e8_methods}
+
+class _AutoPCA:
+    """PCA at the dimension ``EmbedKit`` would pick on the same rows (WP 7.1).
+
+    ``fit`` runs the analysis step of :meth:`embedkit.EmbedKit.fit` (same ``EmbedKitAnalyzer``
+    settings, ``id_methods`` and ``random_state`` defaults), takes ``suggested_target_dim`` as
+    ``k`` and fits ``PCAReduce(k, whiten=whiten)``. ``k`` is in ``get_params()``, so it lands in
+    the result JSON (the last fit of each stage).
+    """
+
+    def __init__(self, whiten: bool = False, random_state: int | None = E4_AUTO_SEED):
+        self.whiten, self.random_state = whiten, random_state
+
+    def fit(self, X, y=None):
+        from embedkit.analysis.report import EmbedKitAnalyzer
+
+        X = np.asarray(X)
+        report = EmbedKitAnalyzer(random_state=self.random_state, calibrate=False,
+                                  id_bootstrap=0, id_scale_curve=False).fit(X)
+        self.k_ = int(report.suggested_target_dim)
+        self.pca_ = B.PCAReduce(self.k_, whiten=self.whiten).fit(X)
+        return self
+
+    def transform(self, X):
+        return self.pca_.transform(X)
+
+    def get_params(self) -> dict:
+        return dict(whiten=self.whiten, k=getattr(self, "k_", None),
+                    n_components=getattr(getattr(self, "pca_", None), "n_components_", None))
+
+
+def e4_methods(dataset) -> list[Method]:
+    """E4 (WP 7.1): training-free interventions on the natural data sets, both stages.
+
+    E1's training-free grid (E1's ``DIMS`` up to ``d``) with the hubness reductions, plus
+    ``pca-auto`` and ``pca_whiten-auto`` at the dimension ``EmbedKit`` itself would choose
+    (:class:`_AutoPCA`; their own families, so that selection within ``pca`` stays over the
+    fixed grid). No refiner, no random projection, no labels. Scored on cosine kNN, Euclidean
+    kNN and the C = 1 probe; the hubness reductions only on the two kNN metrics.
+    """
+    d = dataset.X_train.shape[1]
+    m: list[Method] = [
+        Method("raw", lambda s, ds, dev: B.Identity(), family="raw"),
+        Method("center_l2", lambda s, ds, dev: B.CenterNormalize(), family="center_l2"),
+        Method("standardize", lambda s, ds, dev: B.Standardize(), family="standardize"),
+        Method("zca", lambda s, ds, dev: B.ZCAWhiten(), family="zca"),
+        Method("conceptor", lambda s, ds, dev: B.ConceptorNegation(alpha=2.0),
+               family="conceptor", params=dict(alpha=2.0)),
+    ]
+    for k in _dims_for(d):
+        m += [
+            Method(f"pca-{k}", lambda s, ds, dev, k=k: B.PCAReduce(k), family="pca",
+                   params=dict(n_components=k)),
+            Method(f"pca_whiten-{k}", lambda s, ds, dev, k=k: B.PCAReduce(k, whiten=True),
+                   family="pca_whiten", params=dict(n_components=k)),
+        ]
+    m += [
+        Method("pca-auto", lambda s, ds, dev: _AutoPCA(), family="pca_auto"),
+        Method("pca_whiten-auto", lambda s, ds, dev: _AutoPCA(whiten=True),
+               family="pca_whiten_auto"),
+    ]
+    for D in sorted({1, 3, max(1, d // 100)}):
+        m.append(Method(f"abtt-{D}", lambda s, ds, dev, D=D: B.AllButTheTop(D),
+                        family="abtt", params=dict(n_remove=D)))
+    for k in _dims_for(d):
+        m.append(Method(f"abtt_reduce-{k}",
+                        lambda s, ds, dev, k=k: B.AllButTheTop(7, n_components=k),
+                        family="abtt_reduce", params=dict(n_remove=7, n_components=k)))
+    from embedkit.hubness_reduction import CSLS, DisSimLocal, LocalScaling, MutualProximity
+
+    m = [_with_metrics(x, E5_METRICS) for x in m]
+    for short, red in [("ls", LocalScaling()), ("mp", MutualProximity()), ("csls", CSLS()),
+                       ("dsl", DisSimLocal())]:
+        m.append(Method(f"raw+{short}", lambda s, ds, dev: B.Identity(), family=f"hub_{short}",
+                        params=dict(hubness_reduction=repr(red)), hubness_reduction=red,
+                        metrics=("knn_accuracy", "knn_accuracy_euclidean")))
+    return m
+
+
+EXPERIMENTS: dict[str, Callable] = {"e1": e1_methods, "e4": e4_methods, "e5": e5_methods,
+                                    "e6": e6_methods, "e7": e7_methods, "e8": e8_methods}

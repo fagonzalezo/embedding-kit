@@ -15,6 +15,7 @@ split, score held-out data.
 | `report_gate.py` | The phase 3 gate on E1: self-supervised `EmbedKit` against the best training-free baseline at the same d, with paired intervals. |
 | `report_e6.py` | E6 tables: each refiner arm, selected on validation, against the previous default and against PCA at the same d; applies the phase 5 acceptance rule. |
 | `report_e7.py` | E7 tables: learning curves of the default refiner against PCA and PCA-whitening over the number of rows fitted, and inductive against transductive fitting. |
+| `e4.py`, `e4_data.py`, `report_e4.py` | Experiment E4 (WP 7.1): the report on each natural set (`e4.py`; the interventions run through `run.py --experiment e4`), the tables of diagnostics and gains (`e4_data.py`), and the analysis fixed in the plan before the runs (`report_e4.py`). |
 | `extract_features.py` | Downloads a large set and caches its embeddings. **Cluster only.** |
 | `cluster/` | Slurm jobs for the OCCIDATA cluster (see "On the cluster" below). |
 | `review_2026_11/` | Scripts behind `docs/CRITICAL_REVIEW.md` (pilot, defect reproductions). |
@@ -53,8 +54,14 @@ python benchmarks/run.py --experiment e1 --datasets digits --methods raw pca-32
 | `cifar100_dinov2` | CIFAR-100, DINOv2 ViT-B/14 (cluster) | 100 classes (+20 coarse) |
 | `stl10_clip` | STL-10, CLIP ViT-B/32 (cluster) | 10 classes |
 | `banking77_mpnet` | Banking77, all-mpnet-base-v2 (cluster) | 77 classes |
+| E4 images (12 new: `{cifar10, cifar100, stl10, pets, flowers102}_{resnet50, dinov2, clip}`, minus the three above) | CIFAR-10/100, STL-10, Oxford Pets, Flowers102; ResNet-50 IMAGENET1K_V2 (2,048-d), DINOv2, CLIP (cluster) | 10, 100, 10, 37, 102 classes |
+| E4 text (19 new: `{banking77, emotion, massive, agnews, newsgroups}_{mpnet, minilm, bge, e5}`, minus `banking77_mpnet`) | Banking77, emotion, MASSIVE intent (en), AG News (20k / 5k subset), 20 Newsgroups; all-mpnet-base-v2, all-MiniLM-L6-v2, bge-base-en-v1.5, e5-base-v2 (`"query: "`), `Normalize` removed, `max_seq_length` 256 (cluster); JSON records `n_test_in_train` | 77, 6, 60, 4, 20 classes |
 | `stsb_mpnet` | STS-B, all-mpnet-base-v2 (cluster) | sentence similarity |
 | `glove100`, `sift128`, `gist960` | ANN-Benchmarks (cluster) | unlabelled |
+
+`bench_datasets.E4_SETS` lists the 35 natural sets of E4 (these 31 plus `pets_resnet50`,
+`cifar100_dinov2`, `stl10_clip`, `banking77_mpnet`); extract the new ones with
+`SETS=E4_GPU_SETS sbatch --array=0-30%2 extract.slurm.sh`.
 
 ## On the cluster
 

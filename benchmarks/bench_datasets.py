@@ -259,6 +259,19 @@ LOADERS: dict[str, Callable[[Path], Dataset]] = {
     "gist960": _cached("gist960", "unlabelled"),
 }
 
+# Experiment E4 (WP 7.1): natural classification sets `<data>_<encoder>`, images first. Four
+# exist from earlier phases; the other 31 are built by extract_features.py (cluster/env.sh has the
+# same lists: E4_SETS, and E4_GPU_SETS without the four).
+E4_IMAGE_SOURCES = ("cifar10", "cifar100", "stl10", "pets", "flowers102")
+E4_IMAGE_ENCODERS = ("resnet50", "dinov2", "clip")
+E4_TEXT_SOURCES = ("banking77", "emotion", "massive", "agnews", "newsgroups")
+E4_TEXT_ENCODERS = ("mpnet", "minilm", "bge", "e5")
+E4_SETS = tuple(
+    [f"{s}_{e}" for s in E4_IMAGE_SOURCES for e in E4_IMAGE_ENCODERS]
+    + [f"{s}_{e}" for s in E4_TEXT_SOURCES for e in E4_TEXT_ENCODERS])
+for _name in E4_SETS:
+    LOADERS.setdefault(_name, _cached(_name, "classification"))
+
 LOCAL = ("pets_resnet50", "digits", "synthetic_anisotropic", "synthetic_regression",
          "synthetic_regression_ties")
 

@@ -644,7 +644,7 @@ Release as 0.6.0.
 | 6.1 | Supervised defaults | done (2026-11-14): supervised = SupCon on the residual adapter, regression = RnC on the MLP with noise views (E8) |
 | 6.2 | Class collapse | implemented (2026-11-13): `train_nc1`/`val_nc1`, `SupConLoss(spread_weight)` |
 | 6.3 | Run E8 | done (2026-11-14; `docs/BENCHMARK_SUPERVISED.md`) |
-| 7.1 | Run E4 | not started |
+| 7.1 | Run E4 | in progress (2026-11-17): design and criteria fixed, extraction and harness built and smoke-tested locally (notes below); cluster runs next |
 | 7.2 | Selection-based auto-configuration | not started |
 | 7.3 | Robustness and scaling | not started |
 | 7.4 | Documentation | not started |
@@ -1205,6 +1205,96 @@ cluster and locally.
 - DANCo returns NaN on `cube2` at n = 5,000 (it works at n = 500).
 - Under cosine, an isotropic Gaussian has no antihubs; under Euclidean 17% (n = 500, d = 256):
   antihubs there come from the spread of row norms.
+
+### WP 7.1 design and criteria, fixed before the runs (2026-11-17)
+
+Scope chosen by the user (2026-11-17): a larger pool of natural data sets, training-free
+interventions only, and a keep rule with two conditions. Nothing below was chosen after looking
+at the relation between diagnostics and gains; the E1 and E5 results had been seen as tables of
+gains and of detections, not against each other.
+
+**Data sets.** Natural labelled classification embeddings, one per (source data set, encoder),
+named `<data>_<encoder>`. The 4 that exist (`pets_resnet50`, `cifar100_dinov2`, `stl10_clip`,
+`banking77_mpnet`) plus 31 new, extracted on Occidata:
+
+| Source (classes; train / test rows) | Encoders |
+|---|---|
+| CIFAR-10 (10; 50k / 10k), CIFAR-100 (100; 50k / 10k), STL-10 (10; 5k / 8k), Oxford Pets (37; 3,680 / 3,669), Flowers102 (102; train+val 2,040 / test 6,149) | `resnet50` (torchvision IMAGENET1K_V2, 2,048), `dinov2` (ViT-B/14, 768), `clip` (ViT-B/32 image projection, 512) |
+| Banking77 (77; 9,993 / 3,076), emotion (6; 16k / 2k), MASSIVE intent en (60; 11.5k / 3k), AG News (4; capped 20k / 5k), 20 Newsgroups (20; 11.3k / 7.5k) | `mpnet` (all-mpnet-base-v2), `minilm` (all-MiniLM-L6-v2, 384), `bge` (bge-base-en-v1.5, CLS pooling), `e5` (e5-base-v2, `"query: "` prefix) |
+
+35 sets from 10 source data sets. Text encoders keep their `Normalize` module removed (as for
+`banking77_mpnet`), so no set arrives with a common row norm, the case the report does not
+calibrate (WP 4.5). `max_seq_length` 256 for every text encoder. The published splits are kept
+as they are (so that the existing sets stay comparable); the number of test texts that also
+occur verbatim in the training split is recorded in the cache's JSON. Model and data revisions
+are pinned and recorded. The 48 E5 damaged variants are a check, not part of the decision.
+
+**Diagnostics.** `EmbedKitAnalyzer(metric=m, random_state=0)` with its defaults (calibrated, 20
+draws) on the training split, for m in cosine and Euclidean, as in E5's detection half.
+
+**Interventions.** The training-free set of E5 at E1's grid of d, run with both stages
+(validation selects within a family, as in E1): `center_l2`, `standardize`, `zca`, `conceptor`,
+`pca-<k>`, `pca_whiten-<k>`, `abtt_reduce-<k>` (k in E1's `DIMS` up to d, plus the report's
+`suggested_target_dim` as `pca-auto` and `pca_whiten-auto`), `abtt-1`, `abtt-3`,
+`abtt-<d/100>`, and the hubness reductions `raw+ls`, `raw+mp`, `raw+csls`, `raw+dsl` (kNN
+metrics only). No refiner.
+
+**Outcomes.** Test gain over `raw` of the family's validation-selected member (fixed-setting
+methods are their own family) on cosine kNN accuracy, Euclidean kNN accuracy and the C = 1
+linear probe. A gain is significant on a data set when its paired bootstrap 95% interval
+(`compare()`, per test point) excludes 0. The cosine report goes with cosine kNN; the Euclidean
+report with Euclidean kNN and the probe.
+
+**Rules tested** (signal oriented so that larger means "the rule fires harder"; firing point in
+brackets; the primary outcome decides, the others are reported):
+
+| # | Rule (source) | Signal [fires] | Intervention family | Primary outcome |
+|---|---|---|---|---|
+| R1 | hubness (report) | `z_k_skewness` [> 3] | best hubness reduction | kNN, both metrics |
+| R2 | antihubs (report) | `z_antihub_ratio` [> 3], Euclidean report | best hubness reduction | Euclidean kNN |
+| R3 | concentration (report) | `-z_distance_cv` [> 3] | PCA; hubness reduction | kNN, both metrics |
+| R4 | neighbour consistency (report) | `-z_neighbor_consistency` [> 3] | PCA | kNN, both metrics |
+| R5 | ID/D (report) | `-(TwoNN / D)` [ID/D < 0.3] | PCA (`pca-auto` and selected) | kNN, both metrics |
+| H1 | dominant mean (review 4.4) | `mean_vector_ratio` | `center_l2`, `abtt-1` | cosine kNN |
+| H2 | dominant top PCs (review 4.4) | `top_3_variance_share` | ABTT family | kNN, both metrics |
+| H3 | anisotropy (review 4.4) | `spectrum_alpha` | ZCA, PCA-whitening | kNN, both metrics |
+| H4 | rogue coordinates (WP 4.3) | `top_1_coordinate_share` | `standardize` | kNN, both metrics |
+
+For the properties (H1 to H4), which have no threshold, "fires" means above the median of the
+signal over the 35 sets; if such a rule is kept, that median becomes its threshold in the report.
+The review's "whitening hurts classification" is read from H3's gains, not tested separately.
+
+**Keep rule** (the user, 2026-11-17). A rule stays, as a recommendation naming its intervention
+class, when on the natural sets both hold for its primary outcome:
+1. the gain rises with the signal: Spearman correlation between signal and gain over the 35
+   sets, with a 95% interval from 2,000 bootstrap resamples of *source data sets* (all encoders
+   of a source move together), excluding 0; and
+2. where the rule fires, the intervention beats raw (significant positive gain) on at least
+   half of the sets.
+
+A rule with a two-metric primary outcome must pass on each metric it is kept for. Rules that fail
+are removed from the report. An intervention that beats raw on most sets whatever the signal is
+noted as a candidate for WP 7.2's selection, not a recommendation. Nine rules on two or three
+outcomes are tested with no multiplicity correction; the report states the number tested. On the
+E5 damaged sets each kept rule is checked for firing on its expected damage (WP 4.5 signature
+table) and for the fix recovering accuracy; reported, not decisive.
+
+**Code.** Extraction: generic `<data>_<encoder>` builders in `extract_features.py`, loaders in
+`bench_datasets.py`, the array in `cluster/env.sh` and `extract.slurm.sh`. Experiment:
+`e4_methods` and `run.py --experiment e4` (gains), `benchmarks/e4.py` (reports, from E5's
+detection half), `benchmarks/e4_data.py` (tables), `report_e4.py` (the analysis above),
+`cluster/e4.slurm.sh`. Per-run files stay on Occidata; reports and summaries are committed.
+
+**Harness status (2026-11-17).** Built and checked locally, before any E4 run: the 31 new
+builders (old ones untouched; dry run with stub encoders), `e4_methods` (29 methods on a 2,048-d
+set; `pca-auto` picks the d that `EmbedKit` picks: 12 on digits), `e4.py`, and `report_e4.py`,
+whose decision logic keeps a planted signal-gain relation and rejects pure-noise rules on
+synthetic tables. End-to-end smoke run on digits and `synthetic_anisotropic` (not E4 sets):
+1 min for the grid, 26 s for the reports. Not verifiable offline: the column names of the
+MASSIVE, emotion and 20 Newsgroups parquet files (the builders fail loudly on a mismatch).
+Cluster order: `SETS=E4_GPU_SETS sbatch --array=0-30%2 extract.slurm.sh`, then
+`PART=detect sbatch --array=0-34%16 --time=12:00:00 e4.slurm.sh` and
+`sbatch --array=0-34%16 e4.slurm.sh`, then `report_e4.py` on the cluster.
 
 ## Open points for the next session
 

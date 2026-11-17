@@ -21,6 +21,23 @@ export OPENBLAS_NUM_THREADS=$(( CPUS > 1 ? CPUS / 2 : 1 ))
 # Feature-extraction sets: GPU ones (images, text) and CPU ones (ANN-Benchmarks downloads).
 GPU_SETS=(cifar100_dinov2 stl10_clip banking77_mpnet stsb_mpnet yelp_mpnet fluorescence_esm2)
 CPU_SETS=(glove100 sift128 gist960)
+# Experiment E4 (WP 7.1): 35 natural classification sets `<data>_<encoder>` (same order as
+# bench_datasets.E4_SETS, images first), and the 31 of them that extract.slurm.sh builds (the four
+# that exist, pets_resnet50 being a local file, are left out). Extraction array over the 31:
+#   SETS=E4_GPU_SETS sbatch --array=0-30%2 extract.slurm.sh
+E4_GPU_SETS=(cifar10_resnet50 cifar10_dinov2 cifar10_clip cifar100_resnet50 cifar100_clip
+             stl10_resnet50 stl10_dinov2 pets_dinov2 pets_clip flowers102_resnet50
+             flowers102_dinov2 flowers102_clip banking77_minilm banking77_bge banking77_e5
+             emotion_mpnet emotion_minilm emotion_bge emotion_e5 massive_mpnet massive_minilm
+             massive_bge massive_e5 agnews_mpnet agnews_minilm agnews_bge agnews_e5
+             newsgroups_mpnet newsgroups_minilm newsgroups_bge newsgroups_e5)
+E4_SETS=(cifar10_resnet50 cifar10_dinov2 cifar10_clip cifar100_resnet50 cifar100_dinov2
+         cifar100_clip stl10_resnet50 stl10_dinov2 stl10_clip pets_resnet50 pets_dinov2
+         pets_clip flowers102_resnet50 flowers102_dinov2 flowers102_clip banking77_mpnet
+         banking77_minilm banking77_bge banking77_e5 emotion_mpnet emotion_minilm emotion_bge
+         emotion_e5 massive_mpnet massive_minilm massive_bge massive_e5 agnews_mpnet
+         agnews_minilm agnews_bge agnews_e5 newsgroups_mpnet newsgroups_minilm newsgroups_bge
+         newsgroups_e5)
 # Datasets of experiment E1 (one array task each).
 E1_SETS=(pets_resnet50 digits synthetic_anisotropic cifar100_dinov2 stl10_clip banking77_mpnet stsb_mpnet)
 # Datasets of experiment E2 (one array task each; labelled sets only).
