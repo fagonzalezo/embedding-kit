@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+### Added (WP 7.3)
+- `embedkit.utils.validation.validate_embeddings(X, *, name, min_samples, n_features, warn,
+  dtype)`: the one check of an embedding matrix at the public entry points (ndarray or tensor in,
+  2-D ndarray out). It raises `ValueError` for non-2-D input, too few rows, a wrong feature count
+  and NaN or infinite values (the message gives the number of entries and rows), and issues one
+  `UserWarning` for constant columns and one for exact duplicate rows, each with its count.
+  Duplicates are found by hashing rows (`count_duplicate_rows`), about 4 times faster than a void-view
+  `np.unique` at n = 250,000, d = 4,096 (1.4 s against 5.3 s).
+- Called from `EmbedKitAnalyzer.fit`, `IntrinsicDimensionEstimator`, `HubnessAnalyzer`,
+  `DistanceConcentration`, `IsotropyAnalyzer`, `NeighborConsistency`, `UniformityScore`,
+  `KernelDiagnostics`, `EmbedKit.fit` / `fit_transform`, `Trainer.fit` and every baseline's `fit`.
+  Calls that run inside another entry point (the analyzers inside `EmbedKitAnalyzer.fit`, the
+  trainer inside `EmbedKit.fit`, the monitors during training) skip the scans, so each warning
+  appears once per user call.
+
+### Changed (WP 7.3)
+- NaN or infinite values now raise in the analyzers, `EmbedKit`, `Trainer` and the hubness
+  reductions (`embedkit.hubness_reduction`), which used to pass them on. `Trainer.transform`,
+  `EmbedKit.transform` and the hubness reductions' queries check values and shape;
+  `Trainer.transform` and `EmbedKit.transform` also check the feature count against the model.
+- Constant columns and duplicate rows in the training matrix now warn (`transform` does not).
+- float64 input: unchanged for the analyzers, `EmbedKit` and `Trainer` (rounded to float32, as
+  `_to_numpy` always did); the baselines and hubness reductions, which compute in float64, now
+  keep float64 input as given instead of passing it through float32. Results for float32 input
+  are unchanged.
+
 ## 0.5.0 (unreleased)
 
 Phase 6 of `docs/IMPLEMENTATION_PLAN.md`: supervised and regression modes. Phase 4, WP 4.1:
@@ -12,8 +40,6 @@ and the calibration fixes they led to.
 - `EmbedKitReport.severity` is removed; use `n_outside_null` and `calibration` (WP 4.1).
 - `IntrinsicDimensionResult.consensus` and the `aggregate` argument are removed, and
   `uncertainty` is renamed `between_method_spread` (WP 4.2).
-- `IntrinsicDimensionResult.scale_plateau` and `IntrinsicDimensionEstimator(plateau_tolerance=)`
-  are replaced by `scale_max_deviation` (WP 4.5).
 - `EmbedKitAnalyzer(metric=...)` accepts only `"euclidean"` and `"cosine"` (WP 4.4).
 - Recommendations: anisotropy statements moved to `report.properties` (WP 4.3); the fixed
   hubness, concentration, consistency, uniformity (WP 4.1) and antihub (WP 4.5) thresholds are
@@ -37,9 +63,9 @@ and the calibration fixes they led to.
   `metric="euclidean"` only. Under cosine the z-score is reported but raises nothing: it gave a
   false recommendation in 44% of spiked-spectrum Gaussian cells. The fixed rule fired on 31% of
   isotropic Gaussian cells (now 1%).
-- **Breaking: `scale_plateau` and `plateau_tolerance` are replaced by `scale_max_deviation`**, the
-  largest relative deviation of the TwoNN scale curve from the full-sample value, with no
-  threshold. The boolean flipped between random subsets of one dataset.
+- **`scale_plateau` and `plateau_tolerance` (added in WP 4.2, never released) are replaced by
+  `scale_max_deviation`**, the largest relative deviation of the TwoNN scale curve from the
+  full-sample value, with no threshold. The boolean flipped between random subsets of one dataset.
 - **Rows with a common norm** (relative spread under 1e-3, e.g. normalised upstream) are compared
   with null draws normalised to that norm, under either metric. Before, `distance_cv` z reached
   -35 and the concentration recommendation fired on every such data set. Normalised rows with an

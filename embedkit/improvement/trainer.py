@@ -15,7 +15,13 @@ from torch.utils.data import DataLoader, TensorDataset
 from embedkit.improvement.augmentation.base import BaseAugmentation
 from embedkit.improvement.losses.base import BaseLoss
 from embedkit.improvement.model import EmbeddingRefiner
-from embedkit.utils.validation import _to_numpy, _to_tensor, encode_labels
+from embedkit.utils.validation import (
+    _to_numpy,
+    _to_tensor,
+    encode_labels,
+    trusted_input,
+    validate_embeddings,
+)
 
 # ---------------------------------------------------------------------------------------------
 # Monitors
@@ -301,7 +307,9 @@ class Trainer:
         dropout all come from generators derived from ``random_state``. (The model's initial
         weights are drawn when the model is built; build it under a fixed seed too.)
         """
-        with _rng_scope(self.random_state is not None):
+        # Validated once here; the monitors and the transforms during training stay silent.
+        X = validate_embeddings(X, min_samples=1)
+        with _rng_scope(self.random_state is not None), trusted_input():
             return self._fit(X, y)
 
     def _fit(self, X, y=None) -> Trainer:
@@ -495,7 +503,8 @@ class Trainer:
     def transform(self, X, batch_size: int | None = None) -> np.ndarray | torch.Tensor:
         """Transform X in mini-batches to avoid GPU OOM on large datasets."""
         was_tensor = isinstance(X, torch.Tensor)
-        X_np = _to_numpy(X)
+        X_np = validate_embeddings(
+            X, min_samples=1, n_features=getattr(self.model, "input_dim", None), warn=False)
         bs = batch_size or max(self.batch_size * 4, 1024)
         self.model.to(self.device)
         self.model.eval()
@@ -517,9 +526,11 @@ class Trainer:
         y_ref_np = (
             encode_labels(y_ref, n_samples=len(X_ref))[0].numpy() if y_ref is not None else None
         )
-        return self._evaluate(
-            _to_numpy(X), y=y_np, X_ref=None if X_ref is None else _to_numpy(X_ref), y_ref=y_ref_np
-        )
+        X = validate_embeddings(X, min_samples=1, warn=False)
+        if X_ref is not None:
+            X_ref = validate_embeddings(X_ref, min_samples=1, warn=False)
+        with trusted_input():  # the monitors run analyzers on the refined rows
+            return self._evaluate(X, y=y_np, X_ref=X_ref, y_ref=y_ref_np)
 
     def _evaluate(self, X_np: np.ndarray, y=None, X_ref=None, y_ref=None) -> dict[str, float]:
         Z_np = self.transform(X_np)

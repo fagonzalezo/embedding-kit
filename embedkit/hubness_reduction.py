@@ -35,22 +35,10 @@ from __future__ import annotations
 
 import numpy as np
 
+from embedkit.utils.validation import validate_embeddings
+
 _METRICS = ("euclidean", "cosine")
 _CHUNK_ENTRIES = 4_000_000  # base-distance entries computed at once (32 MB in float64)
-
-
-def _as_float64(X) -> np.ndarray:
-    try:
-        import torch
-
-        if isinstance(X, torch.Tensor):
-            X = X.detach().cpu().double().numpy()
-    except ImportError:  # pragma: no cover
-        pass
-    X = np.asarray(X, dtype=np.float64)
-    if X.ndim != 2:
-        raise ValueError(f"Expected a 2-D array, got shape {X.shape}")
-    return X
 
 
 def _topk(D: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray]:
@@ -95,7 +83,9 @@ class _HubnessReduction:
 
     # ----------------------------------------------------------------------------- helpers
     def _prepare(self, X) -> np.ndarray:
-        X = _as_float64(X)
+        # NaN or infinite values raise; float64 is kept as given (the distances are computed in
+        # float64). No duplicate or constant-column warnings: these run inside evaluation loops.
+        X = validate_embeddings(X, min_samples=1, warn=False, dtype=np.float64)
         if self.metric == "cosine":
             X = X / np.maximum(np.linalg.norm(X, axis=1, keepdims=True), 1e-12)
         return X

@@ -23,7 +23,7 @@ from embedkit.improvement.losses import (
 from embedkit.improvement.model import EmbeddingRefiner
 from embedkit.improvement.trainer import Trainer
 from embedkit.utils.io import load_bundle, save_bundle
-from embedkit.utils.validation import _to_numpy
+from embedkit.utils.validation import _to_numpy, trusted_input, validate_embeddings
 
 
 class EmbedKit:
@@ -123,7 +123,13 @@ class EmbedKit:
         if self.mode not in ("self_supervised", "supervised", "regression"):
             raise ValueError(f"mode must be 'self_supervised', 'supervised' or 'regression', "
                              f"got {self.mode!r}")
-        X_np = _to_numpy(X)
+        # The one validation of the call (NaN or infinite values raise; constant columns and
+        # duplicate rows warn); the analyzer and the trainer below stay silent.
+        X_np = validate_embeddings(X, min_samples=5)
+        with trusted_input():
+            return self._fit(X_np, y)
+
+    def _fit(self, X_np: np.ndarray, y) -> EmbedKit:
         n, d = X_np.shape
         if self.mode != "self_supervised" and y is None:
             raise ValueError(f"mode={self.mode!r} needs labels: call fit(X, y)")
@@ -134,7 +140,7 @@ class EmbedKit:
                     f"Regression refiner fitted on {n} rows: with {_SMALL_REGRESSION_ROWS} "
                     "training rows or fewer, no refiner reliably beat the raw embeddings in E8 "
                     "(docs/BENCHMARK_SUPERVISED.md); compare with the raw embeddings or PCA.",
-                    UserWarning, stacklevel=2)
+                    UserWarning, stacklevel=3)
 
         # Step 1: analyze
         # Only suggested_target_dim is read here, so the null calibration, the ID bootstrap and

@@ -27,7 +27,7 @@ import warnings
 import numpy as np
 from sklearn.exceptions import NotFittedError
 
-from embedkit.utils.validation import _to_numpy
+from embedkit.utils.validation import validate_embeddings
 
 __all__ = [
     "Identity",
@@ -50,14 +50,8 @@ class _Baseline:
     """Common plumbing: input validation, fitted checks, ``get_params``, ``fit_transform``."""
 
     def _fit_input(self, X, min_samples: int = 1) -> np.ndarray:
-        X = _to_numpy(X).astype(np.float64)
-        if X.shape[0] < min_samples:
-            raise ValueError(
-                f"{type(self).__name__} needs at least {min_samples} samples, got {X.shape[0]}")
-        if X.shape[1] < 1:
-            raise ValueError("X has no columns")
-        if not np.isfinite(X).all():
-            raise ValueError("X contains NaN or infinite values; all entries must be finite")
+        # float64 is kept as given: the baselines compute in float64
+        X = validate_embeddings(X, min_samples=min_samples, dtype=np.float64, stacklevel=4)
         self.n_features_in_ = X.shape[1]
         return X
 
@@ -65,14 +59,8 @@ class _Baseline:
         if not hasattr(self, "n_features_in_"):
             raise NotFittedError(
                 f"This {type(self).__name__} instance is not fitted yet; call fit() first.")
-        X = _to_numpy(X).astype(np.float64)
-        if X.shape[1] != self.n_features_in_:
-            raise ValueError(
-                f"X has {X.shape[1]} features, but {type(self).__name__} was fitted with "
-                f"{self.n_features_in_} features")
-        if not np.isfinite(X).all():
-            raise ValueError("X contains NaN or infinite values; all entries must be finite")
-        return X
+        return validate_embeddings(
+            X, min_samples=1, n_features=self.n_features_in_, warn=False, dtype=np.float64)
 
     def get_params(self) -> dict:
         """Constructor arguments, so that ``type(obj)(**obj.get_params())`` rebuilds it."""

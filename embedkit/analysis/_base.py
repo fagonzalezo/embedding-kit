@@ -7,16 +7,15 @@ from typing import Any
 
 import numpy as np
 
-from embedkit.utils.validation import _to_numpy, check_n_samples
+from embedkit.utils.validation import validate_embeddings
 
 
 class BaseAnalyzer:
     """Mixin enforcing fit(X) -> Result convention."""
 
     def _prepare(self, X, min_n: int = 2) -> np.ndarray:
-        X = _to_numpy(X)
-        check_n_samples(X, min_n)
-        return X
+        """Validate and convert to a float32 ndarray (see ``validate_embeddings``)."""
+        return validate_embeddings(X, min_samples=min_n, stacklevel=4)
 
 
 @dataclass(frozen=True)

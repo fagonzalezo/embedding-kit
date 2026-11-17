@@ -646,8 +646,8 @@ Release as 0.6.0.
 | 6.3 | Run E8 | done (2026-11-14; `docs/BENCHMARK_SUPERVISED.md`) |
 | 7.1 | Run E4 | in progress (2026-11-17): design and criteria fixed, extraction and harness built and smoke-tested locally (notes below); cluster runs next |
 | 7.2 | Selection-based auto-configuration | not started |
-| 7.3 | Robustness and scaling | not started |
-| 7.4 | Documentation | not started |
+| 7.3 | Robustness and scaling | in progress (2026-11-17): input validation done (`validate_embeddings` at every public entry point); E9 timings not started |
+| 7.4 | Documentation | in progress (2026-11-17): `docs/MIGRATION.md` (0.1.2 to 0.5.0) written; README and manual wait for E4 |
 
 ### Phase 1 notes (2026-11-10)
 

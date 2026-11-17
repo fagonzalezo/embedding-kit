@@ -23,6 +23,7 @@ from embedkit.analysis.intrinsic_dim import IntrinsicDimensionEstimator, Intrins
 from embedkit.analysis.kernel import KernelDiagnostics, KernelDiagnosticsResult
 from embedkit.analysis.null import CalibratedStatistic, NullModel, calibrate
 from embedkit.utils.neighbors import knn
+from embedkit.utils.validation import trusted_input
 
 # The statistics compared with a null model when EmbedKitAnalyzer(calibrate=True).
 CALIBRATED_STATISTICS = (
@@ -301,7 +302,11 @@ class EmbedKitAnalyzer(BaseAnalyzer):
 
     def fit(self, X, y=None) -> EmbedKitReport:
         _check_metric(self.metric)
-        X = self._prepare(X, min_n=5)
+        X = self._prepare(X, min_n=5)  # the one validation of the call: warnings are issued here
+        with trusted_input():  # the analyzers below get the validated array, and stay silent
+            return self._fit_validated(X, y)
+
+    def _fit_validated(self, X: np.ndarray, y) -> EmbedKitReport:
         X_given = X  # the null model of the calibration is fitted to the rows as given
         if self.metric == "cosine":
             X = l2_normalize(X)
