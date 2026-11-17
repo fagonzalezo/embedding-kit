@@ -85,7 +85,7 @@ projector = EmbeddingRefiner(
     target_dim=64,
     hidden_dim=256,
     n_layers=2,
-    normalize=True,
+    normalize_output=True,
 )
 
 aug = GaussianNoise(std=0.05, adaptive=True)

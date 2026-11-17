@@ -1210,17 +1210,18 @@ cluster and locally.
 
 All design decisions in this plan are confirmed.
 
-1. **Phases 5 and 6 are done** (0.4.0 tagged locally on 2026-11-13; phase 6 is unreleased).
-2. **Phase 4 is in progress** (started 2026-11-14). WP 4.1, 4.2 and 4.3 are done (see their
-   notes). WP 4.5 is done (2026-11-16): the phase 4 exit criterion holds after the
-   calibration fixes (`docs/BENCHMARK_DIAGNOSTICS.md`), so phase 4 is complete. Its open
-   findings (normalised anisotropic rows, spiked spectra at d = 1,024, near-threshold flips)
-   go to phase 7. Phases 4 and
-   6 ship together as 0.5.0, and phase 7 as 0.6.0 (the user's decision, 2026-11-14). WP 4.4 is
-   done (2026-11-15). The user
-   also kept calibration on by default with 20 draws.
-3. **Phase 7** follows phase 4.
-4. **Benchmark results:** new experiments commit only their reports and summaries, as E8 does;
+1. **Phases 4, 5 and 6 are done.** 0.4.0 (phase 5) was tagged locally on 2026-11-13; 0.5.0
+   (phases 4 and 6, the user's decision, 2026-11-14) was tagged locally on 2026-11-17. Before the
+   tag, both phase 4 exit criteria were checked: the subsample criterion holds after the WP 4.5
+   calibration fixes (`docs/BENCHMARK_DIAGNOSTICS.md`), and the WP 1.5 isotropic-Gaussian and
+   independent-label tests (`tests/test_analysis_fixes.py`) pass, as does the full suite.
+   The README, `docs/manual.md`, the skill (`skills/embedkit/`) and `examples/04` were brought
+   in line with the 0.5.0 API; WP 7.4 still owns the full documentation pass and the migration
+   note. The open phase 4 findings (normalised anisotropic rows, spiked spectra at d = 1,024,
+   near-threshold flips, the cosine antihub reading) go to phase 7. The user also kept
+   calibration on by default with 20 draws.
+2. **Phase 7 is next**, starting with WP 7.1 (E4), released as 0.6.0.
+3. **Benchmark results:** new experiments commit only their reports and summaries, as E8 does;
    per-run JSON stays on the cluster. E8's per-run files exist only on Occidata
    (`$BASE/embedding-kit/benchmarks/results/e8/`); the local copies were deleted on 2026-11-14
    after an MD5 check.

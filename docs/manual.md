@@ -117,7 +117,7 @@ In high-dimensional spaces, pairwise Euclidean distances tend to concentrate nea
 
 **Ranges & interpretation:**
 
-- `distance_cv` = standard deviation over mean of the pairwise distances: `[0, ∞)`. **Larger is better.** For iid Gaussian data it is about `1 / sqrt(2d)`. The report flags concentration below 0.02 (a provisional threshold, to be replaced by a null-calibrated statistic). Robust to a single duplicated pair.
+- `distance_cv` = standard deviation over mean of the pairwise distances: `[0, ∞)`. **Larger is better.** For iid Gaussian data it is about `1 / sqrt(2d)`. The report judges it only against the null model (calibrated z below `-z_threshold`), not against a fixed value, because its scale depends on d and the spectrum. Robust to a single duplicated pair.
 - `relative_contrast_per_query` = median over query points of `(d_max − d_min) / d_min`, with zero distances excluded.
 - `relative_contrast` = `(d_max − d_min) / d_mean`: `[0, ∞)`. **Larger is better.** Near 0 means the distance histogram is a narrow spike; high-dimensional random data can push this below 0.1. Values above 1.0 indicate a healthy spread of distances.
 - `concentration_ratio` = `d_min / d_max`: `[0, 1]`. Near 0 = healthy (minimum distances are much smaller than maximum). Near 1 = severe concentration (every pair of points is nearly the same distance apart). One duplicated pair sets it to 0, so the report no longer uses it (since 0.1.3).
@@ -199,7 +199,7 @@ The *uniformity* metric (Wang & Isola, 2020) measures how evenly normalized embe
 **Result field:** `uniformity`
 
 **Ranges & interpretation:**
-- `uniformity` = `log E[exp(−t ‖zᵢ − zⱼ‖²)]` for L2-normalized vectors: always **negative** (the expectation is strictly less than 1 for any non-degenerate distribution). **More negative = more uniform** (better coverage of the sphere). Near 0 means embeddings are tightly clustered or collapsed. The library flags values above −1.0 as poor uniformity.
+- `uniformity` = `log E[exp(−t ‖zᵢ − zⱼ‖²)]` for L2-normalized vectors: always **negative** (the expectation is strictly less than 1 for any non-degenerate distribution). **More negative = more uniform** (better coverage of the sphere). Near 0 means embeddings are tightly clustered or collapsed. The report compares it with the null model and states the result in `report.properties` (clustered directions are a property, not a defect); there is no fixed threshold.
 
 ```python
 from embedkit.analysis.geometry import UniformityScore

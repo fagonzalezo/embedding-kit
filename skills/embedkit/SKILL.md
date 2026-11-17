@@ -47,12 +47,17 @@ report = EmbedKitAnalyzer(k=10).fit(X)
 report.print_summary()          # human-readable overview
 df = report.to_dataframe()      # pandas DataFrame of all metrics
 
-# ── Full self-supervised refinement (auto-configured) ──────
-X_refined = EmbedKit(mode="self_supervised", epochs=200).fit_transform(X)
+# ── Self-supervised: PCA at the suggested dim + L2 norm (no training) ──
+X_reduced = EmbedKit(mode="self_supervised").fit_transform(X)
+# opt-in contrastive refiner:
+X_refined = EmbedKit(mode="self_supervised", method="refiner", epochs=100).fit_transform(X)
 
 # ── Supervised refinement with class labels ────────────────
 y = np.load("labels.npy")       # integer class indices
 X_refined = EmbedKit(mode="supervised", epochs=100).fit_transform(X, y=y)
+
+# ── Regression targets (Rank-N-Contrast) ───────────────────
+X_refined = EmbedKit(mode="regression", epochs=100).fit_transform(X, y=targets)
 ```
 
 ---
@@ -63,9 +68,10 @@ X_refined = EmbedKit(mode="supervised", epochs=100).fit_transform(X, y=y)
 from embedkit import EmbedKitAnalyzer
 
 analyzer = EmbedKitAnalyzer(
-    k=10,                                    # kNN size; auto = sqrt(n)/2 if None
+    k=10,                                    # kNN size; auto = max(5, round(sqrt(n)/2)) if None
     id_methods=["TwoNN", "MLE", "lPCA", "MOM"],  # ID estimators (default)
     metric="euclidean",                       # "euclidean" or "cosine" (normalised rows)
+    calibrate=True,                           # compare 5 statistics with a null model (z-scores)
     random_state=42,
 )
 report = analyzer.fit(X, y=None)    # y enables centered_kernel_alignment
@@ -79,10 +85,12 @@ report = analyzer.fit(X, y=None)    # y enables centered_kernel_alignment
 | `report.intrinsic_dim` | `IntrinsicDimensionResult` | Per-method ID estimates with bootstrap intervals, TwoNN scale curve, reference estimate |
 | `report.hubness` | `HubnessResult` | k-occurrence distribution, skewness, hub/antihub ratios |
 | `report.geometry` | `GeometryBundle` | Distance concentration, isotropy, neighbor consistency, uniformity |
-| `report.kernel` | `KernelDiagnosticsResult` | RBF kernel rank, spectral gap, condition number |
-| `report.calibration` | `dict[str, CalibratedStatistic]` | k-skewness, distance CV, neighbour consistency, uniformity against a null model (z-scores) |
-| `report.n_outside_null` | `int` | Calibrated statistics with \|z\| > 3 (replaces `severity`) |
-| `report.recommendations` | `list[str]` | Actionable suggestions |
+| `report.kernel` | `KernelDiagnosticsResult` | Centred RBF kernel: effective rank, spectral gap, `top_k_eigen_ratio` (`condition_number` is a deprecated alias), kernel alignment |
+| `report.calibration` | `dict[str, CalibratedStatistic]` | k-skewness, antihub ratio, distance CV, neighbour consistency, uniformity against a null model: `observed`, `null_mean`, `null_std`, `z_score`; `None` if `calibrate=False` |
+| `report.calibration_k` | `int` | The `k` used by the calibration |
+| `report.n_outside_null` | `int` | Calibrated statistics with \|z\| > `z_threshold` (3); replaces `severity` |
+| `report.properties` | `list[str]` | Descriptive statements (spectrum, mean direction, uniformity vs null); anisotropy is a property, not a recommendation |
+| `report.recommendations` | `list[str]` | Actions: hubness, antihubs (Euclidean only), distance concentration, neighbour consistency beyond the null; low ID/D |
 | `report.suggested_k` | `int` | Recommended kNN size |
 | `report.suggested_sigma` | `float` | Recommended RBF sigma |
 | `report.suggested_target_dim` | `int` | Recommended output dimension (≈ 1.5 × TwoNN ID) |
@@ -99,6 +107,7 @@ report.to_dataframe()            # pandas table for logging / CSV export
 print(report.hubness.k_skewness)
 print(report.geometry.isotropy.participation_ratio)
 print(report.intrinsic_dim.estimates)    # per method; no consensus
+print(report.calibration["k_skewness"].z_score)   # against the null model
 print(report.recommendations)
 print(report.n_outside_null)     # calibrated statistics with |z| > 3
 ```
@@ -110,27 +119,36 @@ For detailed interpretation of every metric and its healthy ranges, read
 
 ## Pathology → Improvement Quick Reference
 
-> These fixed-threshold pairings are from 0.1.x and are not backed by a benchmark. Since 0.5.0 the
-> report judges hubness, distance concentration and neighbour consistency against a null model,
-> and describes anisotropy and clustering as properties (`report.properties`), not defects.
-> Experiment E4 (WP 7.1) decides which pairings stay.
+> These pairings are not backed by a benchmark. Since 0.5.0 the report judges hubness, antihubs,
+> distance concentration and neighbour consistency against a null model (z-scores, no fixed
+> thresholds), and describes anisotropy and clustering as properties (`report.properties`), not
+> defects. `EmbedKit` does not read them: it uses only `suggested_target_dim`. Experiment E4
+> (WP 7.1) decides which pairings stay.
 
 | Detected pathology | Metric signal | Recommended improvement |
 |---|---|---|
-| Severe hubness | `k_skewness > 5` | `AlignUniformLoss` + `KNNPairs` |
-| Moderate hubness | `k_skewness 2–5` | `NTXentLoss` + `KNNPairs` |
-| Distance collapse | `distance_cv < 0.02` (provisional) | Reduce `target_dim` aggressively |
-| Sparse manifold | `ID/D < 0.1` | Strong bottleneck (low `target_dim`) |
-| Low neighbor stability | `mean_consistency < 0.5` | `KNNPairs` (auto-config default) |
-| Supervised, class labels available | any severity | `mode="supervised"`, `SupConLoss` |
-| Supervised, continuous/regression labels | any severity | `mode="supervised"`, `RankNContrastLoss` |
+| Hubness | `calibration["k_skewness"].z_score > 3` | Hubness-reducing search (`embedkit.hubness_reduction.MutualProximity`); or `AlignUniformLoss` + `KNNPairs` |
+| Antihubs (Euclidean only) | `calibration["antihub_ratio"].z_score > 3` | Same |
+| Distance concentration | `calibration["distance_cv"].z_score < -3` | Lower `target_dim` |
+| Sparse manifold | reference `ID/D < 0.1` | Strong bottleneck (low `target_dim`) |
+| Low neighbor stability | `calibration["neighbor_consistency"].z_score < -3` | `KNNPairs` (auto-config default) |
+| Supervised, class labels available | labels given | `mode="supervised"`, `SupConLoss` |
+| Supervised, continuous/regression labels | targets given | `mode="regression"`, `RankNContrastLoss` |
 | Sparse / NLP embeddings | high dim, sparse values | `FeatureDropout` augmentation |
-| Locally smooth, pretrained | low severity | `EmbeddingMixup` |
+| Locally smooth, pretrained | `n_outside_null == 0` | `EmbeddingMixup` |
 
-When `augmentation="auto"` and `loss="auto"` (the defaults), `EmbedKit` auto-configures
-`KNNPairs(k=5)` + `CombinedLoss(NTXent + 0.5·AlignUniform)` for self-supervised mode,
-and `KNNPairs(k=5)` + `CombinedLoss(SupCon + 0.5·AlignUniform)` for supervised mode
-(see `api.py:_resolve_loss` and `_resolve_augmentation`).
+With `method="auto"`, self-supervised mode trains nothing (PCA at `target_dim`, L2-normalised); the
+trained refiner is `method="refiner"`, and the default for supervised and regression modes. With
+`augmentation="auto"`, `loss="auto"` and `architecture="auto"`, the refiner uses:
+
+| Mode | Architecture | Augmentation | Loss |
+|---|---|---|---|
+| `self_supervised` | `linear` | `KNNPairs(k=5)` | `NTXentLoss(0.07)` + 0.5 `AlignUniformLoss` |
+| `supervised` | `residual` | `KNNPairs(k=5)` | `SupConLoss(0.07)` |
+| `regression` | `mlp` | `GaussianNoise(0.05)` | `RankNContrastLoss()` |
+
+(see `api.py:_resolve_loss`, `_resolve_augmentation`, `_resolve_architecture`). Setting
+`augmentation`, `loss`, `nested_dims` or a non-linear `architecture` with `method="pca"` raises.
 
 ---
 
@@ -142,8 +160,9 @@ and `KNNPairs(k=5)` + `CombinedLoss(SupCon + 0.5·AlignUniform)` for supervised 
 from embedkit import EmbedKit
 
 ek = EmbedKit(
-    mode="self_supervised",     # or "supervised"
-    augmentation="auto",        # or pass an augmentation object
+    mode="self_supervised",     # or "supervised" | "regression"
+    method="auto",              # "auto" | "pca" | "refiner"; auto = pca without labels
+    augmentation="auto",        # or pass an augmentation object (method="refiner" only)
     loss="auto",                # or pass a loss object
     target_dim="auto",          # or int; auto = 1.5 × TwoNN intrinsic dim
     hidden_dim=256,
@@ -152,18 +171,18 @@ ek = EmbedKit(
     batch_size=256,
     lr=3e-4,
     scheduler="cosine",         # "cosine" | "step" | "plateau" | None
-    early_stopping_patience=20, # None to disable
+    early_stopping_patience="auto",  # int, None to disable; auto = off without labels
     device="cuda",              # or "cpu", or None (auto-detect)
     random_state=42,
 )
-ek.fit(X, y=y)                  # y=None for self-supervised
+ek.fit(X, y=y)                  # y=None for self-supervised; targets for regression
 X_refined = ek.transform(X)
 
 # or in one call:
 X_refined = ek.fit_transform(X, y=y)
 
 # inspect what was auto-chosen:
-ek.analysis_report.print_summary()
+ek.analysis_report.print_summary()   # EmbedKit runs the report uncalibrated
 print(ek._config)
 ```
 
@@ -186,7 +205,7 @@ model = EmbeddingRefiner(
     target_dim=64,
     hidden_dim=256,
     n_layers=2,
-    normalize=True,       # L2-normalize output; required for NTXentLoss
+    normalize_output=True,  # L2-normalize output; required for NTXentLoss
 )
 
 aug = CompositeAugmentation(
@@ -227,7 +246,7 @@ X_refined = trainer.transform(X)
 | `EmbeddingMixup(alpha, k)` | Locally smooth, trusted embeddings |
 | `KNNPairs(k, neighbor_index, metric)` | Auto-config default; pretrained embeddings with good local structure |
 | `FeatureMasking(mask_ratio)` | Structured, correlated embeddings |
-| `CompositeAugmentation(augs, mode)` | High-severity or combination strategies |
+| `CompositeAugmentation(augs, mode)` | Combination strategies |
 
 #### Loss guide
 
@@ -279,7 +298,7 @@ X_refined = ek2.transform(X_new)
 from embedkit.utils.io import save_bundle, load_bundle
 save_bundle("outdir/", model, config_dict, report)
 bundle = load_bundle("outdir/")
-# bundle keys: "state_dict", "config", "report"
+# bundle keys: "state_dict", "config", "report_dict"
 ```
 
 ---
@@ -303,13 +322,14 @@ EmbedKit slots into common ML stacks. For detailed patterns with code, read
 
 ## Common Pitfalls
 
-**Don't L2-normalize before analysis.** Run `EmbedKitAnalyzer` on the raw embeddings.
-Normalizing first collapses distance information and makes the hubness / isotropy
-metrics unreliable.
+**Don't L2-normalize before analysis.** Run `EmbedKitAnalyzer` on the raw embeddings. If you
+search by cosine, pass `metric="cosine"`: the analyzer normalises the rows itself and every
+statistic then describes the normalised rows. Rows already normalised upstream are calibrated
+against a null normalised to the same norm, which is reliable only for flat spectra.
 
 **`NTXentLoss` requires normalized embeddings.** `EmbeddingRefiner` defaults to
-`normalize=True` for this reason. If you swap in a different loss (e.g., `TripletLoss`
-with Euclidean distance), pass `normalize=False`.
+`normalize_output=True` for this reason. If you swap in a different loss (e.g., `TripletLoss`
+with Euclidean distance), pass `normalize_output=False`.
 
 **Temperature matters.** `NTXentLoss` and `SupConLoss` are sensitive to temperature.
 The default `0.07` works well for most cases; go lower (colder) if representations

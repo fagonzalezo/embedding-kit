@@ -8,13 +8,14 @@ A Python library for analyzing and improving ML embedding spaces. Embedding Kit 
 ## Features
 
 ### Analysis
-- **Intrinsic dimension** estimation with 7 estimators: `TwoNN`, `MLE`, `lPCA`, `DANCo`, `CorrInt`, `MOM`, `FisherS`
+- **Intrinsic dimension** estimation with 8 estimators: `TwoNN`, `MLE`, `lPCA`, `DANCo`, `CorrInt`, `MOM`, `FisherS`, `ESS`, each reported separately with a bootstrap interval
 - **Hubness analysis** — k-occurrence distribution, skewness, hub/antihub ratios
 - **Distance concentration** — detects when pairwise distances collapse to a narrow range (curse of dimensionality)
 - **Isotropy** — eigenvalue spectrum of the covariance matrix, participation ratio
 - **Neighbor consistency** — stability of the kNN graph across perturbations
 - **Uniformity score** — how well embeddings fill the unit hypersphere
-- **Kernel diagnostics** — RBF kernel rank, spectral gap, and condition number
+- **Kernel diagnostics** — centred RBF kernel: effective rank, spectral gap, top-k eigenvalue ratio, centred kernel alignment
+- **Null-model calibration** — k-skewness, antihub ratio, distance CV, neighbour consistency and uniformity are compared with a Gaussian null (z-scores); recommendations about them come only from the z-scores
 
 All estimators follow the sklearn `fit` / `transform` API and accept `np.ndarray` or `torch.Tensor`.
 
@@ -22,7 +23,7 @@ All estimators follow the sklearn `fit` / `transform` API and accept `np.ndarray
 - **`EmbeddingRefiner`** — a PyTorch `nn.Module`: a linear map initialised at PCA (default), a residual adapter or an MLP, with optional L2 normalization
 - **Augmentations**: `GaussianNoise`, `FeatureDropout`, `EmbeddingMixup`, `KNNPairs`, `FeatureMasking`, `CompositeAugmentation`
 - **Losses**: `NTXentLoss`, `AlignUniformLoss`, `SupConLoss`, `TripletLoss`, `RankNContrastLoss`, `MatryoshkaLoss` (nested prefixes), `CombinedLoss`
-- **Diagnostics-driven auto-config** — `EmbedKit` reads the analysis report and automatically selects the best loss function, augmentation strategy, and target dimension
+- **Auto-config** — `EmbedKit` takes `target_dim` from the analysis report (1.5 × TwoNN intrinsic dimension); loss, augmentation and architecture defaults are fixed per mode
 - **Self-supervised and supervised** modes: `EmbedKit(method="auto")` is PCA without labels and the trained refiner with them; `method="refiner"` trains in either mode
 - **Hubness reduction** — `LocalScaling`, `MutualProximity`, `CSLS`, `DisSimLocal` for kNN search
 
@@ -102,7 +103,7 @@ See [`examples/`](https://github.com/fagonzalezo/embedding-kit/tree/main/example
 | Document | Description |
 |----------|-------------|
 | [Concepts Manual](https://github.com/fagonzalezo/embedding-kit/blob/main/docs/manual.md) | Full guide to analysis metrics, the improvement pipeline, and visualization |
-| [Metric Guide](https://github.com/fagonzalezo/embedding-kit/blob/main/skills/embedkit/references/metric_guide.md) | Per-metric healthy ranges, pathology thresholds, geometric meaning, and downstream consequences |
+| [Metric Guide](https://github.com/fagonzalezo/embedding-kit/blob/main/skills/embedkit/references/metric_guide.md) | Per-metric reading ranges, which statistics the report judges against a null model, geometric meaning, and downstream consequences |
 | [Workflow Guide](https://github.com/fagonzalezo/embedding-kit/blob/main/skills/embedkit/references/workflow_guide.md) | Integration patterns for HuggingFace, PyTorch training loops, scikit-learn pipelines, RAG / vector stores, and ONNX export |
 | [Examples](https://github.com/fagonzalezo/embedding-kit/tree/main/examples) | Runnable notebooks |
 
@@ -130,7 +131,7 @@ The skill is already present at `skills/embedkit/` and Claude Code picks it up a
 ### What the skill provides
 
 - Quick-start API reference for both the analysis and improvement pipelines
-- A pathology → improvement decision table (which loss and augmentation to use for each detected geometric problem)
+- A pathology → improvement table (unbenchmarked pairings of report signals with losses and augmentations)
 - Visualization and persistence guides
 - Common pitfall warnings (e.g., don't L2-normalize before analysis, temperature sensitivity for NTXentLoss)
 - Pointers to the [Metric Guide](https://github.com/fagonzalezo/embedding-kit/blob/main/skills/embedkit/references/metric_guide.md) and [Workflow Guide](https://github.com/fagonzalezo/embedding-kit/blob/main/skills/embedkit/references/workflow_guide.md)

@@ -1,17 +1,64 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (unreleased)
 
 Phase 6 of `docs/IMPLEMENTATION_PLAN.md`: supervised and regression modes. Phase 4, WP 4.1:
 null-calibrated statistics in the report; WP 4.2: intrinsic dimension per estimator; WP 4.3:
 isotropy and spectrum statistics, reported as properties; WP 4.4: one metric in every analyzer
-and the centred kernel spectrum.
+and the centred kernel spectrum; WP 4.5: benchmarks E3 and E5 (`docs/BENCHMARK_DIAGNOSTICS.md`)
+and the calibration fixes they led to.
+
+### Breaking changes since 0.4.0 (summary; details below)
+- `EmbedKitReport.severity` is removed; use `n_outside_null` and `calibration` (WP 4.1).
+- `IntrinsicDimensionResult.consensus` and the `aggregate` argument are removed, and
+  `uncertainty` is renamed `between_method_spread` (WP 4.2).
+- `IntrinsicDimensionResult.scale_plateau` and `IntrinsicDimensionEstimator(plateau_tolerance=)`
+  are replaced by `scale_max_deviation` (WP 4.5).
+- `EmbedKitAnalyzer(metric=...)` accepts only `"euclidean"` and `"cosine"` (WP 4.4).
+- Recommendations: anisotropy statements moved to `report.properties` (WP 4.3); the fixed
+  hubness, concentration, consistency, uniformity (WP 4.1) and antihub (WP 4.5) thresholds are
+  replaced by z-scores against a null model, so `calibrate=False` makes none of them.
+- `KernelDiagnosticsResult.effective_rank`, `spectral_gap` and `eigenvalues` come from the centred
+  kernel; `condition_number` is a deprecated alias of `top_k_eigen_ratio` (WP 4.4).
+- Supervised and regression `EmbedKit` defaults changed (architecture, loss, early stopping; phase
+  6).
 
 ### Changed (WP 4.5)
+- **The Gaussian null's mean is shrunk** so that its squared norm is unbiased
+  (`null.mean_shrinkage`): centred on the raw sample mean, zero-mean data gave uniformity z of -6
+  to -19. On flat Gaussians uniformity is now inside +-3 in 98% of E3 cells (was 31%).
+- **Calibration `k` no longer depends on the size of `X`.** It is `k` when given, otherwise
+  `max(5, round(sqrt(rows) / 2))` on the `n_calibration` rows (`report.calibration_k`; 22 for
+  2,000 rows). Reusing the report's `k` (71 at 20,000 rows) raised the neighbour-consistency z on
+  the same 2,000 rows from 9 to 23.
+- **Breaking: the fixed antihub rule (`antihub_ratio > 0.3`) is removed.** The antihub ratio is a
+  fifth calibrated statistic on the same kNN graph, with its null sd floored at one count
+  (`1 / rows`); the recommendation is made when its z exceeds `z_threshold`, under
+  `metric="euclidean"` only. Under cosine the z-score is reported but raises nothing: it gave a
+  false recommendation in 44% of spiked-spectrum Gaussian cells. The fixed rule fired on 31% of
+  isotropic Gaussian cells (now 1%).
+- **Breaking: `scale_plateau` and `plateau_tolerance` are replaced by `scale_max_deviation`**, the
+  largest relative deviation of the TwoNN scale curve from the full-sample value, with no
+  threshold. The boolean flipped between random subsets of one dataset.
+- **Rows with a common norm** (relative spread under 1e-3, e.g. normalised upstream) are compared
+  with null draws normalised to that norm, under either metric. Before, `distance_cv` z reached
+  -35 and the concentration recommendation fired on every such data set. Normalised rows with an
+  anisotropic (power-law) spectrum remain uncalibrated (`distance_cv` and uniformity z of +8 to
+  +11); see the `EmbedKitAnalyzer` docstring.
 - `NeighborConsistency` scales its perturbations by the RMS per-coordinate standard deviation,
   `sqrt(mean_j var(X[:, j]))`, instead of `np.std(X)` over all entries, which also counted the
   spread of the coordinate means: adding a common vector to digits moved the calibrated
   neighbour-consistency z from 14.9 to 33.5. The statistic is now translation-invariant.
+
+### Added (WP 4.5)
+- `EmbedKitReport.calibration_k`; `antihub_ratio` in `report.calibration`;
+  `embedkit.analysis.null.mean_shrinkage` and `embedkit.analysis.report.common_norm`.
+- Benchmarks E3 (`benchmarks/e3.py`: known-ID manifolds, Gaussian null families, subsampling
+  stability of six real embeddings) and E5 (`benchmarks/e5.py` and `run.py --experiment e5`:
+  six kinds of controlled damage via `bench_datasets.damage`, detection and training-free
+  repair), with `report_e3.py`, `report_e5.py`, Slurm scripts and
+  `docs/BENCHMARK_DIAGNOSTICS.md`. The phase 4 exit criterion holds: on all six real data sets
+  the report reads the same at 2,000 and 20,000 rows.
 
 ### Changed (WP 4.4)
 - **Breaking: `EmbedKitAnalyzer(metric=...)` accepts only `"euclidean"` and `"cosine"`**, and
