@@ -34,3 +34,4 @@ benchmarks/results/e3/*/
 benchmarks/results/e5/*/
 # E4 per-run results stay on the cluster too (WP 7.1)
 benchmarks/results/e4/*/
+benchmarks/results/e9/*.json

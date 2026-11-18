@@ -74,6 +74,11 @@ E8C_TASKS=(yelp_mpnet+fluorescence_esm2@rnc_mlp_noise,rnc_mlp_noes
 
 E7_SETS=(cifar100_dinov2 banking77_mpnet stsb_mpnet pets_resnet50 synthetic_anisotropic stl10_clip digits)
 
+# Grid of experiment E9 (WP 7.3, time and memory of fit): array task i is
+# n = E9_N[i / 3], d = E9_D[i % 3] (12 tasks, 0-11).
+E9_N=(1000 10000 100000 1000000)
+E9_D=(128 1024 4096)
+
 check_clean() {
   # Results must match the commit recorded in each result file.
   if [ -n "$(git -C "$REPO" status --porcelain -- embedkit benchmarks pyproject.toml | grep -v 'benchmarks/results/')" ]; then
