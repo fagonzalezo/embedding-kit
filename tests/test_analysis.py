@@ -1,16 +1,6 @@
 """Tests for embedkit.analysis.*"""
 
 import numpy as np
-import pytest
-
-from embedkit.utils.neighbors import clear_cache
-
-
-@pytest.fixture(autouse=True)
-def reset_knn_cache():
-    clear_cache()
-    yield
-    clear_cache()
 
 
 class TestIntrinsicDim:
@@ -18,13 +8,15 @@ class TestIntrinsicDim:
         from embedkit.analysis.intrinsic_dim import IntrinsicDimensionEstimator
         result = IntrinsicDimensionEstimator(methods=["TwoNN"]).fit(small_X)
         assert "TwoNN" in result.estimates
-        assert isinstance(result.consensus, float)
-        assert result.uncertainty >= 0
+        assert result.reference_method == "TwoNN"
+        assert result.reference_estimate == result.estimates["TwoNN"]
+        assert result.between_method_spread == 0.0
 
-    def test_consensus_positive(self, small_X):
+    def test_reference_positive(self, small_X):
         from embedkit.analysis.intrinsic_dim import IntrinsicDimensionEstimator
         result = IntrinsicDimensionEstimator(methods=["TwoNN", "MLE"]).fit(small_X)
-        assert result.consensus > 0
+        assert result.reference_estimate > 0
+        assert result.between_method_spread >= 0
 
     def test_multiple_methods_dict(self, small_X):
         from embedkit.analysis.intrinsic_dim import IntrinsicDimensionEstimator
@@ -35,7 +27,7 @@ class TestIntrinsicDim:
         from embedkit.analysis.intrinsic_dim import IntrinsicDimensionEstimator
         result = IntrinsicDimensionEstimator(methods=["TwoNN"]).fit(small_X)
         d = result.to_dict()
-        assert "consensus" in d
+        assert "reference_estimate" in d and "intervals" in d and "consensus" not in d
 
 
 class TestHubness:
@@ -79,7 +71,7 @@ class TestGeometry:
         assert 1.0 <= r.participation_ratio <= d + 1e-3
         assert 0.0 <= r.isotropy_score <= 1.0
         assert r.effective_rank >= 1.0
-        assert len(r.eigenvalue_spectrum) == d
+        assert len(r.eigenvalue_spectrum_top) == d
 
     def test_neighbor_consistency(self, small_X):
         from embedkit.analysis.geometry import NeighborConsistency
@@ -109,35 +101,39 @@ class TestKernelDiagnostics:
         r = KernelDiagnostics().fit(small_X)
         assert r.effective_rank >= 1.0
         assert r.sigma > 0.0
-        assert r.condition_number >= 1.0
+        assert r.top_k_eigen_ratio >= 1.0
 
-    def test_kernel_alignment_with_labels(self, small_Xy):
+    def test_centered_kernel_alignment_with_labels(self, small_Xy):
         from embedkit.analysis.kernel import KernelDiagnostics
         X, y = small_Xy
         r = KernelDiagnostics().fit(X, y)
-        assert r.kernel_alignment is not None
-        assert 0.0 <= r.kernel_alignment <= 1.0
+        assert r.centered_kernel_alignment is not None
+        assert 0.0 <= r.centered_kernel_alignment <= 1.0
 
-    def test_kernel_alignment_none_without_labels(self, small_X):
+    def test_centered_kernel_alignment_none_without_labels(self, small_X):
         from embedkit.analysis.kernel import KernelDiagnostics
         r = KernelDiagnostics().fit(small_X)
-        assert r.kernel_alignment is None
+        assert r.centered_kernel_alignment is None
 
 
 class TestEmbedKitAnalyzer:
     def test_report_fields(self, small_X):
         from embedkit.analysis.report import EmbedKitAnalyzer
         report = EmbedKitAnalyzer(id_methods=["TwoNN"]).fit(small_X)
-        assert report.suggested_k > 0
+        assert report.k > 0
         assert report.suggested_target_dim > 0
-        assert report.severity in ("low", "medium", "high")
+        assert set(report.calibration) == {
+            "k_skewness", "antihub_ratio", "distance_cv", "neighbor_consistency", "uniformity"}
+        assert 0 <= report.n_outside_null <= 5
+        assert report.calibration_k == max(5, round(np.sqrt(len(small_X)) / 2))
         assert len(report.recommendations) > 0
 
     def test_to_dict(self, small_X):
         from embedkit.analysis.report import EmbedKitAnalyzer
         report = EmbedKitAnalyzer(id_methods=["TwoNN"]).fit(small_X)
         d = report.to_dict()
-        assert "severity" in d
+        assert "n_outside_null" in d
+        assert "z_score" in d["calibration"]["k_skewness"]
         assert "recommendations" in d
 
     def test_to_dataframe(self, small_X):
@@ -146,13 +142,15 @@ class TestEmbedKitAnalyzer:
         df = report.to_dataframe()
         assert "metric" in df.columns
         assert "value" in df.columns
+        assert "k_skewness_z" in set(df["metric"])
 
     def test_print_summary(self, small_X, capsys):
         from embedkit.analysis.report import EmbedKitAnalyzer
         report = EmbedKitAnalyzer(id_methods=["TwoNN"]).fit(small_X)
         report.print_summary()
         captured = capsys.readouterr()
-        assert "severity" in captured.out.lower()
+        assert "[calibration]" in captured.out.lower()
+        assert "recommendations" in captured.out.lower()
 
     def test_input_shape(self, small_X):
         from embedkit.analysis.report import EmbedKitAnalyzer

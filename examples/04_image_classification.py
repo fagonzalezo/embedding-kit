@@ -133,7 +133,10 @@ print(f"Raw kNN accuracy (k=5): {acc_raw:.3f}\n")
 print("=" * 60)
 print("Stage 2 — Unsupervised refinement (self-supervised)")
 print("=" * 60)
-ek = EmbedKit(mode="self_supervised", target_dim="auto", epochs=80, eval_every=20, device=device)
+# method="refiner" trains the contrastive refiner; without labels the default centres and
+# L2-normalises, and with labels it selects a transform by validation (WP 7.2).
+ek = EmbedKit(mode="self_supervised", method="refiner", target_dim="auto", epochs=80,
+              eval_every=20, device=device)
 X_train_u = ek.fit_transform(X_train)
 X_test_u  = ek.transform(X_test)
 
@@ -150,7 +153,8 @@ print("Stage 3 — Supervised refinement (SupCon + AlignUniform)")
 print("=" * 60)
 aug     = CompositeAugmentation([GaussianNoise(std=0.05), FeatureDropout(p=0.1)])
 loss_fn = CombinedLoss([(SupConLoss(temperature=0.07), 1.0), (AlignUniformLoss(), 0.3)])
-model   = EmbeddingRefiner(input_dim=2048, target_dim=128, hidden_dim=512, n_layers=2)
+model   = EmbeddingRefiner(input_dim=2048, target_dim=128, hidden_dim=512, n_layers=2,
+                           architecture="mlp")
 trainer = Trainer(
     model=model,
     augmentation=aug,

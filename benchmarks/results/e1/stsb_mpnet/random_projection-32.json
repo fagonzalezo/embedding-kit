@@ -1,0 +1,1099 @@
+{
+ "experiment": "e1",
+ "dataset": "stsb_mpnet",
+ "method": "random_projection-32",
+ "family": "random_projection",
+ "params": {
+  "n_components": 32
+ },
+ "deterministic": false,
+ "fit_with_labels": false,
+ "seeds": 5,
+ "device": "cuda",
+ "val_fraction": 0.2,
+ "git": {
+  "commit": "6ef1a3b4604b2a3b641a5a50d2f329223729767f",
+  "dirty": false
+ },
+ "embedkit_version": "0.2.0",
+ "python": "3.12.3",
+ "host": "r9ng-8000-1",
+ "created": "2026-11-11T14:49:20+00:00",
+ "dataset_meta": {
+  "model": "sentence-transformers/all-mpnet-base-v2",
+  "hf_dataset": "sentence-transformers/stsb",
+  "normalized": false,
+  "pooling": "mean, Normalize module removed",
+  "n_test_pairs": 1379,
+  "n_val_pairs": 1500,
+  "dataset": "stsb_mpnet",
+  "created": "2026-11-11T10:23:00+00:00",
+  "model_revision": "e8c3b32edf5434bc2275fc9bab85f82640a19130",
+  "device": "cuda",
+  "seconds": 26.5,
+  "source": "/projects/iris/fabio.gonzalezosorio/data/embedkit-bench/features/stsb_mpnet.npz",
+  "task": "sts"
+ },
+ "stages": {
+  "val": [
+   {
+    "method": "random_projection-32",
+    "seed": 0,
+    "metric": "sts_spearman",
+    "value": 0.8191310833502741,
+    "fit_time": 0.02355794794857502,
+    "transform_time": 0.03468405269086361,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 0,
+    "metric": "trustworthiness",
+    "value": 0.8565113003153866,
+    "fit_time": 0.02355794794857502,
+    "transform_time": 0.03468405269086361,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 0,
+    "metric": "continuity",
+    "value": 0.9276404295621687,
+    "fit_time": 0.02355794794857502,
+    "transform_time": 0.03468405269086361,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 0,
+    "metric": "knn_overlap",
+    "value": 0.29000000000000004,
+    "fit_time": 0.02355794794857502,
+    "transform_time": 0.03468405269086361,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 0,
+    "metric": "linear_cka",
+    "value": 0.43186153081341233,
+    "fit_time": 0.02355794794857502,
+    "transform_time": 0.03468405269086361,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 0,
+    "metric": "k_skewness",
+    "value": 0.9709960108342787,
+    "fit_time": 0.02355794794857502,
+    "transform_time": 0.03468405269086361,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 0,
+    "metric": "effective_rank",
+    "value": 30.99158337146606,
+    "fit_time": 0.02355794794857502,
+    "transform_time": 0.03468405269086361,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 1,
+    "metric": "sts_spearman",
+    "value": 0.8230308341548114,
+    "fit_time": 0.023173455148935318,
+    "transform_time": 0.034529948607087135,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 1
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 1,
+    "metric": "trustworthiness",
+    "value": 0.8572105290339125,
+    "fit_time": 0.023173455148935318,
+    "transform_time": 0.034529948607087135,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 1
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 1,
+    "metric": "continuity",
+    "value": 0.9271593773948578,
+    "fit_time": 0.023173455148935318,
+    "transform_time": 0.034529948607087135,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 1
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 1,
+    "metric": "knn_overlap",
+    "value": 0.2875601374570447,
+    "fit_time": 0.023173455148935318,
+    "transform_time": 0.034529948607087135,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 1
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 1,
+    "metric": "linear_cka",
+    "value": 0.42592870595316046,
+    "fit_time": 0.023173455148935318,
+    "transform_time": 0.034529948607087135,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 1
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 1,
+    "metric": "k_skewness",
+    "value": 0.9201642690553867,
+    "fit_time": 0.023173455148935318,
+    "transform_time": 0.034529948607087135,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 1
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 1,
+    "metric": "effective_rank",
+    "value": 31.135400043022504,
+    "fit_time": 0.023173455148935318,
+    "transform_time": 0.034529948607087135,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 1
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 2,
+    "metric": "sts_spearman",
+    "value": 0.8158263946309756,
+    "fit_time": 0.023266848176717758,
+    "transform_time": 0.034715672954916954,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 2
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 2,
+    "metric": "trustworthiness",
+    "value": 0.8538361711006596,
+    "fit_time": 0.023266848176717758,
+    "transform_time": 0.034715672954916954,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 2
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 2,
+    "metric": "continuity",
+    "value": 0.9275650407010808,
+    "fit_time": 0.023266848176717758,
+    "transform_time": 0.034715672954916954,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 2
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 2,
+    "metric": "knn_overlap",
+    "value": 0.2841580756013746,
+    "fit_time": 0.023266848176717758,
+    "transform_time": 0.034715672954916954,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 2
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 2,
+    "metric": "linear_cka",
+    "value": 0.40953312018094273,
+    "fit_time": 0.023266848176717758,
+    "transform_time": 0.034715672954916954,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 2
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 2,
+    "metric": "k_skewness",
+    "value": 0.8885861690435931,
+    "fit_time": 0.023266848176717758,
+    "transform_time": 0.034715672954916954,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 2
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 2,
+    "metric": "effective_rank",
+    "value": 31.138104591598307,
+    "fit_time": 0.023266848176717758,
+    "transform_time": 0.034715672954916954,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 2
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 3,
+    "metric": "sts_spearman",
+    "value": 0.8214269661930044,
+    "fit_time": 0.023183053359389305,
+    "transform_time": 0.03575805015861988,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 3
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 3,
+    "metric": "trustworthiness",
+    "value": 0.8468834779077988,
+    "fit_time": 0.023183053359389305,
+    "transform_time": 0.03575805015861988,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 3
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 3,
+    "metric": "continuity",
+    "value": 0.9246026027559081,
+    "fit_time": 0.023183053359389305,
+    "transform_time": 0.03575805015861988,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 3
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 3,
+    "metric": "knn_overlap",
+    "value": 0.28350515463917525,
+    "fit_time": 0.023183053359389305,
+    "transform_time": 0.03575805015861988,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 3
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 3,
+    "metric": "linear_cka",
+    "value": 0.3944464521785588,
+    "fit_time": 0.023183053359389305,
+    "transform_time": 0.03575805015861988,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 3
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 3,
+    "metric": "k_skewness",
+    "value": 0.9820763405367503,
+    "fit_time": 0.023183053359389305,
+    "transform_time": 0.03575805015861988,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 3
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 3,
+    "metric": "effective_rank",
+    "value": 31.150361090462848,
+    "fit_time": 0.023183053359389305,
+    "transform_time": 0.03575805015861988,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 3
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 4,
+    "metric": "sts_spearman",
+    "value": 0.8276672657069424,
+    "fit_time": 0.025352315977215767,
+    "transform_time": 0.043174391612410545,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 4
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 4,
+    "metric": "trustworthiness",
+    "value": 0.8646023771829379,
+    "fit_time": 0.025352315977215767,
+    "transform_time": 0.043174391612410545,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 4
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 4,
+    "metric": "continuity",
+    "value": 0.927527571843507,
+    "fit_time": 0.025352315977215767,
+    "transform_time": 0.043174391612410545,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 4
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 4,
+    "metric": "knn_overlap",
+    "value": 0.2846048109965636,
+    "fit_time": 0.025352315977215767,
+    "transform_time": 0.043174391612410545,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 4
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 4,
+    "metric": "linear_cka",
+    "value": 0.42514011020484854,
+    "fit_time": 0.025352315977215767,
+    "transform_time": 0.043174391612410545,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 4
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 4,
+    "metric": "k_skewness",
+    "value": 0.9155166658951738,
+    "fit_time": 0.025352315977215767,
+    "transform_time": 0.043174391612410545,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 4
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 4,
+    "metric": "effective_rank",
+    "value": 31.128058007733436,
+    "fit_time": 0.025352315977215767,
+    "transform_time": 0.043174391612410545,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 4
+    },
+    "per_point": null
+   }
+  ],
+  "test": [
+   {
+    "method": "random_projection-32",
+    "seed": 0,
+    "metric": "sts_spearman",
+    "value": 0.7896466562637281,
+    "fit_time": 0.025279756635427475,
+    "transform_time": 0.03359360992908478,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 0,
+    "metric": "trustworthiness",
+    "value": 0.8721738016804189,
+    "fit_time": 0.025279756635427475,
+    "transform_time": 0.03359360992908478,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 0,
+    "metric": "continuity",
+    "value": 0.9356613968968421,
+    "fit_time": 0.025279756635427475,
+    "transform_time": 0.03359360992908478,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 0,
+    "metric": "knn_overlap",
+    "value": 0.3304467084639498,
+    "fit_time": 0.025279756635427475,
+    "transform_time": 0.03359360992908478,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 0,
+    "metric": "linear_cka",
+    "value": 0.44345662476154685,
+    "fit_time": 0.025279756635427475,
+    "transform_time": 0.03359360992908478,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 0,
+    "metric": "k_skewness",
+    "value": 0.8973072215657639,
+    "fit_time": 0.025279756635427475,
+    "transform_time": 0.03359360992908478,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 0,
+    "metric": "effective_rank",
+    "value": 30.924095499674827,
+    "fit_time": 0.025279756635427475,
+    "transform_time": 0.03359360992908478,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 1,
+    "metric": "sts_spearman",
+    "value": 0.790600093454127,
+    "fit_time": 0.025519346818327904,
+    "transform_time": 0.035397475585341454,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 1
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 1,
+    "metric": "trustworthiness",
+    "value": 0.8747782686260225,
+    "fit_time": 0.025519346818327904,
+    "transform_time": 0.035397475585341454,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 1
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 1,
+    "metric": "continuity",
+    "value": 0.9355664199242779,
+    "fit_time": 0.025519346818327904,
+    "transform_time": 0.035397475585341454,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 1
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 1,
+    "metric": "knn_overlap",
+    "value": 0.33295454545454545,
+    "fit_time": 0.025519346818327904,
+    "transform_time": 0.035397475585341454,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 1
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 1,
+    "metric": "linear_cka",
+    "value": 0.44791167239339746,
+    "fit_time": 0.025519346818327904,
+    "transform_time": 0.035397475585341454,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 1
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 1,
+    "metric": "k_skewness",
+    "value": 0.8686731867581687,
+    "fit_time": 0.025519346818327904,
+    "transform_time": 0.035397475585341454,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 1
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 1,
+    "metric": "effective_rank",
+    "value": 31.013750089473298,
+    "fit_time": 0.025519346818327904,
+    "transform_time": 0.035397475585341454,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 1
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 2,
+    "metric": "sts_spearman",
+    "value": 0.7917958889690156,
+    "fit_time": 0.023107176646590233,
+    "transform_time": 0.03445608913898468,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 2
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 2,
+    "metric": "trustworthiness",
+    "value": 0.8692849908576168,
+    "fit_time": 0.023107176646590233,
+    "transform_time": 0.03445608913898468,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 2
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 2,
+    "metric": "continuity",
+    "value": 0.9352418019795006,
+    "fit_time": 0.023107176646590233,
+    "transform_time": 0.03445608913898468,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 2
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 2,
+    "metric": "knn_overlap",
+    "value": 0.329153605015674,
+    "fit_time": 0.023107176646590233,
+    "transform_time": 0.03445608913898468,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 2
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 2,
+    "metric": "linear_cka",
+    "value": 0.42119163274576416,
+    "fit_time": 0.023107176646590233,
+    "transform_time": 0.03445608913898468,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 2
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 2,
+    "metric": "k_skewness",
+    "value": 0.9851068053394622,
+    "fit_time": 0.023107176646590233,
+    "transform_time": 0.03445608913898468,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 2
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 2,
+    "metric": "effective_rank",
+    "value": 31.083907367520506,
+    "fit_time": 0.023107176646590233,
+    "transform_time": 0.03445608913898468,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 2
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 3,
+    "metric": "sts_spearman",
+    "value": 0.7927453494670579,
+    "fit_time": 0.022965112701058388,
+    "transform_time": 0.033675381913781166,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 3
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 3,
+    "metric": "trustworthiness",
+    "value": 0.8609683727299299,
+    "fit_time": 0.022965112701058388,
+    "transform_time": 0.033675381913781166,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 3
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 3,
+    "metric": "continuity",
+    "value": 0.9289602215181856,
+    "fit_time": 0.022965112701058388,
+    "transform_time": 0.033675381913781166,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 3
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 3,
+    "metric": "knn_overlap",
+    "value": 0.3236677115987461,
+    "fit_time": 0.022965112701058388,
+    "transform_time": 0.033675381913781166,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 3
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 3,
+    "metric": "linear_cka",
+    "value": 0.41108364392550995,
+    "fit_time": 0.022965112701058388,
+    "transform_time": 0.033675381913781166,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 3
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 3,
+    "metric": "k_skewness",
+    "value": 0.8940673628612237,
+    "fit_time": 0.022965112701058388,
+    "transform_time": 0.033675381913781166,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 3
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 3,
+    "metric": "effective_rank",
+    "value": 31.03318202670262,
+    "fit_time": 0.022965112701058388,
+    "transform_time": 0.033675381913781166,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 3
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 4,
+    "metric": "sts_spearman",
+    "value": 0.7817860640934033,
+    "fit_time": 0.023015163838863373,
+    "transform_time": 0.034043703228235245,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 4
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 4,
+    "metric": "trustworthiness",
+    "value": 0.8837176131304274,
+    "fit_time": 0.023015163838863373,
+    "transform_time": 0.034043703228235245,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 4
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 4,
+    "metric": "continuity",
+    "value": 0.9386890891417901,
+    "fit_time": 0.023015163838863373,
+    "transform_time": 0.034043703228235245,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 4
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 4,
+    "metric": "knn_overlap",
+    "value": 0.3378918495297806,
+    "fit_time": 0.023015163838863373,
+    "transform_time": 0.034043703228235245,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 4
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 4,
+    "metric": "linear_cka",
+    "value": 0.4600840668645728,
+    "fit_time": 0.023015163838863373,
+    "transform_time": 0.034043703228235245,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 4
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 4,
+    "metric": "k_skewness",
+    "value": 1.0118160265028968,
+    "fit_time": 0.023015163838863373,
+    "transform_time": 0.034043703228235245,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 4
+    },
+    "per_point": null
+   },
+   {
+    "method": "random_projection-32",
+    "seed": 4,
+    "metric": "effective_rank",
+    "value": 30.98524518524253,
+    "fit_time": 0.023015163838863373,
+    "transform_time": 0.034043703228235245,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "random_state": 4
+    },
+    "per_point": null
+   }
+  ]
+ },
+ "errors": {},
+ "warnings": {
+  "val": [],
+  "test": []
+ },
+ "elapsed": 8.286651872098446
+}

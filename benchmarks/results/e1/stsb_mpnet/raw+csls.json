@@ -1,0 +1,77 @@
+{
+ "experiment": "e1",
+ "dataset": "stsb_mpnet",
+ "method": "raw+csls",
+ "family": "hub_csls",
+ "params": {
+  "hubness_reduction": "CSLS(k=10, metric='cosine')"
+ },
+ "deterministic": true,
+ "fit_with_labels": false,
+ "seeds": 1,
+ "device": "cpu",
+ "val_fraction": 0.2,
+ "git": {
+  "commit": "77bc902f3c9bb454e18605434854dac6a6b2cefd",
+  "dirty": false
+ },
+ "embedkit_version": "0.2.0",
+ "python": "3.12.3",
+ "host": "r9nc-24-6",
+ "created": "2026-11-12T12:06:39+00:00",
+ "dataset_meta": {
+  "model": "sentence-transformers/all-mpnet-base-v2",
+  "hf_dataset": "sentence-transformers/stsb",
+  "normalized": false,
+  "pooling": "mean, Normalize module removed",
+  "n_test_pairs": 1379,
+  "n_val_pairs": 1500,
+  "dataset": "stsb_mpnet",
+  "created": "2026-11-11T10:23:00+00:00",
+  "model_revision": "e8c3b32edf5434bc2275fc9bab85f82640a19130",
+  "device": "cuda",
+  "seconds": 26.5,
+  "source": "/projects/iris/fabio.gonzalezosorio/data/embedkit-bench/features/stsb_mpnet.npz",
+  "task": "sts"
+ },
+ "stages": {
+  "val": [
+   {
+    "method": "raw+csls",
+    "seed": 0,
+    "metric": "k_skewness",
+    "value": 0.827012976430727,
+    "fit_time": 0.02557734213769436,
+    "transform_time": 0.04376181773841381,
+    "dim": 768,
+    "transductive": false,
+    "params": {
+     "hubness_reduction": "CSLS(k=10, metric='cosine')"
+    },
+    "per_point": null
+   }
+  ],
+  "test": [
+   {
+    "method": "raw+csls",
+    "seed": 0,
+    "metric": "k_skewness",
+    "value": 0.8521275290769491,
+    "fit_time": 0.024182768538594246,
+    "transform_time": 0.03478612005710602,
+    "dim": 768,
+    "transductive": false,
+    "params": {
+     "hubness_reduction": "CSLS(k=10, metric='cosine')"
+    },
+    "per_point": null
+   }
+  ]
+ },
+ "errors": {},
+ "warnings": {
+  "val": [],
+  "test": []
+ },
+ "elapsed": 0.6158333066850901
+}

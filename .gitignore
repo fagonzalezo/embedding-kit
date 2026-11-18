@@ -23,3 +23,15 @@ CLAUDE.md
 claude/
 examples/data/
 docs/BUG-supcon-nan.md
+docs/BUG-rnc-ties.md
+benchmarks/data/
+.claude/
+
+# E8 per-run results (about 200 MB) stay on the cluster; REPORT.md is committed
+benchmarks/results/e8/*/
+# E3 and E5 per-run results stay on the cluster too (WP 4.5)
+benchmarks/results/e3/*/
+benchmarks/results/e5/*/
+# E4 per-run results stay on the cluster too (WP 7.1)
+benchmarks/results/e4/*/
+benchmarks/results/e9/*.json

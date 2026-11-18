@@ -1,0 +1,11 @@
+import importlib.util, numpy as np
+spec = importlib.util.spec_from_file_location("nb", "embedkit/utils/neighbors.py"); nb = importlib.util.module_from_spec(spec); spec.loader.exec_module(nb)
+rng = np.random.default_rng(0)
+X = (rng.standard_normal((200, 16)) * 5).astype(np.float32)
+n0 = np.linalg.norm(X, axis=1).mean()
+d, _ = nb.knn(X, 5, metric="cosine")
+print("cosine: mean row norm before", round(float(n0), 3), "after", round(float(np.linalg.norm(X, axis=1).mean()), 3), "| returned 'distances' row0:", d[0, :3])
+X = rng.standard_normal((200, 16)).astype(np.float32)
+d, i = nb.knn(X, 5)
+true = np.linalg.norm(X[0] - X[i[0, 0]])
+print("euclidean: returned", d[0, 0], "true L2", true, "squared:", bool(np.isclose(d[0, 0], true**2, rtol=1e-3)))

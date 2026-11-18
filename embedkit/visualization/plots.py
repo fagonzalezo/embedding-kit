@@ -12,7 +12,7 @@ class AnalysisPlotter:
     def plot_eigenvalue_spectrum(self):
         import matplotlib.pyplot as plt
         fig, ax = plt.subplots(figsize=(8, 4))
-        ev = self.report.geometry.isotropy.eigenvalue_spectrum
+        ev = self.report.geometry.isotropy.eigenvalue_spectrum_top
         ax.plot(np.arange(1, len(ev) + 1), ev, marker="o", markersize=3)
         ax.set_xlabel("Component")
         ax.set_ylabel("Eigenvalue")
@@ -55,7 +55,7 @@ class AnalysisPlotter:
         ax.set_xlabel("Component")
         ax.set_ylabel("Eigenvalue")
         ax.set_title(
-            f"Kernel Eigenvalue Spectrum  "
+            f"Centred Kernel Eigenvalue Spectrum  "
             f"(eff_rank={self.report.kernel.effective_rank:.1f})"
         )
         ax.set_yscale("log")
@@ -64,6 +64,7 @@ class AnalysisPlotter:
 
     def plot_id_local_map(self, X):
         import matplotlib.pyplot as plt
+
         from embedkit.analysis.intrinsic_dim import IntrinsicDimensionEstimator
         from embedkit.utils.validation import _to_numpy
         X_np = _to_numpy(X)
@@ -83,6 +84,7 @@ class AnalysisPlotter:
 
     def plot_hubness_map(self, X):
         import matplotlib.pyplot as plt
+
         from embedkit.utils.validation import _to_numpy
         X_np = _to_numpy(X)
         N_k = self.report.hubness.k_occurrence
@@ -113,7 +115,7 @@ class AnalysisPlotter:
             ax.set_title(title)
 
         # 1: eigenvalue spectrum
-        ev = self.report.geometry.isotropy.eigenvalue_spectrum
+        ev = self.report.geometry.isotropy.eigenvalue_spectrum_top
         axes[0, 0].plot(ev, marker="o", markersize=2)
         axes[0, 0].set_title("Eigenvalue Spectrum")
         axes[0, 0].set_yscale("log")
@@ -131,13 +133,13 @@ class AnalysisPlotter:
         # 4: kernel spectrum
         kev = self.report.kernel.eigenvalues
         axes[1, 0].plot(kev, marker="o", markersize=2)
-        axes[1, 0].set_title("Kernel Spectrum")
+        axes[1, 0].set_title("Centred Kernel Spectrum")
         axes[1, 0].set_yscale("log")
 
         # 5: summary metrics
-        names = ["PR", "Isotropy", "NC", "Hub ratio", "Antihub ratio"]
+        names = ["PR/d", "Isotropy", "NC", "Hub ratio", "Antihub ratio"]
         vals = [
-            self.report.geometry.isotropy.participation_ratio,
+            self.report.geometry.isotropy.participation_ratio_normalized,
             self.report.geometry.isotropy.isotropy_score,
             self.report.geometry.neighbor_consistency.mean_consistency,
             self.report.hubness.hub_ratio,
@@ -147,12 +149,18 @@ class AnalysisPlotter:
         axes[1, 1].set_title("Key Metrics")
         axes[1, 1].tick_params(axis="x", rotation=30)
 
-        # 6: severity text
+        # 6: summary text
+        n_out = self.report.n_outside_null
+        outside = (
+            "not calibrated" if n_out is None
+            else f"{n_out} of {len(self.report.calibration)}"
+        )
         axes[1, 2].axis("off")
         axes[1, 2].text(
             0.1, 0.9,
-            f"Severity: {self.report.severity.upper()}\n"
-            f"ID: {self.report.intrinsic_dim.consensus:.1f}\n"
+            f"Outside the null: {outside}\n"
+            f"ID ({self.report.intrinsic_dim.reference_method}): "
+            f"{self.report.intrinsic_dim.reference_estimate:.1f}\n"
             f"Uniformity: {self.report.geometry.uniformity.uniformity:.3f}\n\n"
             + "\n".join(f"• {r[:60]}..." if len(r) > 60 else f"• {r}"
                         for r in self.report.recommendations[:4]),

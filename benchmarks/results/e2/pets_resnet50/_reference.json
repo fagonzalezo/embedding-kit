@@ -1,0 +1,20 @@
+{
+ "experiment": "e2",
+ "dataset": "pets_resnet50",
+ "epochs": 100,
+ "eval_every": 5,
+ "max_pool": 10000,
+ "max_test": 5000,
+ "device": "cuda",
+ "git": {
+  "commit": "bcba00f4834ddf83074e78a7468fce3d185bc764",
+  "dirty": false
+ },
+ "embedkit_version": "0.2.0",
+ "python": "3.12.3",
+ "host": "r9ng-8000-1",
+ "raw_test_knn_accuracy": 0.9013355137639684,
+ "raw_test_linear_probe": 0.9160534205505587,
+ "n_pool": 3680,
+ "n_test": 3669
+}

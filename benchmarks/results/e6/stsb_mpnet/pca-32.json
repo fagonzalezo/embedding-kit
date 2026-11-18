@@ -1,0 +1,273 @@
+{
+ "experiment": "e6",
+ "dataset": "stsb_mpnet",
+ "method": "pca-32",
+ "family": "pca",
+ "params": {
+  "n_components": 32
+ },
+ "deterministic": true,
+ "fit_with_labels": false,
+ "seeds": 1,
+ "device": "cuda",
+ "val_fraction": 0.2,
+ "git": {
+  "commit": "16789d3c85231b1d4c8e0656b452d502cfb44a61",
+  "dirty": false
+ },
+ "embedkit_version": "0.2.0",
+ "python": "3.12.3",
+ "host": "r9ng-8000-1",
+ "created": "2026-11-12T05:36:53+00:00",
+ "dataset_meta": {
+  "model": "sentence-transformers/all-mpnet-base-v2",
+  "hf_dataset": "sentence-transformers/stsb",
+  "normalized": false,
+  "pooling": "mean, Normalize module removed",
+  "n_test_pairs": 1379,
+  "n_val_pairs": 1500,
+  "dataset": "stsb_mpnet",
+  "created": "2026-11-11T10:23:00+00:00",
+  "model_revision": "e8c3b32edf5434bc2275fc9bab85f82640a19130",
+  "device": "cuda",
+  "seconds": 26.5,
+  "source": "/projects/iris/fabio.gonzalezosorio/data/embedkit-bench/features/stsb_mpnet.npz",
+  "task": "sts"
+ },
+ "stages": {
+  "val": [
+   {
+    "method": "pca-32",
+    "seed": 0,
+    "metric": "sts_spearman",
+    "value": 0.8148515178734288,
+    "fit_time": 1.2325013130903244,
+    "transform_time": 0.07374483346939087,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "whiten": false,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca-32",
+    "seed": 0,
+    "metric": "trustworthiness",
+    "value": 0.9380686323570179,
+    "fit_time": 1.2325013130903244,
+    "transform_time": 0.07374483346939087,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "whiten": false,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca-32",
+    "seed": 0,
+    "metric": "continuity",
+    "value": 0.9698039117914709,
+    "fit_time": 1.2325013130903244,
+    "transform_time": 0.07374483346939087,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "whiten": false,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca-32",
+    "seed": 0,
+    "metric": "knn_overlap",
+    "value": 0.4463230240549828,
+    "fit_time": 1.2325013130903244,
+    "transform_time": 0.07374483346939087,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "whiten": false,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca-32",
+    "seed": 0,
+    "metric": "linear_cka",
+    "value": 0.8060869991436446,
+    "fit_time": 1.2325013130903244,
+    "transform_time": 0.07374483346939087,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "whiten": false,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca-32",
+    "seed": 0,
+    "metric": "k_skewness",
+    "value": 1.1380876054168703,
+    "fit_time": 1.2325013130903244,
+    "transform_time": 0.07374483346939087,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "whiten": false,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca-32",
+    "seed": 0,
+    "metric": "effective_rank",
+    "value": 30.95760298020955,
+    "fit_time": 1.2325013130903244,
+    "transform_time": 0.07374483346939087,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "whiten": false,
+     "random_state": 0
+    },
+    "per_point": null
+   }
+  ],
+  "test": [
+   {
+    "method": "pca-32",
+    "seed": 0,
+    "metric": "sts_spearman",
+    "value": 0.7510318487382074,
+    "fit_time": 1.2149675581604242,
+    "transform_time": 0.07255398482084274,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "whiten": false,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca-32",
+    "seed": 0,
+    "metric": "trustworthiness",
+    "value": 0.9621669703828801,
+    "fit_time": 1.2149675581604242,
+    "transform_time": 0.07255398482084274,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "whiten": false,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca-32",
+    "seed": 0,
+    "metric": "continuity",
+    "value": 0.9758346016497692,
+    "fit_time": 1.2149675581604242,
+    "transform_time": 0.07255398482084274,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "whiten": false,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca-32",
+    "seed": 0,
+    "metric": "knn_overlap",
+    "value": 0.4826410658307209,
+    "fit_time": 1.2149675581604242,
+    "transform_time": 0.07255398482084274,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "whiten": false,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca-32",
+    "seed": 0,
+    "metric": "linear_cka",
+    "value": 0.8257823276458649,
+    "fit_time": 1.2149675581604242,
+    "transform_time": 0.07255398482084274,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "whiten": false,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca-32",
+    "seed": 0,
+    "metric": "k_skewness",
+    "value": 0.9282341342912446,
+    "fit_time": 1.2149675581604242,
+    "transform_time": 0.07255398482084274,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "whiten": false,
+     "random_state": 0
+    },
+    "per_point": null
+   },
+   {
+    "method": "pca-32",
+    "seed": 0,
+    "metric": "effective_rank",
+    "value": 30.79220326889718,
+    "fit_time": 1.2149675581604242,
+    "transform_time": 0.07255398482084274,
+    "dim": 32,
+    "transductive": false,
+    "params": {
+     "n_components": 32,
+     "whiten": false,
+     "random_state": 0
+    },
+    "per_point": null
+   }
+  ]
+ },
+ "errors": {},
+ "warnings": {
+  "val": [],
+  "test": []
+ },
+ "elapsed": 4.09923417493701
+}

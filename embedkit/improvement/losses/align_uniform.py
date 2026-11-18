@@ -9,6 +9,8 @@ from embedkit.improvement.losses.base import BaseLoss
 
 
 class AlignUniformLoss(BaseLoss):
+    uses_labels = False
+
     def __init__(self, alpha: float = 2.0, t: float = 2.0):
         super().__init__()
         self.alpha = alpha
@@ -34,7 +36,8 @@ class AlignUniformLoss(BaseLoss):
 def _chunked_uniformity(z: torch.Tensor, t: float, chunk: int = 1024) -> torch.Tensor:
     """Compute log-average pairwise Gaussian potential without torch.pdist.
 
-    Processes rows in chunks to bound peak memory to O(chunk × 2N × d).
+    ``z`` must be L2-normalised. Processes rows in chunks to bound peak memory to
+    O(chunk × 2N × d).
     Avoids CUDA's torch.pdist size limit and the N×N×D broadcast.
     """
     n = z.shape[0]
@@ -45,7 +48,9 @@ def _chunked_uniformity(z: torch.Tensor, t: float, chunk: int = 1024) -> torch.T
         # only upper-triangle pairs to avoid double-counting
         for j in range(i, n, chunk):
             zj = z[j: j + chunk]  # (cj, d)
-            sq = torch.cdist(zi, zj, p=2).pow(2)  # (ci, cj)
+            # z is unit-norm, so ||a - b||^2 = 2 - 2 a.b. This avoids torch.cdist, whose
+            # backward is not implemented on Apple MPS.
+            sq = (2.0 - 2.0 * zi @ zj.T).clamp(min=0.0)  # (ci, cj)
             if i == j:
                 # keep strict upper triangle within the diagonal block
                 mask = torch.triu(torch.ones_like(sq, dtype=torch.bool), diagonal=1)

@@ -1,5 +1,15 @@
 # Unsupervised Embedding Refinement — Analysis Report
 
+> **Superseded (2026-11-11).** This report's conclusions rest on one seed, one dataset, and
+> configurations chosen by their **test** accuracy. Benchmarks E1 and E2 repeat the comparison with
+> selection on validation data, five seeds, seven datasets, and training-free baselines
+> ([`BENCHMARK_E1_E2.md`](BENCHMARK_E1_E2.md)). They find the following:
+> - No self-supervised configuration selected on validation beats PCA or PCA-whitening at the same dimension.
+> - On Pets, the refiner ties with PCA-64 (0.900 vs 0.901).
+> - No label-free statistic, k-skewness included, is a reliable stopping rule.
+>
+> Read this report as the history of the pilot, not as evidence for the self-supervised mode.
+
 **Dataset:** Oxford-IIIT Pets · 37 fine-grained classes · 3,680 train / 3,669 test  
 **Backbone:** ResNet50 (ImageNet V2) · 2048-D penultimate features  
 **Evaluation metric:** kNN accuracy (k=5) on the test split  

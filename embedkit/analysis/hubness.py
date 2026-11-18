@@ -37,24 +37,30 @@ class HubnessAnalyzer(BaseAnalyzer):
         self.subsample = subsample
         self.random_state = random_state
 
-    def fit(self, X, y=None) -> HubnessResult:
+    def fit(self, X, y=None, neighbor_index: np.ndarray | None = None) -> HubnessResult:
+        """Compute hubness statistics.
+
+        neighbor_index:
+            Optional precomputed kNN graph of ``X`` (shape ``(n, >= k)``, row ``i`` holding
+            the neighbours of row ``i`` in ascending distance, without ``i`` itself), for
+            example from :func:`embedkit.utils.neighbors.knn`. When given, it is used as is:
+            ``X`` is not subsampled and no search is run. Its first ``k`` columns are used.
+        """
         X = self._prepare(X)
-        rng = np.random.default_rng(self.random_state)
         n = X.shape[0]
-        if n > self.subsample:
-            idx = rng.choice(n, self.subsample, replace=False)
-            X = X[idx]
-            n = self.subsample
+        if neighbor_index is not None:
+            indices = _check_neighbor_index(neighbor_index, n, self.k)
+        else:
+            rng = np.random.default_rng(self.random_state)
+            if n > self.subsample:
+                idx = rng.choice(n, self.subsample, replace=False)
+                X = X[idx]
+                n = self.subsample
+            _, indices = knn(X, self.k, metric=self.metric)
 
-        _, indices = knn(X, self.k, metric=self.metric)
-
-        N_k = np.bincount(indices.ravel(), minlength=n).astype(np.int64)
-
+        N_k = k_occurrence(indices, n)
         mean_N = N_k.mean()
-        std_N = N_k.std()
-        k_skewness = float(
-            np.mean((N_k - mean_N) ** 3) / (std_N ** 3 + 1e-10)
-        )
+        k_skewness = k_occurrence_skewness(N_k)
 
         sorted_N = np.sort(N_k)
         n_arr = np.arange(1, n + 1)
@@ -85,3 +91,34 @@ class HubnessAnalyzer(BaseAnalyzer):
             antihubs=antihubs,
             hub_contamination=hub_contamination,
         )
+
+
+def k_occurrence(indices: np.ndarray, n: int) -> np.ndarray:
+    """k-occurrence ``N_k``: how often each of ``n`` points appears in the neighbour lists.
+
+    ``indices`` is a kNN graph of shape ``(n, k)``, for example from
+    :func:`embedkit.utils.neighbors.knn`. Returns an ``int64`` array of length ``n``.
+    """
+    return np.bincount(np.asarray(indices).ravel(), minlength=n).astype(np.int64)
+
+
+def k_occurrence_skewness(N_k: np.ndarray) -> float:
+    """Skewness of the k-occurrence distribution (the "hubness" of Radovanovic et al. 2010).
+
+    Population (biased) skewness ``E[(N - mean)^3] / std^3``; ``1e-10`` is added to the cubed
+    standard deviation, so a constant ``N_k`` gives 0.
+    """
+    N_k = np.asarray(N_k)
+    mean_N = N_k.mean()
+    std_N = N_k.std()
+    return float(np.mean((N_k - mean_N) ** 3) / (std_N ** 3 + 1e-10))
+
+
+def _check_neighbor_index(neighbor_index, n: int, k: int) -> np.ndarray:
+    """Validate a precomputed kNN graph for ``n`` points and return its first ``k`` columns."""
+    indices = np.asarray(neighbor_index)
+    if indices.ndim != 2 or indices.shape[0] != n or indices.shape[1] < k:
+        raise ValueError(
+            f"neighbor_index must have shape ({n}, >= {k}), got {indices.shape}"
+        )
+    return indices[:, :k].astype(np.int64, copy=False)

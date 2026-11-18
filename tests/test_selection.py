@@ -1,0 +1,130 @@
+"""EmbedKit(strategy="select"), the default since WP 7.2."""
+
+import numpy as np
+import pandas as pd
+import pytest
+import torch
+
+from embedkit import EmbedKit
+from embedkit.baselines import CenterNormalize
+
+KW = dict(device="cpu", random_state=0)
+
+
+def _noisy_classes(n=1500, d=1000, n_classes=5, seed=0):
+    """Class signal in 8 high-variance directions, plus many low-variance noise columns whose
+    total variance swamps it: PCA keeps the signal and drops most of the noise."""
+    rng = np.random.default_rng(seed)
+    y = rng.integers(0, n_classes, n)
+    means = rng.standard_normal((n_classes, 8)) * 0.6
+    signal = means[y] + rng.standard_normal((n, 8))
+    noise = rng.standard_normal((n, d - 8)) * 1.5
+    return np.hstack([signal * 3.0, noise]).astype(np.float32), y
+
+
+def test_without_labels_the_default_is_center_l2():
+    X = np.random.default_rng(0).standard_normal((200, 16)).astype(np.float32) + 3.0
+    ek = EmbedKit(**KW).fit(X)
+    assert ek.selected_ == "center_l2" and ek.strategy_ == "select"
+    assert ek.selection_report_ is None and ek.analysis_report is None
+    np.testing.assert_allclose(ek.transform(X), CenterNormalize().fit(X).transform(X),
+                               atol=1e-6)
+    Zt = ek.transform(torch.from_numpy(X))
+    assert isinstance(Zt, torch.Tensor) and Zt.shape == (200, 16)
+
+
+def test_labels_select_a_transform_that_beats_identity():
+    X, y = _noisy_classes()
+    ek = EmbedKit(mode="self_supervised", **KW).fit(X, y)
+    t = ek.selection_report_
+    assert list(t["candidate"]) == ["identity", "center_l2", "pca-64", "pca-128", "pca-256"]
+    assert t["selected"].sum() == 1 and ek.selected_ == t.loc[t["selected"], "candidate"].item()
+    assert ek.selected_.startswith("pca-"), t
+    row = t[t["selected"]].iloc[0]
+    assert row["beats_identity"] and row["diff_lo"] > 0
+    assert t.attrs["criterion"] == "knn_accuracy" and t.attrs["n_val"] == 300
+    k = int(ek.selected_.split("-")[1])
+    assert ek.transform(X).shape == (len(X), k) and ek.method_ == "pca"
+
+
+def test_identity_is_kept_without_a_significant_gain():
+    rng = np.random.default_rng(1)
+    X = rng.standard_normal((600, 32)).astype(np.float32)
+    y = rng.integers(0, 3, 600)  # labels unrelated to X
+    ek = EmbedKit(mode="self_supervised", **KW).fit(X, y)
+    assert ek.selected_ == "identity", ek.selection_report_
+    np.testing.assert_array_equal(ek.transform(X), X)
+
+
+def test_supervised_selection_includes_the_refiner():
+    X, y = _noisy_classes(n=400, d=40)
+    ek = EmbedKit(epochs=2, eval_every=1, **KW).fit(X, y)  # mode="auto" with labels
+    assert ek.mode_ == "supervised"
+    names = list(ek.selection_report_["candidate"])
+    assert names[-1] == "refiner-20" and "pca-64" not in names  # 64 is not below d = 40
+    if ek.selected_ == "refiner-20":
+        assert ek.method_ == "refiner" and ek.transform(X).shape == (400, 20)
+
+
+def test_regression_uses_knn_r2():
+    rng = np.random.default_rng(0)
+    X = rng.standard_normal((300, 12)).astype(np.float32)
+    y = X[:, 0] * 2 + 0.1 * rng.standard_normal(300)
+    ek = EmbedKit(mode="regression", epochs=1, eval_every=100, **KW).fit(X, y)
+    assert ek.selection_report_.attrs["criterion"] == "knn_regression_r2"
+    assert "refiner-6" in set(ek.selection_report_["candidate"])
+
+
+def test_too_few_rows_return_identity_with_a_warning():
+    X, y = _noisy_classes(n=60, d=20)
+    with pytest.warns(UserWarning, match="Too few rows"):
+        ek = EmbedKit(mode="self_supervised", **KW).fit(X, y)
+    assert ek.selected_ == "identity"
+
+
+def test_continuous_labels_need_regression_mode():
+    X = np.random.default_rng(0).standard_normal((100, 8)).astype(np.float32)
+    with pytest.raises(ValueError, match="mode='regression'"):
+        EmbedKit(**KW).fit(X, np.linspace(0, 1, 100))
+
+
+def test_training_configuration_without_a_refiner_raises():
+    X = np.random.default_rng(0).standard_normal((100, 8)).astype(np.float32)
+    with pytest.raises(ValueError, match="nested_dims configure training"):
+        EmbedKit(nested_dims="auto", **KW).fit(X)
+
+
+def test_explicit_method_means_fixed():
+    X = np.random.default_rng(0).standard_normal((100, 16)).astype(np.float32)
+    ek = EmbedKit(method="pca", target_dim=4, id_methods=["TwoNN"], **KW).fit(X)
+    assert ek.strategy_ == "fixed" and ek.selected_ is None
+    assert ek.transform(X).shape == (100, 4)
+
+
+@pytest.mark.parametrize("labels", [False, True])
+def test_save_load_roundtrip(tmp_path, labels):
+    X, y = _noisy_classes(n=600, d=100)
+    ek = EmbedKit(mode="self_supervised", **KW).fit(X, y if labels else None)
+    ek.save(tmp_path / "b")
+    back = EmbedKit.load(tmp_path / "b", device="cpu")
+    assert back.selected_ == ek.selected_ and back.strategy_ == "select"
+    assert back.mode_ == ek.mode_
+    if labels:
+        pd.testing.assert_frame_equal(back.selection_report_, ek.selection_report_,
+                                      check_dtype=False)
+        assert back.selection_report_.attrs == ek.selection_report_.attrs
+    else:
+        assert back.selection_report_ is None
+    np.testing.assert_allclose(back.transform(X), ek.transform(X), atol=1e-5)
+
+
+def test_report_k_and_deprecated_aliases():
+    from embedkit import EmbedKitAnalyzer
+
+    X = np.random.default_rng(0).standard_normal((300, 8)).astype(np.float32)
+    r = EmbedKitAnalyzer(id_methods=["TwoNN"], calibrate=False, id_bootstrap=0,
+                         id_scale_curve=False).fit(X)
+    with pytest.warns(DeprecationWarning, match="report.k"):
+        assert r.suggested_k == r.k
+    with pytest.warns(DeprecationWarning, match="kernel.sigma"):
+        assert r.suggested_sigma == r.kernel.sigma

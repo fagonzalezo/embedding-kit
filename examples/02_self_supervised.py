@@ -15,8 +15,19 @@ print("=== Before refinement ===")
 report_before = EmbedKitAnalyzer(id_methods=["TwoNN"]).fit(X)
 report_before.print_summary()
 
-print("\nRefining embedding (self-supervised) ...")
-ek = EmbedKit(mode="self_supervised", epochs=50, eval_every=10, target_dim="auto")
+# Without labels the default (strategy="select") centres and L2-normalises: no label-free score
+# can tell whether a transform helps, and in E4 PCA to the suggested dimension lost accuracy on
+# 32 of 35 natural sets. With labels, EmbedKit().fit(X, y) chooses by validation instead.
+X_default = EmbedKit().fit_transform(X)
+print(f"Default (centre + L2) shape: {X_default.shape}")
+
+# PCA at the report's suggested dimension, as a fixed configuration.
+X_pca = EmbedKit(method="pca", target_dim="auto").fit_transform(X)
+print(f"PCA shape: {X_pca.shape}")
+
+print("\nRefining embedding (self-supervised, trained refiner) ...")
+ek = EmbedKit(mode="self_supervised", method="refiner", epochs=50, eval_every=10,
+              target_dim="auto")
 X_refined = ek.fit_transform(X)
 print(f"Refined shape: {X_refined.shape}")
 
@@ -26,7 +37,7 @@ report_after.print_summary()
 
 print(f"\nk_skewness:  {report_before.hubness.k_skewness:.3f} → {report_after.hubness.k_skewness:.3f}")
 print(f"uniformity:  {report_before.geometry.uniformity.uniformity:.4f} → {report_after.geometry.uniformity.uniformity:.4f}")
-print(f"severity:    {report_before.severity} → {report_after.severity}")
+print(f"outside the null: {report_before.n_outside_null} → {report_after.n_outside_null}")
 
 viz = EmbeddingVisualizer(method="pca", random_state=0)
 fig = viz.plot_comparison(X, X_refined)

@@ -57,7 +57,8 @@ EmbedKitAnalyzer(id_methods=["TwoNN"]).fit(X_train).print_summary()
 aug = CompositeAugmentation([GaussianNoise(std=0.05), FeatureDropout(p=0.1)])
 loss_fn = CombinedLoss([(SupConLoss(temperature=0.07), 1.0), (AlignUniformLoss(), 0.3)])
 
-model = EmbeddingRefiner(input_dim=64, target_dim=16, hidden_dim=256, n_layers=2)
+model = EmbeddingRefiner(input_dim=64, target_dim=16, hidden_dim=256, n_layers=2,
+                         architecture="mlp")
 trainer = Trainer(
     model=model,
     augmentation=aug,
