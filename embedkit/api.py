@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import warnings
 from collections.abc import Sequence
 from pathlib import Path
@@ -277,10 +278,14 @@ class EmbedKit:
             self.method_ = "pca"
         else:
             final = self._fixed_refiner(int(winner.split("-")[1]))
-            final.fit(X_np, y)
+            with warnings.catch_warnings():  # the refiner has just beaten Identity here
+                warnings.filterwarnings("ignore", message="Regression refiner fitted on")
+                final.fit(X_np, y)
             self._adopt(final)
         self.selected_, self.selection_report_ = winner, table
-        self._config["selected"] = winner
+        self._config.update(strategy="select", mode=self.mode_, selected=winner,
+                            selection_report=json.loads(table.to_json(orient="records")),
+                            selection_attrs=dict(table.attrs))
         return self
 
     def _pca_dims(self, d: int, rank: int) -> list[int]:
@@ -547,14 +552,15 @@ class EmbedKit:
         bundle = load_bundle(directory)
         cfg = bundle["config"]
         if cfg.get("method") in ("identity", "center_l2"):
-            obj = cls(mode=cfg.get("mode", "self_supervised"))
+            obj = cls(mode=cfg.get("mode", "self_supervised"),
+                      strategy=cfg.get("strategy", "select"))
             base = Identity() if cfg["method"] == "identity" else CenterNormalize()
             base.n_features_in_ = base.n_features_out_ = cfg["input_dim"]
             if cfg["method"] == "center_l2":
                 base.mean_ = np.asarray(bundle["arrays"]["mean"], dtype=np.float64)
             obj._baseline, obj.device = base, device
-            obj.method_ = obj.selected_ = cfg["method"]
-            obj._config = cfg
+            obj.method_ = cfg["method"]
+            _restore_selection(obj, cfg)
             return obj
         obj = cls(
             mode=cfg.get("mode", "self_supervised"),
@@ -576,8 +582,7 @@ class EmbedKit:
         obj._trainer = _inference_trainer(model, device)
         obj.device = device
         obj.method_ = cfg.get("method", "refiner")
-        obj.selected_ = cfg.get("selected")
-        obj._config = cfg
+        _restore_selection(obj, cfg)
         return obj
 
     def _resolve_target_dim(self, d: int, report: EmbedKitReport) -> int:
@@ -634,6 +639,18 @@ _PARAMS = {name: name for name in (
     "weight_decay", "scheduler", "eval_every", "early_stopping_patience", "monitor",
     "val_split", "device", "id_methods", "random_state", "nested_dims", "val_fraction",
     "selection_metric")} | {"augmentation": "augmentation_cfg", "loss": "loss_cfg"}
+
+
+def _restore_selection(obj: EmbedKit, cfg: dict) -> None:
+    """Set the fitted attributes that a bundle records (``selection_report_`` since WP 7.2)."""
+    obj._config = cfg
+    obj.mode_ = cfg.get("mode", "self_supervised")
+    obj.strategy_ = cfg.get("strategy", "fixed")
+    obj.selected_ = cfg.get("selected")
+    obj.selection_report_ = None
+    if cfg.get("selection_report"):
+        obj.selection_report_ = pd.DataFrame(cfg["selection_report"])
+        obj.selection_report_.attrs.update(cfg.get("selection_attrs", {}))
 
 
 def _labels_array(y, mode: str) -> np.ndarray:

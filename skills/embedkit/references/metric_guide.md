@@ -3,11 +3,13 @@
 Detailed interpretation of every metric in `EmbedKitReport`, including rough reading ranges,
 which statistics the report judges, geometric meaning, and the downstream consequences.
 
-Since 0.5.0 the report does not apply fixed pathology thresholds, with one exception (the
-ID / D ratio). Hubness, antihubs, distance concentration, neighbour consistency and uniformity are
-compared with a null model (see "Calibration" below), and recommendations about them come only from
-z-scores. The ranges in the tables below are rough guides for reading a number; the report does not
-use them.
+The report applies no fixed pathology thresholds. Hubness, antihubs, distance concentration,
+neighbour consistency and uniformity are compared with a null model (see "Calibration" below). Since
+experiment E4 (WP 7.1) the only recommendations are two rules, from the z-scores of k-skewness and the
+antihub ratio under `metric="euclidean"`; every other statistic is descriptive. E4 tested 9 rules on
+35 natural classification sets, and the other 7 did not predict the gain of their fix
+(`benchmarks/results/e4/REPORT.md`). The ranges in the tables below are rough guides for reading a
+number; the report does not use them, and a reading outside them is not evidence that a transform helps.
 
 ---
 
@@ -32,14 +34,15 @@ use them.
 The k-NN estimators (TwoNN, MLE, MOM) read low at high ID (15 to 17 on a 20-sphere, n = 5,000);
 `lPCA` returns d + 1 for a d-sphere. The intervals do not cover these biases.
 
-### Key ratio: reference ID / ambient dimension (D)
+### Reference ID / ambient dimension (D) and `suggested_target_dim`
 
 | ID/D ratio | Report | `suggested_target_dim` |
 |---|---|---|
 | any | No recommendation (the ID / D rule was removed after E4: it fired on all 35 natural sets, and PCA to `suggested_target_dim` lost accuracy on 32) | `clip(1.5 × ID, max(4, ID), D)` |
 
-No benchmark supports the factor 1.5. If the estimate is unreliable (small n, noisy data), pass an
-explicit `target_dim`.
+No benchmark supports the factor 1.5. `EmbedKit` reads it only under `strategy="fixed"` with
+`target_dim="auto"`; the default `strategy="select"` does not compute the report. If you reduce
+dimension, pass an explicit `target_dim` and test it against the input on held-out data.
 
 ---
 
@@ -75,6 +78,10 @@ k-skewness z did not predict the gain of a hubness reduction on cosine kNN (Spea
   `embedkit.hubness_reduction.MutualProximity` (also `LocalScaling`, `CSLS`, `DisSimLocal`).
   In E4 the best of them raised Euclidean kNN accuracy significantly on all 3 natural sets where
   the k-skewness rule fired and on 5 of the 8 where the antihub rule fired.
+  The evidence is modest: the k-skewness rule fired on only 3 sets (two of them from the same encoder),
+  and E4 applied no multiplicity correction over its 23 primary tests, so about one false pass is
+  expected by chance. On the E1 sets the best hubness reduction changed cosine kNN accuracy by at most
+  +0.005. Check on your own held-out data.
 - Training with `AlignUniformLoss` (uniformity term) is a possible remedy but not benchmarked for
   hubness (E4 tested training-free fixes only).
 
@@ -96,7 +103,9 @@ k-skewness z did not predict the gain of a hubness reduction on cosine kNN (Spea
 meaningless — all distances are indistinguishable. This is the curse of dimensionality in its
 most acute form.
 
-**Fix (not benchmarked):** a lower-dimensional output (`target_dim`).
+**Fix:** none validated. In E4 PCA and hubness reduction did not help more where `distance_cv` was
+further below the null (Spearman -0.50 for both on Euclidean kNN), and PCA to the report's
+`suggested_target_dim` lost accuracy on 32 of 35 sets.
 
 ---
 
@@ -120,8 +129,10 @@ with cluster structure, and whitening can hurt classification.
 | `eigenvalue_spectrum_top`, `explained_variance_ratio` | Top `n_components` eigenvalues, for plotting (`AnalysisPlotter.plot_eigenvalue_spectrum()`); `eigenvalue_spectrum` is a deprecated alias |
 
 **Effect:** Anisotropic embeddings concentrate variance in a few directions, and a shared mean
-vector inflates cosine similarity between unrelated rows. Whether `AlignUniformLoss`, whitening or
-mean removal helps is an open question (E4).
+vector inflates cosine similarity between unrelated rows. E4 found that none of these readings
+predicted the gain of mean removal, all-but-the-top, whitening or standardising, and ZCA and
+PCA-whitening lost accuracy on most sets (ZCA on 34 of 35 under cosine kNN). `EmbedKit`'s default
+removes the mean (centring) and normalises; it was the most consistent small gain in E4.
 
 ---
 
@@ -136,7 +147,8 @@ mean removal helps is an open question (E4).
 **Effect:** Low consistency means small changes in input values cause large changes
 in the kNN graph. The local structure is fragile — models trained on it are not robust.
 
-**Fix (not benchmarked):** `GaussianNoise(adaptive=True)` or `EmbeddingMixup` augmentations.
+**Fix (not benchmarked):** `GaussianNoise(adaptive=True)` or `EmbeddingMixup` augmentations. In
+E4 the reading did not predict the gain of PCA (Spearman -0.35 and -0.02 for the two metrics).
 
 ---
 
@@ -160,7 +172,7 @@ hurts retrieval diversity and model calibration. `AlignUniformLoss` optimizes th
 
 Applies an RBF kernel `K(x_i, x_j) = exp(−||x_i − x_j||² / (2σ²))` on a subsample and analyzes
 the spectrum of the centred kernel `Kc = HKH`. Sigma is the median pairwise distance
-(`suggested_sigma` in the report).
+(`report.kernel.sigma`; `suggested_sigma` is a deprecated alias removed in 0.7.0).
 
 | Attribute | Meaning |
 |---|---|
@@ -209,7 +221,8 @@ spectrum; or `"permuted"`: each column permuted). The comparison runs on a subsa
 - Rows with a common norm (normalised upstream) are compared with null draws normalised to that
   norm; this calibrates flat-spectrum rows only (a power-law spectrum on the sphere gives
   spurious z of +8 to +11).
-- The high-level `EmbedKit` runs the report uncalibrated and reads only `suggested_target_dim`.
+- The high-level `EmbedKit` computes no report under `strategy="select"` (`analysis_report` is
+  `None`); `strategy="fixed"` runs it uncalibrated and reads only `suggested_target_dim`.
 
 ---
 

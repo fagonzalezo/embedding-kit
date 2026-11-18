@@ -647,7 +647,7 @@ Release as 0.6.0.
 | 7.1 | Run E4 | done (2026-11-17): 35 natural sets; 2 of 9 rules kept (hubness and antihubs, Euclidean kNN), the rest removed from the report (outcome below) |
 | 7.2 | Selection-based auto-configuration | done (2026-11-17): `strategy="select"` default; decisions and deviations in "WP 7.2 notes" |
 | 7.3 | Robustness and scaling | in progress (2026-11-17): input validation done (`validate_embeddings` at every public entry point); E9 harness built, analyzer runs submitted (arrays 3083006, 3083007) |
-| 7.4 | Documentation | in progress (2026-11-17): `docs/MIGRATION.md` (0.1.2 to 0.5.0) written and extended for the E4 changes; manual and skill passages on recommendations updated; full README and manual pass not started |
+| 7.4 | Documentation | in progress (2026-11-17): README rewritten around the benchmark results; manual and skill brought to the 0.6.0 API (every code block executed); `docs/MIGRATION.md` extended for WP 7.1 and 7.2; the E9 table waits for the runs |
 
 ### Phase 1 notes (2026-11-10)
 

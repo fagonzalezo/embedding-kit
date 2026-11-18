@@ -121,7 +121,7 @@ the defaults.
 | 0.4.0 | `early_stopping_patience=10`, `val_split=0.1`, `monitor="k_skewness"` | Defaults `"auto"`, `None` and `"auto"`. Self-supervised: no early stopping, all rows used for training, `k_skewness` only logged. Supervised and regression: patience 10, 10% of rows held out, best weights restored | Pass `early_stopping_patience=10, val_split=0.1, monitor="k_skewness"` for the 0.1.2 behaviour |
 | 0.5.0 | `mode="supervised"`: `SupConLoss(0.07)` + 0.5 `AlignUniformLoss`, MLP, `k_skewness` monitor | `SupConLoss(0.07)` alone on the residual adapter, monitored by `val_knn_accuracy` | See the snippet below |
 | 0.5.0 | No regression mode | `mode="regression"`: `RankNContrastLoss` on an MLP with `GaussianNoise(0.05)` views, monitored by `val_ridge_r2`; warns with 1000 rows or fewer | Additive |
-| 0.5.0 | `analysis_report` held the full report | `fit` runs the report with `calibrate=False, id_bootstrap=0, id_scale_curve=False`, since it reads only `suggested_target_dim`. `analysis_report.n_outside_null` and `.calibration` are `None`, and the calibrated recommendations are absent | Run `EmbedKitAnalyzer().fit(X)` yourself for the full report |
+| 0.5.0 | `analysis_report` held the full report | With `strategy="fixed"`, `fit` runs the report with `calibrate=False, id_bootstrap=0, id_scale_curve=False`, since it reads only `suggested_target_dim`; with `strategy="select"` (the default since WP 7.2) it runs none and `analysis_report` is `None`. `analysis_report.n_outside_null` and `.calibration` are `None`, and the calibrated recommendations are absent | Run `EmbedKitAnalyzer().fit(X)` yourself for the full report |
 | 0.1.3, 0.5.0 | `target_dim="auto"` | Can differ: 0.1.3 changed the ID estimates (duplicates removed, sequential runs); 0.5.0 uses 1.5 x TwoNN (Pets 22 to 24, digits 12 to 13) | Pass `target_dim=` to pin it |
 | 0.1.3 | `random_state` did not reproduce a run | Two fits with the same `random_state` return identical arrays on CPU. The initial weights come from `random_state`, so numbers differ from 0.1.2 | Re-run baselines; do not expect 0.1.2 numbers |
 | 0.4.0 | `config.json` had `mode`, `target_dim`, `hidden_dim`, `n_layers`, `input_dim` and the training settings | Also `method`, `architecture`, `nested_dims` | Bundles from 0.1.2 still load (section 6) |
@@ -138,14 +138,20 @@ ek = EmbedKit(method="refiner", architecture="mlp",
 Z = ek.fit_transform(X)
 
 # 0.1.2: supervised, SupCon + 0.5 AlignUniform on the MLP
-ek = EmbedKit(mode="supervised", architecture="mlp",
+ek = EmbedKit(mode="supervised", method="refiner", architecture="mlp",
               loss=CombinedLoss([(SupConLoss(temperature=0.07), 1.0), (AlignUniformLoss(), 0.5)]),
               early_stopping_patience=10, monitor="k_skewness", val_split=0.1)
 Z = ek.fit_transform(X, y)
 
 # 0.5.0 defaults: PCA without labels, residual adapter with SupCon and a held-out kNN score with labels
+Z = EmbedKit(strategy="fixed").fit_transform(X)
+Z = EmbedKit(mode="supervised", strategy="fixed").fit_transform(X, y)
+
+# Unreleased (WP 7.2) defaults: centre + L2 without labels, validated selection with labels
 Z = EmbedKit().fit_transform(X)
-Z = EmbedKit(mode="supervised").fit_transform(X, y)
+ek = EmbedKit().fit(X, y)
+Z = ek.transform(X)
+print(ek.selected_, ek.selection_report_)
 ```
 
 ## 5. `Trainer`, `EmbeddingRefiner`, losses and augmentations

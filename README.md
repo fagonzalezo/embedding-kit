@@ -1,72 +1,107 @@
-# Embedding Kit
+# EmbedKit
 
-A Python library for analyzing and improving ML embedding spaces. Embedding Kit has two pillars:
+EmbedKit is a Python library for analyzing and changing ML embedding spaces. It has an analysis
+side (intrinsic dimension, hubness, isotropy, distance concentration, kernel diagnostics, each
+compared with a null model) and an improvement side (training-free baselines, hubness-reducing
+neighbour search, and a contrastive refiner trained with or without labels). A benchmark harness
+and an evaluation protocol with paired bootstrap intervals ship with it. Most benchmark results
+below are negative, and the defaults were changed to match them.
 
-- **Analysis** — a suite of geometry-aware metrics that diagnose problems in an embedding space (hubness, distance collapse, anisotropy, intrinsic dimensionality mismatch, etc.) and produce actionable recommendations.
-- **Improvement** — dimension reduction and refinement. Without labels, `EmbedKit` defaults to PCA with L2 normalisation, which a trained contrastive refiner did not beat in our benchmarks ([`docs/BENCHMARK_E6_E7.md`](docs/BENCHMARK_E6_E7.md)); the refiner stays available. With class labels, a supervised contrastive refiner (SupCon on a residual adapter), and with continuous targets a Rank-N-Contrast refiner; in E8, with all training rows, these beat or tied the raw embeddings, LDA and PCA ([`docs/BENCHMARK_SUPERVISED.md`](docs/BENCHMARK_SUPERVISED.md)).
+## What the benchmarks show
 
-## Features
+All numbers below come from held-out splits with paired bootstrap intervals; "significant" means the
+95% interval excludes 0. Sources are in `docs/` and `benchmarks/results/`. The data are mostly
+pretrained text and image embeddings (E4: 35 sets from 10 source data sets and 3 or 4 encoders each);
+digits (raw pixels) and synthetic sets are also in E1 to E8.
 
-### Analysis
-- **Intrinsic dimension** estimation with 8 estimators: `TwoNN`, `MLE`, `lPCA`, `DANCo`, `CorrInt`, `MOM`, `FisherS`, `ESS`, each reported separately with a bootstrap interval
-- **Hubness analysis** — k-occurrence distribution, skewness, hub/antihub ratios
-- **Distance concentration** — detects when pairwise distances collapse to a narrow range (curse of dimensionality)
-- **Isotropy** — eigenvalue spectrum of the covariance matrix, participation ratio
-- **Neighbor consistency** — stability of the kNN graph across perturbations
-- **Uniformity score** — how well embeddings fill the unit hypersphere
-- **Kernel diagnostics** — centred RBF kernel: effective rank, spectral gap, top-k eigenvalue ratio, centred kernel alignment
-- **Null-model calibration** — k-skewness, antihub ratio, distance CV, neighbour consistency and uniformity are compared with a Gaussian null (z-scores); recommendations about them come only from the z-scores
+**Where the library does not help**
 
-All estimators follow the sklearn `fit` / `transform` API and accept `np.ndarray` or `torch.Tensor`.
+- **The self-supervised refiner did not beat PCA.** In E1 it won on none of 6 data sets against the
+  best training-free baseline at the same dimension (3 ties, 3 losses; STS-B scored 0.036 lower,
+  without an interval) ([`docs/BENCHMARK_E1_E2.md`](docs/BENCHMARK_E1_E2.md)). In E6 and E7, against
+  the better of PCA and PCA-whitening, it had 1 win, 4 ties and 1 loss with every training row, and
+  lost on 4 of 7 data sets when fitted on 200 to 1,000 rows (Banking77 -0.052 kNN accuracy,
+  synthetic -0.251) ([`docs/BENCHMARK_E6_E7.md`](docs/BENCHMARK_E6_E7.md)). It costs about 100 times more than PCA
+  ([`CHANGELOG.md`](CHANGELOG.md), 0.4.0). No label-free statistic tracked test accuracy during a
+  run (E2).
+- **No training-free fix beat the raw embedding on most data sets.** In E4, on 35 natural
+  classification sets, nothing was significantly better than the raw embedding on more than 16 sets
+  (centring plus L2 normalisation, Euclidean kNN: 16 up, 1 down, median +0.3 points). On cosine kNN
+  the best count was 10 (hubness reduction; 6 sets down) ([`benchmarks/results/e4/REPORT.md`](benchmarks/results/e4/REPORT.md)).
+- **PCA to the report's `suggested_target_dim` lost accuracy** on 32 of the 35 sets (cosine kNN,
+  median -5.1 points). That was the 0.5.0 default. ZCA whitening lost on 34 of 35 (cosine kNN) and
+  on all 35 (Euclidean kNN, median -21.5 points); PCA-whitening on 26 and 24.
+- **Most diagnostic rules did not predict a fix.** E4 tested 9 rules (hubness, antihubs, distance
+  concentration, neighbour consistency, ID/D, and four hypotheses about the mean direction, top
+  components, anisotropy and dominant coordinates). Two passed the pre-set criteria: hubness (k-skewness
+  above a null model) and antihubs, both for Euclidean kNN, both pointing to a hubness-reducing search.
+  The hubness rule fires on only 3 of 35 sets, so that evidence is thin; the antihub rule fires on 8 and
+  the fix helped significantly on 5. There was no correction for the 23 primary tests, where about one
+  false pass is expected by chance. The report recommends nothing else.
+- **Hubness reduction helps little under cosine.** On the E1 sets the best change against raw cosine
+  kNN was +0.005 (mutual proximity, CIFAR-100); it lost 0.009 on Pets and 0.028 on the synthetic set
+  (E1 addendum in `docs/BENCHMARK_E6_E7.md`). In E4 the best reduction was significantly better on 10
+  of 35 sets under cosine kNN and 14 of 35 under Euclidean kNN (median +0.4 points), worse on 6 and 3.
+- **The diagnostics have limits** ([`docs/BENCHMARK_DIAGNOSTICS.md`](docs/BENCHMARK_DIAGNOSTICS.md),
+  E3 and E5). The k-NN intrinsic-dimension estimators read 14 to 29% low at ID 20, and their
+  intervals cover sampling error only. Rows normalised upstream with a power-law spectrum are not
+  calibrated by the null model.
 
-### Improvement
-- **`EmbeddingRefiner`** — a PyTorch `nn.Module`: a linear map initialised at PCA (default), a residual adapter or an MLP, with optional L2 normalization
-- **Augmentations**: `GaussianNoise`, `FeatureDropout`, `EmbeddingMixup`, `KNNPairs`, `FeatureMasking`, `CompositeAugmentation`
-- **Losses**: `NTXentLoss`, `AlignUniformLoss`, `SupConLoss`, `TripletLoss`, `RankNContrastLoss`, `MatryoshkaLoss` (nested prefixes), `CombinedLoss`
-- **Auto-config** — `EmbedKit` takes `target_dim` from the analysis report (1.5 × TwoNN intrinsic dimension); loss, augmentation and architecture defaults are fixed per mode
-- **Self-supervised and supervised** modes: `EmbedKit(method="auto")` is PCA without labels and the trained refiner with them; `method="refiner"` trains in either mode
-- **Hubness reduction** — `LocalScaling`, `MutualProximity`, `CSLS`, `DisSimLocal` for kNN search
+**Where gains were measured: the supervised refiner**
 
-### Visualization
-- `AnalysisPlotter` — eigenvalue spectrum, distance histogram, k-occurrence distribution, kernel spectrum
-- `EmbeddingVisualizer` — before/after 2-D UMAP or PCA comparison with class labels
+- With class labels (E8, [`docs/BENCHMARK_SUPERVISED.md`](docs/BENCHMARK_SUPERVISED.md)), SupCon on a
+  residual adapter had higher kNN accuracy than the raw embeddings on 4 of 6 sets and lower on none:
+  CIFAR-100/DINOv2 0.879 to 0.900, Pets/ResNet-50 0.901 to 0.921, Banking77/MPNet 0.931 to 0.938,
+  STL-10/CLIP 0.983 to 0.986, digits tied (0.981 against 0.978). The gain on real data is +0.003 to
+  +0.021. On a synthetic set with large nuisance directions it is +0.185. Against LDA it won on 3 of
+  6 sets (+0.002 to +0.013) and lost on none.
+- Limits of that result: with 5 labels per class, LDA was ahead of the best refiner by 0.04 to 0.08; with
+  1 label per class the refiner fell below raw on Banking77 and STL-10. Trained on 20 coarse labels
+  and scored on the 100 fine CIFAR-100 classes, SupCon dropped to 0.645 (raw 0.879).
+- With continuous targets, Rank-N-Contrast on an MLP beat raw and PCA on ridge R^2 on all 4 sets
+  (+0.023 to +0.574 against raw). With 200 or 1,000 training rows it lost to raw on 6 of 8 sets.
 
-### Ecosystem integration
-- Sklearn-compatible (`fit` / `transform`, usable in `Pipeline`)
-- Accepts `np.ndarray` and `torch.Tensor` inputs
-- Exact kNN through scikit-learn by default; FAISS is an optional, faster backend (see Optional extras)
-- Model save/load with `EmbedKit.save()` / `EmbedKit.load()`
+Not yet measured: the selection procedure described below was not benchmarked on its own (it
+reuses E4's findings). Time and memory are being measured (E9).
+
+## What the defaults do
+
+`EmbedKit()` chooses its output by validation, not by diagnosis (`strategy="select"`).
+
+- **Without labels** it returns the input centred on the training mean and scaled to unit L2 norm
+  (`CenterNormalize`). No label-free score can say that a transform helps (kNN overlap with the input
+  ranks the unchanged input first), and centring plus L2 was the most consistent small gain in E4. For a
+  cosine search it changes nothing beyond removing the mean.
+- **With labels** it holds out 20% of the rows, fits `Identity`, `CenterNormalize`, PCA at 64, 128 and
+  256 (below the input dimension, L2-normalised) and, in supervised or regression mode, the refiner, and
+  scores each by 10-NN accuracy (classes) or 10-NN R^2 (continuous targets). A candidate replaces
+  `Identity` only if a paired bootstrap interval of its gain on the held-out rows lies above 0. Otherwise
+  the output is the input unchanged. The winner is refitted on all rows.
+- `mode="auto"` is self-supervised without labels and supervised with them; continuous targets need
+  `mode="regression"`. `strategy="fixed"` (or any `method` other than `"auto"`) builds one configuration
+  as in 0.5.0: `method="pca"`, or the refiner with `method="refiner"`.
+
+The 0.5.0 behaviour is in [`docs/MIGRATION.md`](docs/MIGRATION.md) with every other breaking change
+since 0.1.2.
 
 ## Installation
 
-### uv
-
-```bash
-uv add git+https://github.com/fagonzalezo/embedding-kit.git
-
-# With torchvision (required for image-classification examples):
-uv add "embedkit[examples] @ git+https://github.com/fagonzalezo/embedding-kit.git"
-```
-
-### pip
+Python 3.10 or later.
 
 ```bash
 pip install git+https://github.com/fagonzalezo/embedding-kit.git
-
-# With torchvision (required for image-classification examples):
-pip install "embedkit[examples] @ git+https://github.com/fagonzalezo/embedding-kit.git"
+# or: uv add git+https://github.com/fagonzalezo/embedding-kit.git
 ```
-
-### Optional extras
 
 | Extra | Installs | When to use |
 |---|---|---|
-| `examples` | `torchvision` | Running image-classification examples (e.g., `examples/04_image_classification.*`) |
-| `faiss` | `faiss-cpu` | Faster exact kNN on large datasets. Enable it with `knn(..., backend="faiss")` or by setting `EMBEDKIT_KNN_BACKEND=faiss`. |
+| `examples` | `torchvision` | The image-classification example (`examples/04_image_classification.*`) |
+| `faiss` | `faiss-cpu` | Faster exact kNN on large data: `knn(..., backend="faiss")` or `EMBEDKIT_KNN_BACKEND=faiss` |
+| `dev` | pytest, ruff, mypy | Running the tests |
 
-FAISS is not installed by default. Some environments load two copies of the OpenMP runtime when
-FAISS and PyTorch are imported together, which aborts the process (`OMP: Error #15`) or crashes
-inside the search. The default scikit-learn backend gives the same, exact neighbours.
+Install an extra with `pip install "embedkit[faiss] @ git+https://github.com/fagonzalezo/embedding-kit.git"`.
+FAISS is not a default: next to PyTorch it can load two OpenMP runtimes and abort the process
+(`OMP: Error #15`). The default scikit-learn backend returns the same exact neighbours.
 
 ## Quickstart
 
@@ -74,64 +109,103 @@ inside the search. The default scikit-learn backend gives the same, exact neighb
 import numpy as np
 from embedkit import EmbedKit, EmbedKitAnalyzer
 
-X = np.load("embeddings.npy")   # shape (n_samples, n_features)
+X = np.load("embeddings.npy")   # (n_samples, n_features)
+y = np.load("labels.npy")       # class labels, only for the supervised parts
 
-# Analyze geometry — produces a report with metrics and recommendations
+# Analysis: statistics, null-model z-scores, descriptive properties, recommendations
 report = EmbedKitAnalyzer(k=10).fit(X)
 report.print_summary()
-df = report.to_dataframe()      # pandas DataFrame for logging / CSV export
+print(report.recommendations)   # at most the two validated rules, Euclidean metric only
+df = report.to_dataframe()
 
-# Self-supervised: PCA at the suggested dimension, L2-normalised (the benchmarked default)
-X_reduced = EmbedKit(mode="self_supervised").fit_transform(X)
-X_32 = EmbedKit(target_dim=128).fit(X).transform(X, dim=32)   # nested prefixes
+# Without labels: centred and L2-normalised, nothing trained
+Z = EmbedKit().fit_transform(X)
 
-# Self-supervised contrastive refiner (opt-in; see docs/BENCHMARK_E6_E7.md)
-X_refined = EmbedKit(mode="self_supervised", method="refiner", epochs=100).fit_transform(X)
-
-# Supervised refinement with class labels (see docs/BENCHMARK_SUPERVISED.md)
-y = np.load("labels.npy")
-X_refined = EmbedKit(mode="supervised", epochs=100).fit_transform(X, y=y)
-
-# Regression targets (Rank-N-Contrast)
-X_refined = EmbedKit(mode="regression", epochs=100).fit_transform(X, y=targets)
+# With labels: selection among candidates, Identity unless one is significantly better
+ek = EmbedKit(epochs=50).fit(X, y)
+Z = ek.transform(X)
+print(ek.selected_)                  # "identity", "center_l2", "pca-128", "refiner-128", ...
+print(ek.selection_report_)          # one row per candidate: score, gain over Identity, interval
 ```
 
-See [`examples/`](https://github.com/fagonzalezo/embedding-kit/tree/main/examples) for full usage patterns including low-level API, custom augmentations, and workflow integrations.
+`selection_report_` columns: `candidate`, `dim`, `score` (held-out), `diff_vs_identity`, `diff_lo`,
+`diff_hi` (95% bootstrap interval), `beats_identity`, `selected`.
+
+Fixed configurations, and a refiner trained without labels (E1, E6, E7: not better than PCA):
+
+```python
+from embedkit import EmbedKit
+
+Z = EmbedKit(strategy="fixed", target_dim=64).fit_transform(X)                 # PCA to 64, L2
+Z = EmbedKit(method="refiner", target_dim=64, epochs=100).fit_transform(X)     # contrastive refiner
+Z = EmbedKit(mode="regression", epochs=50).fit_transform(X, y=y.astype(float))  # continuous targets
+```
+
+Hubness-reducing search, for Euclidean kNN when the report recommends it (a secondary distance, not a
+transform: fit it on the gallery, then query):
+
+```python
+from embedkit.hubness_reduction import MutualProximity
+
+Z_train, Z_test = X[:800], X[800:]
+mp = MutualProximity(metric="euclidean").fit(Z_train)
+dist, idx = mp.kneighbors(Z_test, n_neighbors=10)   # neighbours among the Z_train rows
+```
+
+Scoring a transform against baselines on held-out data, with paired bootstrap intervals:
+
+```python
+from embedkit.baselines import Identity, PCAReduce
+from embedkit.evaluation import compare, evaluate_transform
+
+splits = dict(X_train=X[:800], X_test=X[800:], y_train=y[:800], y_test=y[800:], seeds=[0])
+res = [evaluate_transform(lambda s: Identity(), method="raw", **splits),
+       evaluate_transform(lambda s: PCAReduce(32), method="pca-32", **splits)]
+print(compare(res, reference="raw"))
+```
+
+More patterns (low-level `Trainer`, custom augmentations, pipelines) are in
+[`examples/`](examples/).
+
+## What is in the library
+
+- **Analysis**: `IntrinsicDimensionEstimator` (TwoNN, MLE, lPCA, DANCo, CorrInt, MOM, FisherS, ESS, each
+  reported with a bootstrap interval, not combined), `HubnessAnalyzer`, `DistanceConcentration`,
+  `IsotropyAnalyzer`, `NeighborConsistency`, `UniformityScore`, `KernelDiagnostics`, null-model
+  calibration, and `EmbedKitAnalyzer` to run them together.
+- **Baselines** (`embedkit.baselines`): `Identity`, `CenterNormalize`, `Standardize`, `PCAReduce`,
+  `ZCAWhiten`, `AllButTheTop`, `ConceptorNegation`, `RandomProjection`.
+- **Hubness reduction** (`embedkit.hubness_reduction`): `LocalScaling`, `MutualProximity`, `CSLS`,
+  `DisSimLocal`.
+- **Refiner**: `EmbeddingRefiner` (linear, residual or MLP), `Trainer`, augmentations (`GaussianNoise`,
+  `FeatureDropout`, `EmbeddingMixup`, `KNNPairs`, `FeatureMasking`, `IdentityPair`,
+  `CompositeAugmentation`) and losses (`NTXentLoss`, `AlignUniformLoss`, `SupConLoss`, `TripletLoss`,
+  `RankNContrastLoss`, `MatryoshkaLoss`, `CombinedLoss`).
+- **Evaluation** (`embedkit.evaluation`): kNN accuracy, linear probe, recall@k, trustworthiness, CKA, NC1
+  and others; `evaluate_transform` and `compare`.
+- **Visualization**: `AnalysisPlotter`, `EmbeddingVisualizer`.
+- Inputs: `np.ndarray` or `torch.Tensor`, validated once at each entry point (NaN or infinite values
+  raise; constant columns and duplicate rows warn).
 
 ## Documentation
 
 | Document | Description |
-|----------|-------------|
-| [Concepts Manual](https://github.com/fagonzalezo/embedding-kit/blob/main/docs/manual.md) | Full guide to analysis metrics, the improvement pipeline, and visualization |
-| [Metric Guide](https://github.com/fagonzalezo/embedding-kit/blob/main/skills/embedkit/references/metric_guide.md) | Per-metric reading ranges, which statistics the report judges against a null model, geometric meaning, and downstream consequences |
-| [Workflow Guide](https://github.com/fagonzalezo/embedding-kit/blob/main/skills/embedkit/references/workflow_guide.md) | Integration patterns for HuggingFace, PyTorch training loops, scikit-learn pipelines, RAG / vector stores, and ONNX export |
-| [Examples](https://github.com/fagonzalezo/embedding-kit/tree/main/examples) | Runnable notebooks |
+|---|---|
+| [`docs/manual.md`](docs/manual.md) | Concepts manual: every analyzer, the improvement pipeline, the high-level API |
+| [`docs/MIGRATION.md`](docs/MIGRATION.md) | Every breaking change since 0.1.2, with what to do |
+| [`CHANGELOG.md`](CHANGELOG.md) | Changes with their reasons and measurements |
+| [`skills/embedkit/references/metric_guide.md`](skills/embedkit/references/metric_guide.md) | Per-metric reading, and which statistics the report judges |
+| [`skills/embedkit/references/workflow_guide.md`](skills/embedkit/references/workflow_guide.md) | HuggingFace, PyTorch loops, scikit-learn pipelines, retrieval, ONNX export |
+| `docs/BENCHMARK_*.md` | Benchmark outcomes: [E1, E2](docs/BENCHMARK_E1_E2.md), [E6, E7](docs/BENCHMARK_E6_E7.md), [E8](docs/BENCHMARK_SUPERVISED.md), [E3, E5](docs/BENCHMARK_DIAGNOSTICS.md); E4 in [`benchmarks/results/e4/REPORT.md`](benchmarks/results/e4/REPORT.md) |
 
-## Claude Code Skill
+## Claude Code skill
 
-EmbedKit ships a [Claude Code](https://claude.ai/code) skill at `skills/embedkit/`. Once installed, Claude automatically applies deep EmbedKit knowledge whenever you ask about embeddings, hubness, isotropy, retrieval quality, or related topics — no manual prompting required.
+`skills/embedkit/` is a [Claude Code](https://claude.ai/code) skill with the API reference and the
+metric and workflow guides. To install it globally:
 
-### Install the skill
-
-**Option 1 — Copy from a cloned repo (global install):**
 ```bash
 git clone https://github.com/fagonzalezo/embedding-kit.git
-cp -r embedkit/skills/embedkit ~/.claude/skills/
+cp -r embedding-kit/skills/embedkit ~/.claude/skills/        # or ln -s to keep it in sync
 ```
 
-**Option 2 — Symlink (keeps the skill in sync with the repo):**
-```bash
-git clone https://github.com/fagonzalezo/embedding-kit.git
-ln -s "$(pwd)/embedkit/skills/embedkit" ~/.claude/skills/embedkit
-```
-
-**Option 3 — Project-level (already works inside this repo):**
-The skill is already present at `skills/embedkit/` and Claude Code picks it up automatically when working within the repository.
-
-### What the skill provides
-
-- Quick-start API reference for both the analysis and improvement pipelines
-- A pathology → improvement table (unbenchmarked pairings of report signals with losses and augmentations)
-- Visualization and persistence guides
-- Common pitfall warnings (e.g., don't L2-normalize before analysis, temperature sensitivity for NTXentLoss)
-- Pointers to the [Metric Guide](https://github.com/fagonzalezo/embedding-kit/blob/main/skills/embedkit/references/metric_guide.md) and [Workflow Guide](https://github.com/fagonzalezo/embedding-kit/blob/main/skills/embedkit/references/workflow_guide.md)
+Inside this repository Claude Code picks it up without installation.

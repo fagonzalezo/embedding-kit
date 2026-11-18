@@ -1,6 +1,7 @@
 """EmbedKit(strategy="select"), the default since WP 7.2."""
 
 import numpy as np
+import pandas as pd
 import pytest
 import torch
 
@@ -106,7 +107,14 @@ def test_save_load_roundtrip(tmp_path, labels):
     ek = EmbedKit(mode="self_supervised", **KW).fit(X, y if labels else None)
     ek.save(tmp_path / "b")
     back = EmbedKit.load(tmp_path / "b", device="cpu")
-    assert back.selected_ == ek.selected_
+    assert back.selected_ == ek.selected_ and back.strategy_ == "select"
+    assert back.mode_ == ek.mode_
+    if labels:
+        pd.testing.assert_frame_equal(back.selection_report_, ek.selection_report_,
+                                      check_dtype=False)
+        assert back.selection_report_.attrs == ek.selection_report_.attrs
+    else:
+        assert back.selection_report_ is None
     np.testing.assert_allclose(back.transform(X), ek.transform(X), atol=1e-5)
 
 
