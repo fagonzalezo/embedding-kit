@@ -267,28 +267,26 @@ class TestDistanceConcentrationD10:
         r = DistanceConcentration().fit(_iid(100, 8))
         assert r.relative_contrast > 0 and 0 <= r.concentration_ratio <= 1
 
-    def test_report_flags_concentration_by_calibrated_cv(self):
-        # WP 4.1: the fixed distance_cv threshold of WP 1.5 is replaced by a z-score against
-        # the null model; only a CV below the null range is reported.
+    def test_concentration_id_and_consistency_raise_no_recommendation(self):
+        # WP 7.1 (E4): the concentration, neighbour-consistency and ID / D rules did not
+        # predict the gain of their intervention on natural sets and were removed; the
+        # statistics stay in the report.
         from types import SimpleNamespace as NS
 
         from embedkit.analysis.null import calibrated_statistic
         from embedkit.analysis.report import _recommendations
 
         bundle = NS(isotropy=NS(participation_ratio_normalized=1.0))
-        idr = NS(reference_estimate=float("nan"), reference_method=None)
+        idr = NS(reference_estimate=5.0, reference_method="TwoNN")  # ID / D = 0.05
         hub = NS(antihub_ratio=0.0)
         null = np.array([0.05, 0.051, 0.049, 0.05])
-
-        def recs(cv):
-            cal = {"distance_cv": calibrated_statistic(cv, null, "gaussian", 100)}
-            return _recommendations(idr, hub, bundle, cal, 100)
-
-        assert any("more concentrated" in r for r in recs(0.03))
-        assert not any("more concentrated" in r for r in recs(0.05))
-        assert not any("more concentrated" in r for r in recs(0.08))  # wrong direction
-        assert not any("concentrated" in r
-                       for r in _recommendations(idr, hub, bundle, None, 100))
+        cal = {"distance_cv": calibrated_statistic(0.03, null, "gaussian", 100),
+               "neighbor_consistency": calibrated_statistic(0.03, null, "gaussian", 100)}
+        assert cal["distance_cv"].z_score < -3 and cal["neighbor_consistency"].z_score < -3
+        for c in (cal, None):
+            recs = _recommendations(idr, hub, bundle, c, 100)
+            assert recs == ["No recommendation: no statistic with a validated rule is beyond "
+                            "its null range."], recs
 
 
 # --------------------------------------------------------------------------------------

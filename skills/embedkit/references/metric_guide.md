@@ -36,9 +36,7 @@ The k-NN estimators (TwoNN, MLE, MOM) read low at high ID (15 to 17 on a 20-sphe
 
 | ID/D ratio | Report | `suggested_target_dim` |
 |---|---|---|
-| `< 0.1` | Recommendation: very sparse, strong dimensionality reduction advised | `clip(1.5 × ID, max(4, ID), D)` |
-| `0.1 – 0.3` | Recommendation: moderate, reduction may help | same |
-| `≥ 0.3` | No recommendation | same |
+| any | No recommendation (the ID / D rule was removed after E4: it fired on all 35 natural sets, and PCA to `suggested_target_dim` lost accuracy on 32) | `clip(1.5 × ID, max(4, ID), D)` |
 
 No benchmark supports the factor 1.5. If the estimate is unreliable (small n, noisy data), pass an
 explicit `target_dim`.
@@ -53,15 +51,16 @@ semantic similarity, breaking retrieval and kNN-based classifiers.
 
 | Attribute | Judged by the report | Rough reading | Meaning |
 |---|---|---|---|
-| `k_skewness` | yes: z > 3 gives a recommendation | near 0 | Skewness of the k-occurrence distribution |
+| `k_skewness` | yes: z > 3 gives a recommendation, Euclidean metric only | near 0 | Skewness of the k-occurrence distribution |
 | `antihub_ratio` | yes: z > 3, Euclidean metric only | depends on n, d, k, norms | Fraction of points never retrieved as neighbors (isotropic Gaussian at d = 1,024: 0.21 to 0.39 Euclidean, none cosine) |
 | `robinhood_index` | no | `> 0.3` concerning | Gini-like inequality; 0 = uniform, 1 = monopoly |
 | `hub_ratio` | no | `> 0.1` concerning | Fraction of points with `N_k > hub_threshold × mean N_k` (default 2) |
 | `hub_contamination` | no | `> 0.3` concerning | Fraction of the hubs' own neighbors that are also hubs |
 | `k_occurrence`, `hubs`, `antihubs` | no | | Raw per-point counts and index arrays |
 
-Under `metric="cosine"` the antihub z-score is reported in `report.calibration` but raises no
-recommendation: the antihub ratio of Gaussian data is not calibrated there.
+Under `metric="cosine"` both z-scores are reported in `report.calibration` but raise no
+recommendation: the antihub ratio of Gaussian data is not calibrated there, and in E4 the
+k-skewness z did not predict the gain of a hubness reduction on cosine kNN (Spearman 0.05).
 
 ### What hubness does to downstream tasks
 
@@ -74,8 +73,10 @@ recommendation: the antihub ratio of Gaussian data is not calibrated there.
 
 - The report's recommendation: a hubness-reducing neighbour search such as
   `embedkit.hubness_reduction.MutualProximity` (also `LocalScaling`, `CSLS`, `DisSimLocal`).
+  In E4 the best of them raised Euclidean kNN accuracy significantly on all 3 natural sets where
+  the k-skewness rule fired and on 5 of the 8 where the antihub rule fired.
 - Training with `AlignUniformLoss` (uniformity term) is a possible remedy but not benchmarked for
-  hubness (E4 pending).
+  hubness (E4 tested training-free fixes only).
 
 ---
 
@@ -85,7 +86,7 @@ recommendation: the antihub ratio of Gaussian data is not calibrated there.
 
 | Attribute | Rough reading | Meaning |
 |---|---|---|
-| `distance_cv` | larger is better; about `1/sqrt(2d)` for iid Gaussian | `std(D) / mean(D)` of pairwise distances. The statistic the report judges: z < -3 gives a recommendation |
+| `distance_cv` | larger is better; about `1/sqrt(2d)` for iid Gaussian | `std(D) / mean(D)` of pairwise distances. Calibrated (z-score in `report.calibration`); no recommendation since E4 |
 | `relative_contrast` | `> 1.0` healthy, `< 0.1` narrow spike | `(d_max − d_min) / d_mean` |
 | `relative_contrast_per_query` | larger is better | Median over query points of `(d_max − d_min) / d_min`, zero distances excluded |
 | `concentration_ratio` | not used | `d_min / d_max`; one duplicated pair sets it to 0 |
@@ -128,7 +129,7 @@ mean removal helps is an open question (E4).
 
 | Attribute | Rough reading | Meaning |
 |---|---|---|
-| `mean_consistency` | near 1 robust, `< 0.5` fragile | Avg fraction of kNN preserved under small Gaussian perturbation (`0.01 ×` the RMS per-coordinate sd). Judged by the report: z < -3 gives a recommendation |
+| `mean_consistency` | near 1 robust, `< 0.5` fragile | Avg fraction of kNN preserved under small Gaussian perturbation (`0.01 ×` the RMS per-coordinate sd). Calibrated (z-score in `report.calibration`); no recommendation since E4 |
 | `std_consistency` | low | Variability in consistency across perturbation trials |
 | `per_perturbation` | | Per-trial consistency scores |
 
@@ -199,9 +200,11 @@ spectrum; or `"permuted"`: each column permuted). The comparison runs on a subsa
   calibration rows, so z-scores do not change with the size of `X`.
 - `report.n_outside_null` counts statistics with `|z| > z_threshold` (3). It replaces the removed
   `severity`.
-- Recommendations: `k_skewness` z > 3 (more hubness), `antihub_ratio` z > 3 (Euclidean only),
-  `distance_cv` z < -3 (more concentrated), `neighbor_consistency` z < -3 (less stable). Plus the
-  ID / D rule. With `calibrate=False` the report makes no recommendation about these statistics.
+- Recommendations, under `metric="euclidean"` only: `k_skewness` z > 3 (more hubness) and
+  `antihub_ratio` z > 3, both pointing to a hubness-reducing search. These are the two rules E4
+  kept (WP 7.1); the concentration, neighbour-consistency and ID / D rules were removed because
+  they did not predict which fix helps. With `calibrate=False` the report makes no
+  recommendation.
 - A large |z| means "unlike a Gaussian with the same spectrum", not necessarily "defective".
 - Rows with a common norm (normalised upstream) are compared with null draws normalised to that
   norm; this calibrates flat-spectrum rows only (a power-law spectrum on the sphere gives
@@ -217,13 +220,14 @@ When reviewing a report, scan these in order:
 1. **Calibration** — Is `report.n_outside_null > 0`? Which statistics, in which direction?
    Read `report.recommendations`.
 2. **Hubness** — `calibration["k_skewness"].z_score` and (Euclidean) `["antihub_ratio"]`.
-3. **Dimensionality** — Is `reference_estimate / D < 0.3`? Do the per-method `estimates` and
-   `intervals` agree, and is `scale_max_deviation` small?
-4. **Distance concentration** — `calibration["distance_cv"].z_score` below -3?
-5. **Stability** — `calibration["neighbor_consistency"].z_score` below -3?
-6. **Properties** — read `report.properties` (spectrum, mean direction, uniformity against the
+3. **Dimensionality** — Do the per-method `estimates` and `intervals` agree, and is
+   `scale_max_deviation` small? A low ID / D is description: in E4 it did not predict that
+   PCA helps.
+4. **Distance concentration and stability** — `calibration["distance_cv"]` and
+   `["neighbor_consistency"]` z-scores, as description (no action since E4).
+5. **Properties** — read `report.properties` (spectrum, mean direction, uniformity against the
    null) as description, not as defects.
-7. **Label structure** — If labels were passed, is `centered_kernel_alignment` well above 0?
+6. **Label structure** — If labels were passed, is `centered_kernel_alignment` well above 0?
 
-If nothing is beyond its null range and the ID / D ratio is at least 0.3, the report says so
-("No recommendation") and simple refinement (or none) is appropriate.
+If no kept rule fires, the report says "No recommendation"; that does not mean no fix can help,
+only that the report cannot tell which one will.

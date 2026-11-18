@@ -644,10 +644,10 @@ Release as 0.6.0.
 | 6.1 | Supervised defaults | done (2026-11-14): supervised = SupCon on the residual adapter, regression = RnC on the MLP with noise views (E8) |
 | 6.2 | Class collapse | implemented (2026-11-13): `train_nc1`/`val_nc1`, `SupConLoss(spread_weight)` |
 | 6.3 | Run E8 | done (2026-11-14; `docs/BENCHMARK_SUPERVISED.md`) |
-| 7.1 | Run E4 | in progress (2026-11-17): design and criteria fixed, extraction and harness built and smoke-tested locally (notes below); cluster runs next |
+| 7.1 | Run E4 | done (2026-11-17): 35 natural sets; 2 of 9 rules kept (hubness and antihubs, Euclidean kNN), the rest removed from the report (outcome below) |
 | 7.2 | Selection-based auto-configuration | not started |
 | 7.3 | Robustness and scaling | in progress (2026-11-17): input validation done (`validate_embeddings` at every public entry point); E9 timings not started |
-| 7.4 | Documentation | in progress (2026-11-17): `docs/MIGRATION.md` (0.1.2 to 0.5.0) written; README and manual wait for E4 |
+| 7.4 | Documentation | in progress (2026-11-17): `docs/MIGRATION.md` (0.1.2 to 0.5.0) written and extended for the E4 changes; manual and skill passages on recommendations updated; full README and manual pass not started |
 
 ### Phase 1 notes (2026-11-10)
 
@@ -1296,6 +1296,52 @@ Cluster order: `SETS=E4_GPU_SETS sbatch --array=0-30%2 extract.slurm.sh`, then
 `PART=detect sbatch --array=0-34%16 --time=12:00:00 e4.slurm.sh` and
 `sbatch --array=0-34%16 e4.slurm.sh`, then `report_e4.py` on the cluster.
 
+### WP 7.1 outcome (2026-11-17)
+
+**Runs.** All on Occidata at commit 15e9a08: extraction (jobs 3081846 and 3081847, 31 sets),
+reports (3081870, 35 sets × 2 metrics), gains (3081871, 35 sets), analysis (`report_e4.py`,
+3082831). Every task completed. The MiniLM sets have 28 methods instead of 29, because at
+d = 384 `abtt-<d/100>` is `abtt-3`. Report and summary tables: `benchmarks/results/e4/`.
+
+**Decisions** (by the keep rule above, applied as written):
+
+| Rule | Primary outcome | Spearman (95% interval) | Firing sets with a significant gain | Decision |
+|---|---|---|---|---|
+| R1 hubness | Euclidean kNN | 0.36 (0.13, 0.65) | 3 of 3 | **kept**, Euclidean only |
+| R1 hubness | cosine kNN | 0.05 (-0.24, 0.39) | 0 of 2 | removed |
+| R2 antihubs | Euclidean kNN | 0.32 (0.05, 0.58) | 5 of 8 | **kept** |
+| R3 concentration | PCA or hubness, both metrics | -0.50 to 0.10 | 0 to 1 of 3 to 7 | removed |
+| R4 neighbour consistency | PCA, both metrics | -0.35 to -0.02 | 0 to 1 of 4 | removed |
+| R5 ID/D < 0.3 | PCA (auto and selected), both metrics | -0.22 to 0.07 | fires on all 35 | removed |
+| H1 to H4 | their fixes | every interval includes 0 or is negative | | removed (properties stay descriptive) |
+
+Applied: `_calibrated_recommendations` makes only the two kept rules, under
+`metric="euclidean"`, each naming `embedkit.hubness_reduction`; the ID / D rule and the
+concentration and neighbour-consistency recommendations are gone (their statistics stay in the
+report). Tests, CHANGELOG, MIGRATION, manual and skill updated.
+
+**Caveats.** R1 fires on only 3 sets (`agnews_minilm`, `massive_minilm`, `cifar100_dinov2`), two
+of them from the same encoder; the rule passes as written, but the evidence is thin. R2 fires on
+8 sets from 6 sources. No multiplicity correction over the 23 primary tests: at that count about
+one false pass is expected by chance, and the two passes point the same way (hubness reduction,
+Euclidean kNN). On the secondary outcome, R4 with PCA on the linear probe passes both conditions
+(0.52; 4 of 4), but all 4 firing sets are 20 Newsgroups; it is not kept.
+
+**Other findings for WP 7.2.**
+- PCA to `suggested_target_dim` (`pca-auto`, what `EmbedKit(target_dim="auto")` does) lost
+  accuracy significantly on 32 of 35 sets for cosine kNN (median -5.1 points), 28 for Euclidean
+  kNN (-3.8) and 26 for the probe (-4.9). A reduction to 1.5 × TwoNN is not a defensible default;
+  selection with `Identity` as a candidate (WP 7.2) is needed, and `suggested_target_dim` should
+  not drive the default output.
+- ZCA lost accuracy on 34 of 35 sets (cosine kNN) and on all 35 (Euclidean kNN, median -21.5
+  points); PCA-whitening on 26 and 24. This supports the review's "whitening hurts
+  classification".
+- No intervention beats raw on 75% of the sets. The closest are `center_l2` (Euclidean kNN: 16
+  up, 1 down, median +0.3 points) and the best hubness reduction (Euclidean kNN: 14 up, 3 down,
+  +0.4); both are natural WP 7.2 candidates.
+- E5 check (not decisive): the kept rules fire on 0% to 38% of the damaged variants; the
+  hubness reductions recover the most under noise damage (median +3.6 points, significant on 69%).
+
 ## Open points for the next session
 
 All design decisions in this plan are confirmed.
@@ -1310,7 +1356,10 @@ All design decisions in this plan are confirmed.
    note. The open phase 4 findings (normalised anisotropic rows, spiked spectra at d = 1,024,
    near-threshold flips, the cosine antihub reading) go to phase 7. The user also kept
    calibration on by default with 20 draws.
-2. **Phase 7 is next**, starting with WP 7.1 (E4), released as 0.6.0.
+2. **Phase 7 is in progress** (released as 0.6.0). WP 7.1 (E4) is done: see "WP 7.1 outcome".
+   Next: WP 7.2 (selection; E4 says `pca-auto` must not be the default and names `center_l2`
+   and the hubness reductions as candidates), E9 timings (WP 7.3) and the documentation pass
+   (WP 7.4). The cluster clone is still at 15e9a08; pull before the next cluster job.
 3. **Benchmark results:** new experiments commit only their reports and summaries, as E8 does;
    per-run JSON stays on the cluster. E8's per-run files exist only on Occidata
    (`$BASE/embedding-kit/benchmarks/results/e8/`); the local copies were deleted on 2026-11-14

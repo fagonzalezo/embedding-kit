@@ -90,7 +90,7 @@ report = analyzer.fit(X, y=None)    # y enables centered_kernel_alignment
 | `report.calibration_k` | `int` | The `k` used by the calibration |
 | `report.n_outside_null` | `int` | Calibrated statistics with \|z\| > `z_threshold` (3); replaces `severity` |
 | `report.properties` | `list[str]` | Descriptive statements (spectrum, mean direction, uniformity vs null); anisotropy is a property, not a recommendation |
-| `report.recommendations` | `list[str]` | Actions: hubness, antihubs (Euclidean only), distance concentration, neighbour consistency beyond the null; low ID/D |
+| `report.recommendations` | `list[str]` | Actions, Euclidean metric only: more hubness or more antihubs than the null (the two rules E4 kept) |
 | `report.suggested_k` | `int` | Recommended kNN size |
 | `report.suggested_sigma` | `float` | Recommended RBF sigma |
 | `report.suggested_target_dim` | `int` | Recommended output dimension (≈ 1.5 × TwoNN ID) |
@@ -119,19 +119,18 @@ For detailed interpretation of every metric and its healthy ranges, read
 
 ## Pathology → Improvement Quick Reference
 
-> These pairings are not backed by a benchmark. Since 0.5.0 the report judges hubness, antihubs,
-> distance concentration and neighbour consistency against a null model (z-scores, no fixed
-> thresholds), and describes anisotropy and clustering as properties (`report.properties`), not
-> defects. `EmbedKit` does not read them: it uses only `suggested_target_dim`. Experiment E4
-> (WP 7.1) decides which pairings stay.
+> Experiment E4 (WP 7.1) tested the report's rules on 35 natural classification sets
+> (`benchmarks/results/e4/REPORT.md`). Only the first two rows below are backed by it, and only
+> for Euclidean kNN; the report recommends nothing else. Distance concentration, neighbour
+> consistency, low ID/D, the mean direction, the top components, anisotropy and dominant
+> coordinates did not predict which training-free fix helps, so their statistics are reported
+> without an action. PCA to `suggested_target_dim` lost accuracy on 32 of the 35 sets. The
+> remaining rows are untested suggestions.
 
 | Detected pathology | Metric signal | Recommended improvement |
 |---|---|---|
-| Hubness | `calibration["k_skewness"].z_score > 3` | Hubness-reducing search (`embedkit.hubness_reduction.MutualProximity`); or `AlignUniformLoss` + `KNNPairs` |
-| Antihubs (Euclidean only) | `calibration["antihub_ratio"].z_score > 3` | Same |
-| Distance concentration | `calibration["distance_cv"].z_score < -3` | Lower `target_dim` |
-| Sparse manifold | reference `ID/D < 0.1` | Strong bottleneck (low `target_dim`) |
-| Low neighbor stability | `calibration["neighbor_consistency"].z_score < -3` | `KNNPairs` (auto-config default) |
+| Hubness (Euclidean) | `calibration["k_skewness"].z_score > 3` with `metric="euclidean"` | Hubness-reducing search (`embedkit.hubness_reduction.MutualProximity`, `CSLS`) |
+| Antihubs (Euclidean) | `calibration["antihub_ratio"].z_score > 3` with `metric="euclidean"` | Same |
 | Supervised, class labels available | labels given | `mode="supervised"`, `SupConLoss` |
 | Supervised, continuous/regression labels | targets given | `mode="regression"`, `RankNContrastLoss` |
 | Sparse / NLP embeddings | high dim, sparse values | `FeatureDropout` augmentation |

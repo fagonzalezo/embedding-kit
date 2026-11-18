@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+### Changed (WP 7.1: experiment E4)
+- The report's recommendations are cut to the rules E4 validated. E4 ran the report and every
+  training-free fix (centring, standardising, ZCA, conceptors, PCA and PCA-whitening at E1's
+  dimensions and at `suggested_target_dim`, ABTT, the four hubness reductions) on 35 natural
+  classification sets (10 source data sets, 3 or 4 encoders each). A rule stays when the gain of
+  its fix rises with its signal (Spearman interval over 2,000 bootstrap resamples of source data
+  sets excluding 0) and the fix beats the raw embedding significantly on at least half of the
+  sets where the rule fires (criteria fixed before the runs; `benchmarks/results/e4/REPORT.md`).
+- Kept, under `metric="euclidean"` only: k-skewness above the null (Spearman 0.36, 95% interval
+  0.13 to 0.65; significant Euclidean kNN gain on 3 of 3 firing sets) and the antihub ratio
+  above the null (0.32, 0.05 to 0.58; 5 of 8). Both now name a hubness-reducing neighbour search.
+- Removed: hubness under cosine (Spearman 0.05, -0.24 to 0.39), distance concentration (-0.50
+  with PCA on Euclidean kNN: the gain falls as the signal rises), neighbour consistency, and the
+  fixed ID / D rule (0.1 and 0.3), which fired on all 35 sets while PCA to
+  `suggested_target_dim` lost accuracy on 32 of them (median -5.1 points on cosine kNN). The
+  statistics stay in `report.calibration` and `report.intrinsic_dim`. The review's hypotheses
+  about the mean direction, the top components, anisotropy and dominant coordinates (H1 to H4)
+  did not predict their fixes either, so `report.properties` stays descriptive, with no
+  thresholds.
+- No-action message: "No recommendation: no statistic with a validated rule is beyond its null
+  range."
+
+### Added (WP 7.1)
+- E4 harness: `<data>_<encoder>` feature builders for 31 new sets (`extract_features.py`),
+  `e4_methods` and `run.py --experiment e4`, `benchmarks/e4.py`, `benchmarks/e4_data.py`,
+  `benchmarks/report_e4.py`, `benchmarks/cluster/e4.slurm.sh`; results in
+  `benchmarks/results/e4/` (report and summary tables; per-run files stay on Occidata).
+
 ### Added (WP 7.3)
 - `embedkit.utils.validation.validate_embeddings(X, *, name, min_samples, n_features, warn,
   dtype)`: the one check of an embedding matrix at the public entry points (ndarray or tensor in,

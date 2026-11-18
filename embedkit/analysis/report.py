@@ -240,17 +240,17 @@ class EmbedKitAnalyzer(BaseAnalyzer):
         WP 4.5). The antihub ratio is a proportion of a count, often zero in every null draw
         at low dimension, so its null standard deviation is floored at one count,
         ``1 / rows``. (A Poisson floor, ``sqrt(null count) / rows``, bound in about 60% of
-        ordinary Gaussian cells and shrank their z-scores.) The recommendations for these
-        statistics come from the z-scores (``|z| > z_threshold`` in the direction each
-        recommendation names), and ``report.n_outside_null`` counts the statistics with
-        ``|z| > z_threshold``. With ``calibrate=False`` the report makes no recommendation
-        about them. Rows that arrive with a common norm (relative spread under 1e-3, for
-        instance embeddings normalised upstream) are compared with null draws normalised to
-        that norm, under either metric; a Gaussian null with varying norms made such rows look
-        concentrated (``distance_cv`` z down to -35 in E3). This calibrates normalised rows
-        with a flat spectrum only: with a power-law spectrum the null, fitted to rows already
-        on the sphere, is more isotropic than the data (``distance_cv`` and uniformity z of
-        +8 to +11, antihub z up to 4.5, at n = 2,000, d = 256 and 1,024).
+        ordinary Gaussian cells and shrank their z-scores.) The recommendations come from the
+        z-scores of the two rules experiment E4 kept (more hubness and more antihubs than the
+        null, under ``metric="euclidean"`` only; WP 7.1), and ``report.n_outside_null``
+        counts the statistics with ``|z| > z_threshold``. With ``calibrate=False`` the report
+        makes no recommendation. Rows that arrive with a common norm (relative spread under
+        1e-3, for instance embeddings normalised upstream) are compared with null draws
+        normalised to that norm, under either metric; a Gaussian null with varying norms made
+        such rows look concentrated (``distance_cv`` z down to -35 in E3). This calibrates
+        normalised rows with a flat spectrum only: with a power-law spectrum the null, fitted
+        to rows already on the sphere, is more isotropic than the data (``distance_cv`` and
+        uniformity z of +8 to +11, antihub z up to 4.5, at n = 2,000, d = 256 and 1,024).
     metric:
         ``"euclidean"`` or ``"cosine"`` (anything else raises ``ValueError``), honoured by every
         analyzer. With ``"cosine"`` the rows are L2-normalised once and every statistic, the
@@ -463,38 +463,26 @@ def _recommendations(
     id_result, hub_result, geo_bundle, calibration, d, z_threshold: float = 3.0,
     metric: str = "euclidean",
 ) -> list[str]:
-    """Recommendations from the report.
+    """Recommendations from the report: only the rules that experiment E4 kept (WP 7.1).
 
-    Hubness, antihubs, distance concentration, neighbour consistency and uniformity are judged
-    only through ``calibration`` (z-scores against the null model); without it nothing is said
-    about them. The ID / D rule is a fixed threshold. The fixed antihub rule
-    (``antihub_ratio > 0.3``) was replaced by the calibrated one: it fired on 31% of isotropic
-    Gaussian cells and flipped with the sample size through ``k`` (E3, WP 4.5).
+    E4 tested each rule on 35 natural classification sets: a rule stays when the gain of its
+    intervention rises with the signal (Spearman interval over source data sets excluding 0)
+    and the intervention significantly beats the raw embedding on at least half of the sets
+    where the rule fires (``benchmarks/results/e4/REPORT.md``). Two rules passed, both on
+    Euclidean kNN: hubness (k-skewness) and antihubs, each pointing to a hubness-reducing
+    neighbour search. Removed: hubness under cosine, distance concentration, neighbour
+    consistency, and the fixed ID / D rule (0.1 and 0.3), which fired on all 35 sets while
+    PCA to ``suggested_target_dim`` lost accuracy on 32 of them. Their statistics stay in the
+    report (``calibration``, ``intrinsic_dim``); they just raise no action. ``id_result``,
+    ``hub_result``, ``geo_bundle`` and ``d`` are kept for the call signature.
     """
     recs = []
-
     if calibration is not None:
         recs.extend(_calibrated_recommendations(calibration, z_threshold, metric))
-
-    # ID / D ratio (curse of dimensionality)
-    ref_id = id_result.reference_estimate
-    if not np.isnan(ref_id) and d > 0:
-        id_d_ratio = ref_id / d
-        if id_d_ratio < 0.1:
-            recs.append(
-                f"Low intrinsic-to-ambient ratio ({id_result.reference_method} ID/D ≈ "
-                f"{id_d_ratio:.2f}): "
-                "the embedding is very sparse — strong dimensionality reduction is advised."
-            )
-        elif id_d_ratio < 0.3:
-            recs.append(
-                f"Moderate intrinsic-to-ambient ratio ({id_result.reference_method} ID/D ≈ "
-                f"{id_d_ratio:.2f}): "
-                "dimensionality reduction may improve downstream tasks."
-            )
-
     if not recs:
-        recs.append("No recommendation: no statistic is beyond its null range or a fixed rule.")
+        recs.append(
+            "No recommendation: no statistic with a validated rule is beyond its null range."
+        )
     return recs
 
 
@@ -531,44 +519,41 @@ def _properties(geo_bundle, calibration) -> list[str]:
 def _calibrated_recommendations(
     calibration, z_threshold: float, metric: str = "euclidean"
 ) -> list[str]:
-    """One recommendation per calibrated statistic that is beyond the null in its direction.
+    """The two rules E4 kept (WP 7.1), both under ``metric="euclidean"`` only.
 
-    The antihub recommendation is made under ``metric="euclidean"`` only. Under cosine the
-    antihub ratio of Gaussian data is not calibrated (inside +-3 in 89% of E3 null cells; a false
-    recommendation in 44% of cells with a spiked spectrum), so its z-score is reported in
-    ``report.calibration`` but raises nothing (the user's decision, 2026-11-16).
+    - k-skewness above the null: on Euclidean kNN the gain of the best hubness reduction rose
+      with the z-score (Spearman 0.36, 95% interval 0.13 to 0.65 over source data sets) and was
+      significant on all 3 natural sets where it fired. Under cosine it did not predict the
+      gain (0.05, -0.24 to 0.39; no significant gain on the 2 firing sets).
+    - antihub ratio above the null: Spearman 0.32 (0.05 to 0.58), significant gain on 5 of the
+      8 firing sets. Under cosine the antihub ratio of Gaussian data is not calibrated (inside
+      +-3 in 89% of E3 null cells), so it was never a cosine rule (the user's decision,
+      2026-11-16).
+
+    Under cosine the report therefore makes no calibrated recommendation; every z-score stays
+    in ``report.calibration``.
     """
 
     def describe(c) -> str:
         return (f"{c.observed:.3g} against {c.null_mean:.3g} ± {c.null_std:.2g} under the "
                 f"{c.null_model} null, z = {c.z_score:+.1f}")
 
+    if metric != "euclidean":
+        return []
+    search = ("A hubness-reducing neighbour search (embedkit.hubness_reduction, for instance "
+              "MutualProximity or CSLS) is likely to improve Euclidean kNN.")
     recs = []
     c = calibration.get("k_skewness")
     if c is not None and c.z_score > z_threshold:
         recs.append(
             f"More hubness than the null (k-skewness {describe(c)}): a few points dominate "
-            "the neighbour lists. Try a hubness-reducing neighbour search such as "
-            "embedkit.hubness_reduction.MutualProximity."
+            f"the neighbour lists. {search}"
         )
     c = calibration.get("antihub_ratio")
-    if c is not None and metric == "euclidean" and c.z_score > z_threshold:
+    if c is not None and c.z_score > z_threshold:
         recs.append(
             f"More antihubs than the null (antihub_ratio {describe(c)}): more points are "
             "never retrieved as a neighbour than in a Gaussian with the same covariance "
-            "spectrum."
-        )
-    c = calibration.get("distance_cv")
-    if c is not None and c.z_score < -z_threshold:
-        recs.append(
-            f"Distances are more concentrated than the null (distance_cv {describe(c)}): "
-            "nearest and farthest neighbours are harder to tell apart than in a Gaussian with "
-            "the same covariance spectrum."
-        )
-    c = calibration.get("neighbor_consistency")
-    if c is not None and c.z_score < -z_threshold:
-        recs.append(
-            f"The kNN graph is less stable under small perturbations than the null "
-            f"(neighbor_consistency {describe(c)})."
+            f"spectrum. {search}"
         )
     return recs

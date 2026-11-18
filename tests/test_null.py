@@ -214,7 +214,13 @@ class TestReportCalibration:
         X = (Z / np.sqrt(rng.chisquare(3, size=(1000, 1)) / 3)).astype(np.float32)
         report = EmbedKitAnalyzer(id_methods=["TwoNN"]).fit(X)
         assert report.calibration["k_skewness"].z_score > 3
-        assert any("More hubness than the null" in r for r in report.recommendations)
+        assert any("More hubness than the null" in r and "MutualProximity" in r
+                   for r in report.recommendations)
+        # E4 (WP 7.1): under cosine the hubness rule did not predict the gain; it raises
+        # nothing there, and the z-score stays in the calibration.
+        cos = EmbedKitAnalyzer(id_methods=["TwoNN"], metric="cosine", id_bootstrap=0,
+                               id_scale_curve=False).fit(X)
+        assert not any("than the null" in r for r in cos.recommendations)
 
     def test_gaussian_data_raise_no_calibrated_recommendation(self):
         # Checks the report's wiring on one draw; calibration itself is tested by the
