@@ -986,6 +986,63 @@ environment variable `EMBEDKIT_KNN_BACKEND=faiss`). Every backend returns true d
 (Euclidean, or `1 - cos`), ascending, without the query point; the input is not modified. `k`
 outside `1 ... n - 1` raises.
 
+### 3.5 Time and memory
+
+Measured in experiment E9 (`benchmarks/e9.py`, `benchmarks/results/e9/REPORT.md`) on 16 CPUs of a
+cluster node (no GPU), with synthetic float32 data (10 classes, power-law spectrum). Each entry is
+the wall time of one `fit` in a fresh process and the peak resident memory of that process (GB =
+1e9 bytes); the peak includes the interpreter and torch (about 0.6 GB) and the input itself
+(16.4 GB at n = 1e6, d = 4,096). Every cell finished.
+
+`EmbedKitAnalyzer().fit(X)` (the defaults: calibration with 20 null draws, ID bootstrap and scale
+curve):
+
+| n \ d | 128 | 1,024 | 4,096 |
+|---|---|---|---|
+| 1,000 | 36 s / 0.8 GB | 37 s / 0.9 GB | 1.3 min / 1.2 GB |
+| 10,000 | 57 s / 1.0 GB | 1.0 min / 1.1 GB | 2.9 min / 2.0 GB |
+| 100,000 | 1.1 min / 1.1 GB | 1.5 min / 2.2 GB | 3.1 min / 7.1 GB |
+| 1,000,000 | 56 s / 2.6 GB | 1.6 min / 17.0 GB | 4.1 min / 66.1 GB |
+
+`EmbedKitAnalyzer(calibrate=False, id_bootstrap=0, id_scale_curve=False).fit(X)`:
+
+| n \ d | 128 | 1,024 | 4,096 |
+|---|---|---|---|
+| 1,000 | 4.6 s / 0.8 GB | 6.3 s / 0.9 GB | 6.7 s / 1.1 GB |
+| 10,000 | 6.7 s / 1.0 GB | 7.1 s / 1.1 GB | 27 s / 1.9 GB |
+| 100,000 | 5.9 s / 1.1 GB | 10.5 s / 2.2 GB | 41 s / 7.1 GB |
+| 1,000,000 | 7.9 s / 2.6 GB | 17.4 s / 17.0 GB | 1.2 min / 66.1 GB |
+
+The analyzer's time hardly grows with n: the neighbour statistics use a subsample of `n_max`
+(20,000) rows, the ID estimators 5,000 and the calibration 2,000. Its memory does grow, to about
+four times the input at d = 4,096, because the input is copied (float32 conversion, centring)
+before it is subsampled. Calibration accounts for most of the time at small n.
+
+`EmbedKit().fit(X)` without labels (centre and L2-normalise):
+
+| n \ d | 128 | 1,024 | 4,096 |
+|---|---|---|---|
+| 1,000 | < 0.1 s / 0.6 GB | < 0.1 s / 0.6 GB | < 0.1 s / 0.7 GB |
+| 10,000 | < 0.1 s / 0.6 GB | 0.1 s / 0.7 GB | 0.3 s / 1.1 GB |
+| 100,000 | 0.1 s / 0.8 GB | 0.7 s / 1.9 GB | 2.6 s / 5.5 GB |
+| 1,000,000 | 1.1 s / 2.2 GB | 6.7 s / 12.9 GB | 25 s / 49.8 GB |
+
+`EmbedKit().fit(X, y)` with class labels (selection, with the supervised refiner as a candidate):
+
+| n \ d | 128 | 1,024 | 4,096 |
+|---|---|---|---|
+| 1,000 | 10 s / 1.0 GB | 11 s / 1.0 GB | 15 s / 1.2 GB |
+| 10,000 | 28 s / 1.2 GB | 37 s / 1.4 GB | 2.2 min / 3.4 GB |
+| 100,000 | 4.0 min / 3.0 GB | 5.8 min / 5.8 GB | 12.8 min / 20.1 GB |
+| 1,000,000 | 1.8 h / 9.7 GB | 3.5 h / 46.0 GB | 9.7 h / 182 GB |
+
+Training the refiner candidate on CPU is almost all of this time. From 1e5 to 1e6 rows it grew 27
+to 45 times, not 10. `Identity` was selected in every cell, so no model was refitted. When the refiner wins, it is
+trained a second time on all rows, which adds roughly 1.25 times the first training. For n in the
+millions, train on a GPU, or select on a subsample of rows and then fit the chosen method with
+`strategy="fixed"`. At 1e6 × 4,096 the input in float64 (centring + L2, PCA) and the training copies
+need about 11 times the input in memory.
+
 ---
 
 ## Part 4 — Visualization

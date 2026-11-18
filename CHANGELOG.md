@@ -69,6 +69,14 @@
   trainer inside `EmbedKit.fit`, the monitors during training) skip the scans, so each warning
   appears once per user call.
 
+- Experiment E9 (`benchmarks/e9.py`, `benchmarks/report_e9.py`, `benchmarks/cluster/e9.slurm.sh`):
+  wall time and peak memory of `EmbedKitAnalyzer.fit` (default and without calibration) and
+  `EmbedKit.fit` (with and without labels) for n from 1e3 to 1e6 and d from 128 to 4,096, each
+  `fit` in a fresh process. Table in `docs/manual.md` (section 3.5) and
+  `benchmarks/results/e9/REPORT.md`. Every cell finished on 16 CPUs: the analyzer in at most
+  4.1 minutes, `EmbedKit` without labels in at most 25 s, with labels in up to 9.7 hours
+  (n = 1e6, d = 4,096, 182 GB peak memory), almost all of it spent training the refiner candidate.
+
 ### Changed (WP 7.3)
 - NaN or infinite values now raise in the analyzers, `EmbedKit`, `Trainer` and the hubness
   reductions (`embedkit.hubness_reduction`), which used to pass them on. `Trainer.transform`,

@@ -646,8 +646,8 @@ Release as 0.6.0.
 | 6.3 | Run E8 | done (2026-11-14; `docs/BENCHMARK_SUPERVISED.md`) |
 | 7.1 | Run E4 | done (2026-11-17): 35 natural sets; 2 of 9 rules kept (hubness and antihubs, Euclidean kNN), the rest removed from the report (outcome below) |
 | 7.2 | Selection-based auto-configuration | done (2026-11-17): `strategy="select"` default; decisions and deviations in "WP 7.2 notes" |
-| 7.3 | Robustness and scaling | in progress (2026-11-17): input validation done (`validate_embeddings` at every public entry point); E9 harness built, analyzer runs submitted (arrays 3083006, 3083007) |
-| 7.4 | Documentation | in progress (2026-11-17): README rewritten around the benchmark results; manual and skill brought to the 0.6.0 API (every code block executed); `docs/MIGRATION.md` extended for WP 7.1 and 7.2; the E9 table waits for the runs |
+| 7.3 | Robustness and scaling | done (2026-11-18): input validation (`validate_embeddings` at every public entry point); E9 time and memory table in `docs/manual.md` §3.5 (`benchmarks/results/e9/REPORT.md`; all 48 cells finished) |
+| 7.4 | Documentation | in progress (2026-11-17): README rewritten around the benchmark results; manual and skill brought to the 0.6.0 API (every code block executed); `docs/MIGRATION.md` extended for WP 7.1 and 7.2; E9 table added (2026-11-18). Done apart from the 0.6.0 release notes |
 
 ### Phase 1 notes (2026-11-10)
 
@@ -1374,6 +1374,22 @@ above 0), not by plain argmax.
 - Not done: no benchmark of the selection itself on the E4 sets (it would reuse E4's numbers:
   Identity unless a fix is significantly better on validation). E9 times it.
 
+### WP 7.3 notes (2026-11-18)
+
+- E9 ran 48 cells (4 targets × n ∈ {1e3, 1e4, 1e5, 1e6} × d ∈ {128, 1,024, 4,096}) on
+  `48CPUNodes`, 16 CPUs, synthetic float32 data, each `fit` in a child process. Arrays 3083006 and
+  3083007 (the analyzer, commit 6bcd7e0) and 3083038 and 3083039 (`EmbedKit`, commit 63da93f; between
+  the two commits the analyzer changed only in the `k` field). All cells finished (`ok`).
+- The analyzer's time is nearly flat in n (subsamples of 20,000, 5,000 and 2,000 rows); its memory
+  reaches about 4 times the input at d = 4,096.
+- With labels, selection chose `Identity` in every cell, so the times contain one refiner
+  training (on 80% of the rows) and no refit. From 1e5 to 1e6 rows the time grew 27 to 45 times;
+  the largest cell took 9.7 hours and 182 GB (11 times the input). The manual says to use a GPU
+  or select on a subsample at that size. The selection was not changed to subsample by itself:
+  that would be a new default, left for after 0.6.0.
+- Per-cell JSON is ignored by git (`benchmarks/results/e9/*.json`); `REPORT.md` and
+  `summary_e9.csv` are committed.
+
 ## Open points for the next session
 
 All design decisions in this plan are confirmed.
@@ -1389,9 +1405,8 @@ All design decisions in this plan are confirmed.
    near-threshold flips, the cosine antihub reading) go to phase 7. The user also kept
    calibration on by default with 20 draws.
 2. **Phase 7 is in progress** (released as 0.6.0). WP 7.1 (E4) and WP 7.2 (selection) are
-   done. Left: E9 (WP 7.3; harness `benchmarks/e9.py`, analyzer arrays 3083006 and 3083007
-   submitted 2026-11-17, EmbedKit targets to run on the WP 7.2 commit) and the documentation
-   pass (WP 7.4: README led by the benchmark results, manual and skill for the 0.6.0 API).
+   done; WP 7.3 (validation and E9) is done (2026-11-18), and WP 7.4 has every part written.
+   Left: the 0.6.0 release (version bump, CHANGELOG heading, tag), on the user's word.
 3. **Benchmark results:** new experiments commit only their reports and summaries, as E8 does;
    per-run JSON stays on the cluster. E8's per-run files exist only on Occidata
    (`$BASE/embedding-kit/benchmarks/results/e8/`); the local copies were deleted on 2026-11-14

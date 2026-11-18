@@ -62,7 +62,9 @@ digits (raw pixels) and synthetic sets are also in E1 to E8.
   (+0.023 to +0.574 against raw). With 200 or 1,000 training rows it lost to raw on 6 of 8 sets.
 
 Not yet measured: the selection procedure described below was not benchmarked on its own (it
-reuses E4's findings). Time and memory are being measured (E9).
+reuses E4's findings). Time and memory for n up to 1e6 and d up to 4,096 are in the manual
+(section 3.5, experiment E9): the analyzer takes minutes at any n; selection with labels trains
+the refiner on CPU and took 1.8 to 9.7 hours at n = 1e6.
 
 ## What the defaults do
 
