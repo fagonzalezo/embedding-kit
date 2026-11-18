@@ -78,6 +78,7 @@ The user was asked about each of these and confirmed the choice shown. Several w
 | 5 | Refiner improvements, each judged by the harness | 3 (gate) | 1 to 2 weeks | 0.4.0 |
 | 6 | Supervised and regression modes | 2, WP 1.2 | 4 to 6 days | 0.5.0 (with phase 4) |
 | 7 | Auto-configuration that selects among candidates; documentation | 3, 4, 5 | 4 to 5 days | 0.6.0 |
+| 8 | After 0.6.0 (scope confirmed 2026-11-18): selection at scale, a benchmark of the default, open diagnostics, deprecations | 7 | 1 to 2 weeks plus compute | 0.7.0 |
 
 Phases 4 and 6 do not depend on the gate and can run in parallel with phase 3's compute.
 
@@ -609,6 +610,124 @@ Release as 0.6.0.
 
 ---
 
+## Phase 8: after 0.6.0 (proposed and confirmed 2026-11-18)
+
+**Goal:** close what phases 4 to 7 measured but left open: selection that scales to millions of rows, a benchmark
+of the default itself, the diagnostics that are still uncalibrated, and the deprecations. Release as 0.7.0.
+
+**Status: confirmed by the user (2026-11-18).** All five work packages go ahead. The answers to each "Decision
+needed" are recorded under it as "Decided". Each item comes from a note earlier in this plan or in
+`docs/BENCHMARK_DIAGNOSTICS.md`, cited in the work package.
+
+Suggested order: WP 8.1 first, because it sets where the other branches start. WP 8.2 and WP 8.3 share the E4 sets
+and can run as one cluster campaign (E10). WP 8.4 can run at any time. WP 8.5 comes last, just before the
+release.
+
+### WP 8.1 Branch, tags and distribution
+
+- All work since 0.1.2 is on `phase1/correctness`. `main` is still at `4d2a513` (0.1.2). Tags `v0.1.3` to
+  `v0.6.0` exist only locally, and nothing has been published to PyPI.
+- **Decision needed:**
+  - how to bring the branch into `main` (a pull request or a fast-forward);
+  - whether to push the tags;
+  - whether to publish to PyPI.
+- **Decided (the user, 2026-11-18):**
+  - merge through a pull request from `phase1/correctness` to `main`, with CI run on the PR;
+  - push the tags `v0.1.3` to `v0.6.0` to GitHub;
+  - do not publish to PyPI.
+- Acceptance: `main` holds 0.6.0 and CI passes on it. Later work packages branch from `main`, one branch each, as
+  "How to use this plan" says.
+
+### WP 8.2 Selection on a subsample of rows (E9 follow-up)
+
+- **Problem (WP 7.3 notes).** With labels, `strategy="select"` trains the refiner candidate on 80% of the rows. At
+  n = 1e6 on 16 CPUs this took:
+  - 1.8 hours at d = 128;
+  - 9.7 hours and 182 GB at d = 4,096, which is 11 times the size of the input.
+
+  From 1e5 to 1e6 rows the time grew 27 to 45 times. The manual (§3.5) currently tells users to select on a
+  subsample themselves and then refit with `strategy="fixed"`.
+- **Change.** Add `EmbedKit(selection_max_rows=...)`:
+  - When n is above it, the candidates are scored on a stratified subsample, which is split into training and
+    validation parts as now. The winner is then refitted on all rows.
+  - `selection_report_` records the subsample size.
+  - Refitting `Identity` costs nothing. Refitting a refiner winner costs one training on all rows (about 1.25
+    times the selection time in E9).
+  - **Decided (the user, 2026-11-18):** the default cap is 50,000. `None` keeps the 0.6.0 behaviour.
+- **Memory.** Find where the factor of 11 comes from: copies of X per candidate, float64 intermediates, or the
+  kNN distance blocks of the validation score. Cut it, for example by scoring validation kNN in blocks.
+- **Acceptance.** Fix the criteria before the runs, as in WP 4.5 and WP 7.1.
+  1. Choice quality on the 35 E4 sets, with the cap lowered to 5,000, 10,000 and 20,000 so that it binds. On every
+     set, either the subsampled selection makes the same choice as full selection, or its test accuracy is not
+     significantly lower: the paired bootstrap 95% interval of the difference is not entirely below 0.
+  2. E9 rerun of the `embedkit_labels` cells at n = 1e6:
+     - the selection step, without a refiner refit, takes no longer than the cell at n = cap;
+     - peak memory is below 3 times the size of the input.
+  3. GPU times for the n = 1e6 cells on `RTX8000Nodes` (E9 was CPU only), added to manual §3.5.
+
+### WP 8.3 Benchmark the default selection (E10)
+
+- WP 7.2 did not benchmark the selection itself (WP 7.2 notes, "Not done").
+- **Runs:**
+  - `EmbedKit()` with labels, using the default `strategy="select"`, on the 35 E4 sets, with E4's splits. The test
+    part is never seen by the selection.
+  - `mode="regression"` on E8's four regression sets.
+- **Report:**
+  - how often each candidate is chosen;
+  - test kNN accuracy (R^2 for regression) of the chosen output against raw (`Identity`) and against the
+    candidate that is best in hindsight;
+  - fit time.
+- **Acceptance (the promise WP 7.2 makes; fix it before the runs).** The default is significantly worse than raw
+  on no set. Significantly worse means that the paired bootstrap 95% interval is entirely below 0.
+  - If a set fails, look first at `val_fraction` and the significance rule, and only then at the candidate list.
+- **Output:** `docs/BENCHMARK_SELECTION.md` and the README numbers.
+- **Extra sets for R1 (decided by the user, 2026-11-18):** in the same campaign, extract more sets or encoders
+  with high hubness. The R1 rule was kept on only 3 firing sets, two of them from one encoder (WP 7.1 caveats).
+  - Apply WP 7.1's keep rule unchanged to the enlarged set.
+  - If R1 fails, it is removed from the report in WP 8.5.
+
+### WP 8.4 Diagnostics that are still uncalibrated
+
+The items come from "Open findings" in the WP 4.5 notes and from "Limitations and open findings" in
+`docs/BENCHMARK_DIAGNOSTICS.md`.
+
+- **Rows normalised upstream with an anisotropic spectrum.** Many sentence encoders produce such rows.
+  - `distance_cv` and uniformity have z of +8 to +11.
+  - A false antihub recommendation appears in about half of the `power1_l2` cells.
+  - The moment-matched sphere null (local branch `wip/sphere-null`) failed its bar.
+
+  - **Decided (the user, 2026-11-18): flag only.** Detect rows that already have unit norm and mark the affected
+    statistics as uncalibrated in the report, with no recommendation drawn from them.
+  - Not done: a new null on the sphere.
+- **Spiked spectra at d = 1,024.** Two statistics fail the ±3 bar:
+  - neighbour consistency under Euclidean is inside ±3 in only 0 to 60% of seeds;
+  - the antihub ratio under cosine gives a false alarm in 44% of cells.
+- **DANCo returns NaN** on `cube2` at n = 5,000, though it works at n = 500.
+- **Near-threshold flips.** A z between 3 and 4 is not stable with 20 draws. The report could give an interval for
+  z, or draw more samples only when z falls in that range.
+- **Acceptance.** For each of these cases, the WP 4.5 bar (z inside ±3 in at least 95% of seeds) holds on the
+  affected E3 cells. Otherwise the statistic is flagged as uncalibrated in the report, and a test checks the
+  flag.
+
+### WP 8.5 Deprecations and the 0.7.0 release
+
+- Remove the `suggested_k` and `suggested_sigma` aliases, which were deprecated in 0.6.0.
+- If the extra sets in WP 8.3 show that R1 fails WP 7.1's keep rule, remove R1's recommendation.
+- Update `CHANGELOG.md` and `docs/MIGRATION.md` (0.6.0 to 0.7.0), then release 0.7.0. Whether the tag is pushed
+  follows WP 8.1.
+
+### Not scheduled: research questions with too little evidence to plan
+
+- **A label-free selection criterion.**
+  - E2 found no label-free monitor with a median within-run ρ above 0.5.
+  - `knn_overlap` always ranks `Identity` first.
+
+  Until a criterion exists, the default without labels stays a fixed `CenterNormalize`.
+- **Regression losses ConR or SupReMix.** In E8, RnC beat ridge only once on the MLP.
+- **The kbn-histo-survival rerun.** It was handed over to that project (Phase 6 outcome).
+
+---
+
 ## Tracking
 
 | WP | Title | Status |
@@ -648,6 +767,11 @@ Release as 0.6.0.
 | 7.2 | Selection-based auto-configuration | done (2026-11-17): `strategy="select"` default; decisions and deviations in "WP 7.2 notes" |
 | 7.3 | Robustness and scaling | done (2026-11-18): input validation (`validate_embeddings` at every public entry point); E9 time and memory table in `docs/manual.md` §3.5 (`benchmarks/results/e9/REPORT.md`; all 48 cells finished) |
 | 7.4 | Documentation | done (2026-11-18; released as 0.6.0): README rewritten around the benchmark results; manual and skill brought to the 0.6.0 API (every code block executed); `docs/MIGRATION.md` extended to 0.6.0; E9 table added |
+| 8.1 | Branch, tags and distribution | to do (confirmed 2026-11-18): PR to `main`, push tags, no PyPI |
+| 8.2 | Selection on a subsample of rows | to do (confirmed 2026-11-18): `selection_max_rows=50_000` |
+| 8.3 | Benchmark the default selection (E10) | to do (confirmed 2026-11-18): with extra high-hubness sets for R1 |
+| 8.4 | Diagnostics still uncalibrated | to do (confirmed 2026-11-18): flag normalised rows only |
+| 8.5 | Deprecations and 0.7.0 | to do (confirmed 2026-11-18) |
 
 ### Phase 1 notes (2026-11-10)
 
@@ -1392,7 +1516,7 @@ above 0), not by plain argmax.
 
 ## Open points for the next session
 
-All design decisions in this plan are confirmed.
+All design decisions in this plan are confirmed, including phase 8's (2026-11-18).
 
 1. **Phases 4, 5 and 6 are done.** 0.4.0 (phase 5) was tagged locally on 2026-11-13; 0.5.0
    (phases 4 and 6, the user's decision, 2026-11-14) was tagged locally on 2026-11-17. Before the
@@ -1406,8 +1530,8 @@ All design decisions in this plan are confirmed.
    calibration on by default with 20 draws.
 2. **Phase 7 is done** and was tagged `v0.6.0` locally on 2026-11-18 (WP 7.1 E4, WP 7.2
    selection, WP 7.3 validation and E9, WP 7.4 documentation). Every phase of this plan is now
-   done or dropped. Candidates for later: selection on a subsample of rows for n in the millions
-   (E9: 9.7 hours on CPU at 1e6 x 4,096); removal of the deprecated aliases in 0.7.0.
+   done or dropped. Phase 8 (confirmed 2026-11-18, to be released as 0.7.0) collects what is
+   left. Start with WP 8.1.
 3. **Benchmark results:** new experiments commit only their reports and summaries, as E8 does;
    per-run JSON stays on the cluster. E8's per-run files exist only on Occidata
    (`$BASE/embedding-kit/benchmarks/results/e8/`); the local copies were deleted on 2026-11-14
