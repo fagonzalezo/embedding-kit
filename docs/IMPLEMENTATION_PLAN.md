@@ -647,7 +647,7 @@ Release as 0.6.0.
 | 7.1 | Run E4 | done (2026-11-17): 35 natural sets; 2 of 9 rules kept (hubness and antihubs, Euclidean kNN), the rest removed from the report (outcome below) |
 | 7.2 | Selection-based auto-configuration | done (2026-11-17): `strategy="select"` default; decisions and deviations in "WP 7.2 notes" |
 | 7.3 | Robustness and scaling | done (2026-11-18): input validation (`validate_embeddings` at every public entry point); E9 time and memory table in `docs/manual.md` §3.5 (`benchmarks/results/e9/REPORT.md`; all 48 cells finished) |
-| 7.4 | Documentation | in progress (2026-11-17): README rewritten around the benchmark results; manual and skill brought to the 0.6.0 API (every code block executed); `docs/MIGRATION.md` extended for WP 7.1 and 7.2; E9 table added (2026-11-18). Done apart from the 0.6.0 release notes |
+| 7.4 | Documentation | done (2026-11-18; released as 0.6.0): README rewritten around the benchmark results; manual and skill brought to the 0.6.0 API (every code block executed); `docs/MIGRATION.md` extended to 0.6.0; E9 table added |
 
 ### Phase 1 notes (2026-11-10)
 
@@ -1404,9 +1404,10 @@ All design decisions in this plan are confirmed.
    note. The open phase 4 findings (normalised anisotropic rows, spiked spectra at d = 1,024,
    near-threshold flips, the cosine antihub reading) go to phase 7. The user also kept
    calibration on by default with 20 draws.
-2. **Phase 7 is in progress** (released as 0.6.0). WP 7.1 (E4) and WP 7.2 (selection) are
-   done; WP 7.3 (validation and E9) is done (2026-11-18), and WP 7.4 has every part written.
-   Left: the 0.6.0 release (version bump, CHANGELOG heading, tag), on the user's word.
+2. **Phase 7 is done** and was tagged `v0.6.0` locally on 2026-11-18 (WP 7.1 E4, WP 7.2
+   selection, WP 7.3 validation and E9, WP 7.4 documentation). Every phase of this plan is now
+   done or dropped. Candidates for later: selection on a subsample of rows for n in the millions
+   (E9: 9.7 hours on CPU at 1e6 x 4,096); removal of the deprecated aliases in 0.7.0.
 3. **Benchmark results:** new experiments commit only their reports and summaries, as E8 does;
    per-run JSON stays on the cluster. E8's per-run files exist only on Occidata
    (`$BASE/embedding-kit/benchmarks/results/e8/`); the local copies were deleted on 2026-11-14

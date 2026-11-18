@@ -1,6 +1,26 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 (unreleased)
+
+Phase 7 of `docs/IMPLEMENTATION_PLAN.md`: experiment E4 (which diagnostics predict which fix, on
+35 natural sets) and the recommendations it left, a selection-based `EmbedKit` default, input
+validation and the E9 time and memory table, and the documentation pass (README, manual, skill,
+`docs/MIGRATION.md` from 0.1.2 to 0.6.0).
+
+### Breaking changes since 0.5.0 (summary; details below)
+- `EmbedKit()` defaults to `strategy="select"`: without labels it returns the input centred and
+  L2-normalised (was PCA to `suggested_target_dim`); with labels it keeps `Identity` unless a
+  candidate wins significantly on held-out rows. `strategy="fixed"`, or any explicit `method`,
+  restores the 0.5.0 behaviour (WP 7.2).
+- `EmbedKit(mode=...)` defaults to `"auto"`: labels now train a supervised model unless
+  `mode="self_supervised"`; continuous targets need `mode="regression"` (WP 7.2).
+- Under `strategy="select"`, `EmbedKit.analysis_report` is `None` (WP 7.2).
+- Recommendations: only k-skewness and the antihub ratio above the null remain, under
+  `metric="euclidean"`; the concentration, neighbour-consistency, cosine-hubness and ID / D rules
+  are gone, and the no-action message changed (WP 7.1).
+- `report.suggested_k` and `report.suggested_sigma` are deprecated aliases of `report.k` and
+  `report.kernel.sigma` (removal in 0.7.0) (WP 7.2).
+- NaN or infinite input raises `ValueError` at every public entry point (WP 7.3).
 
 ### Changed (WP 7.2: selection-based configuration)
 - `EmbedKit` has `strategy="select"` as the default (`"fixed"` is the 0.5.0 behaviour; any

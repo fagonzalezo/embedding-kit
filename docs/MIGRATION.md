@@ -1,11 +1,11 @@
-# Migrating from EmbedKit 0.1.2 to 0.5.0
+# Migrating from EmbedKit 0.1.2 to 0.6.0
 
 This note is for code written against EmbedKit 0.1.2 (analysis reports, `EmbedKit(...)`, `Trainer`,
 losses, augmentations, saved bundles). It lists every breaking change, the version that made it and
 what to do. `CHANGELOG.md` has the reasons and the measurements; `docs/manual.md` describes the
-current API. Phase 7 of `docs/IMPLEMENTATION_PLAN.md` will extend this note for 0.6.0.
+current API.
 
-Version path: 0.1.2 -> 0.1.3 -> 0.2.0 -> 0.4.0 -> 0.5.0. There is no 0.3.0. The "Since" column
+Version path: 0.1.2 -> 0.1.3 -> 0.2.0 -> 0.4.0 -> 0.5.0 -> 0.6.0. There is no 0.3.0. The "Since" column
 below says which release introduced each change. Releases 0.2.0 and 0.4.0 are mostly additions
 (`embedkit.evaluation`, `embedkit.baselines`, `embedkit.hubness_reduction`, `MatryoshkaLoss`, the
 `residual` and `linear` refiners); only their breaking parts are listed.
@@ -27,8 +27,8 @@ Quick triage:
 | 0.5.0 | Fixed-threshold recommendations: k-skewness above 2 or 5, `antihub_ratio > 0.3`, `distance_cv < 0.02` (0.1.3; `concentration_ratio > 0.8` in 0.1.2), neighbour consistency below 0.5, uniformity above -1 | Made from z-scores against a null model, one direction per statistic (more hubness, more concentrated distances, a less stable graph, more clustered directions than the null). The antihub one is made under `metric="euclidean"` only. With `calibrate=False` none of them is made | Keep `calibrate=True` (the default) if you use these recommendations. Code that matches the old wording must be rewritten |
 | 0.5.0 | Participation-ratio recommendations ("highly anisotropic ... consider whitening") | Gone from `recommendations`. `report.properties` holds descriptive sentences about the spectrum, dominant coordinates, mean direction and (when calibrated) uniformity, with no thresholds | Read `report.properties` for them. Anisotropy is not treated as a defect |
 | 0.5.0 | "No major issues detected. Embedding geometry looks healthy." | "No recommendation: no statistic is beyond its null range or a fixed rule." The ID/D rule (0.1 and 0.3) is the only fixed rule left | Update any string match |
-| Unreleased (WP 7.1) | 0.5.0 recommendations for more concentrated distances, a less stable kNN graph, hubness under cosine, and ID/D below 0.1 or 0.3 | Removed: in experiment E4 none predicted the gain of its fix on 35 natural classification sets. Only two remain, under `metric="euclidean"`: more hubness and more antihubs than the null, both naming a hubness-reducing search. The statistics and z-scores are unchanged in `report.calibration` and `report.intrinsic_dim`. The no-action message is now "No recommendation: no statistic with a validated rule is beyond its null range." | Read the z-scores yourself if you relied on those rules; update string matches |
-| Unreleased (WP 7.2) | `report.suggested_k`, `report.suggested_sigma` | `report.k` (the neighbourhood size the report used) and `report.kernel.sigma`. The old names still work with a `DeprecationWarning` and go in 0.7.0; `to_dataframe()` has `Summary/k` and no `Summary/suggested_k` or `Summary/suggested_sigma` rows | Rename |
+| 0.6.0 | 0.5.0 recommendations for more concentrated distances, a less stable kNN graph, hubness under cosine, and ID/D below 0.1 or 0.3 | Removed: in experiment E4 none predicted the gain of its fix on 35 natural classification sets. Only two remain, under `metric="euclidean"`: more hubness and more antihubs than the null, both naming a hubness-reducing search. The statistics and z-scores are unchanged in `report.calibration` and `report.intrinsic_dim`. The no-action message is now "No recommendation: no statistic with a validated rule is beyond its null range." | Read the z-scores yourself if you relied on those rules; update string matches |
+| 0.6.0 | `report.suggested_k`, `report.suggested_sigma` | `report.k` (the neighbourhood size the report used) and `report.kernel.sigma`. The old names still work with a `DeprecationWarning` and go in 0.7.0; `to_dataframe()` has `Summary/k` and no `Summary/suggested_k` or `Summary/suggested_sigma` rows | Rename |
 | 0.5.0 | `EmbedKitAnalyzer(metric=...)` took any string, and only some analyzers used it | Only `"euclidean"` and `"cosine"`; anything else raises `ValueError`. Every analyzer honours it. With `"cosine"` the rows are L2-normalised once and the whole report, isotropy included, describes the normalised rows; a zero-norm row raises `ValueError` | Pass `"euclidean"` or `"cosine"`. `HubnessAnalyzer` and `NeighborConsistency` on their own still accept any scikit-learn metric |
 | 0.5.0 | `suggested_target_dim` from the median across ID estimators | `1.5 x` the TwoNN estimate (same clipping to `[max(4, ID), d]`). If TwoNN is not in `id_methods` or fails, the first method that succeeded (`reference_method`) | Pin `target_dim` explicitly if you need the old value |
 | 0.5.0 | `fit` ran the analyzers only | By default also runs the null calibration (`n_null_draws + 1` evaluations of five statistics on `n_calibration` rows) and the ID bootstrap and scale curve. New arguments: `calibrate`, `null_model`, `n_null_draws`, `n_calibration`, `z_threshold`, `id_bootstrap`, `id_scale_curve` | `calibrate=False, id_bootstrap=0, id_scale_curve=False` skips the extra work (this is what `EmbedKit.fit` uses) |
@@ -113,9 +113,9 @@ the defaults.
 
 | Since | 0.1.2 | Now | What to do |
 |---|---|---|---|
-| Unreleased (WP 7.2) | `EmbedKit().fit(X)` built one configuration | New `strategy="select"` (default). Without labels: the input centred and L2-normalised (`CenterNormalize`); no analysis report. With labels: `Identity`, `CenterNormalize`, PCA at 64/128/256 (+ L2) and, in supervised or regression mode, the refiner at `min(128, d // 2)` are fitted on 80% of the rows and scored by 10-NN accuracy (cosine) or 10-NN regression R^2 on the rest; a candidate replaces `Identity` only with a paired-bootstrap interval above 0; the winner is refitted on all rows. `selected_`, `selection_report_` and `strategy_` record it | `strategy="fixed"` (or any explicit `method`) for the 0.5.0 behaviour |
-| Unreleased (WP 7.2) | `mode="self_supervised"` was the default, so `fit(X, y)` ignored `y` except for the report | `mode="auto"`: `"self_supervised"` without labels, `"supervised"` with them; continuous targets raise unless `mode="regression"` | Pass `mode="self_supervised"` to keep labels out of training (they are then used only to select among training-free candidates) |
-| Unreleased (WP 7.2) | Bundles held `model.pt` | An `Identity` or `CenterNormalize` result saves `arrays.npz` instead (the training mean), and `config.json` has `strategy` and `selected` | Older bundles load as before |
+| 0.6.0 | `EmbedKit().fit(X)` built one configuration | New `strategy="select"` (default). Without labels: the input centred and L2-normalised (`CenterNormalize`); no analysis report. With labels: `Identity`, `CenterNormalize`, PCA at 64/128/256 (+ L2) and, in supervised or regression mode, the refiner at `min(128, d // 2)` are fitted on 80% of the rows and scored by 10-NN accuracy (cosine) or 10-NN regression R^2 on the rest; a candidate replaces `Identity` only with a paired-bootstrap interval above 0; the winner is refitted on all rows. `selected_`, `selection_report_` and `strategy_` record it | `strategy="fixed"` (or any explicit `method`) for the 0.5.0 behaviour |
+| 0.6.0 | `mode="self_supervised"` was the default, so `fit(X, y)` ignored `y` except for the report | `mode="auto"`: `"self_supervised"` without labels, `"supervised"` with them; continuous targets raise unless `mode="regression"` | Pass `mode="self_supervised"` to keep labels out of training (they are then used only to select among training-free candidates) |
+| 0.6.0 | Bundles held `model.pt` | An `Identity` or `CenterNormalize` result saves `arrays.npz` instead (the training mean), and `config.json` has `strategy` and `selected` | Older bundles load as before |
 | 0.4.0 | `mode="self_supervised"` trained a refiner (MLP, `KNNPairs(5)`, NT-Xent + 0.5 `AlignUniformLoss`) | New `method="auto"` is `"pca"` without labels: the top `target_dim` principal directions followed by L2 normalisation, no training. `transform`, `dim=`, `save` and `load` work as before. In E1, E6 and E7 the refiner never beat the better of PCA and PCA-whitening | `method="refiner"` trains the refiner. With `method="pca"`, setting `augmentation`, `loss`, `nested_dims` or a non-linear `architecture` raises `ValueError` |
 | 0.4.0, 0.5.0 | The refiner was an MLP | `architecture="auto"`: `"linear"` (PCA-initialised linear map) in self-supervised mode, `"residual"` in supervised mode, `"mlp"` in regression mode. The resolved value is `architecture_` after `fit` | `architecture="mlp"` for the 0.1.2 model |
 | 0.4.0 | `early_stopping_patience=10`, `val_split=0.1`, `monitor="k_skewness"` | Defaults `"auto"`, `None` and `"auto"`. Self-supervised: no early stopping, all rows used for training, `k_skewness` only logged. Supervised and regression: patience 10, 10% of rows held out, best weights restored | Pass `early_stopping_patience=10, val_split=0.1, monitor="k_skewness"` for the 0.1.2 behaviour |
@@ -147,7 +147,7 @@ Z = ek.fit_transform(X, y)
 Z = EmbedKit(strategy="fixed").fit_transform(X)
 Z = EmbedKit(mode="supervised", strategy="fixed").fit_transform(X, y)
 
-# Unreleased (WP 7.2) defaults: centre + L2 without labels, validated selection with labels
+# 0.6.0 defaults: centre + L2 without labels, validated selection with labels
 Z = EmbedKit().fit_transform(X)
 ek = EmbedKit().fit(X, y)
 Z = ek.transform(X)
@@ -216,7 +216,14 @@ Trainer(model=refiner, augmentation=aug, loss=NTXentLoss(), epochs=100).fit(X)
 `pyproject.toml` otherwise keeps the same requirements as 0.1.2 (Python 3.10 or later, scikit-learn,
 scikit-dimension, torch, umap-learn and the rest); only `faiss-cpu` moved to an extra.
 
-## 7. Deprecated aliases still accepted in 0.5.0
+Input checks (0.6.0): every public `fit` (the analyzers, `EmbedKitAnalyzer`, `EmbedKit`, `Trainer`,
+the baselines, the hubness reductions) raises `ValueError` for NaN or infinite values, which
+0.5.0 passed on, and warns once for constant columns and once for exact duplicate rows.
+`transform` and the hubness reductions' queries check shape and values without the warnings. Clean
+or drop such rows before the call (`embedkit.utils.validation.validate_embeddings` runs the same
+check).
+
+## 7. Deprecated aliases still accepted in 0.6.0
 
 | Alias | Replacement | Warning | Removal |
 |---|---|---|---|
@@ -224,6 +231,8 @@ scikit-dimension, torch, umap-learn and the rest); only `faiss-cpu` moved to an 
 | `KernelDiagnosticsResult.kernel_alignment` | `centered_kernel_alignment` | `DeprecationWarning` | Same |
 | `KernelDiagnosticsResult.condition_number` | `top_k_eigen_ratio` | `DeprecationWarning` | No date |
 | `embedkit.utils.neighbors.clear_cache()` | none (delete) | `DeprecationWarning` | "Next release" (0.1.3 changelog); still present |
+| `EmbedKitReport.suggested_k` | `report.k` | `DeprecationWarning` | 0.7.0 |
+| `EmbedKitReport.suggested_sigma` | `report.kernel.sigma` | `DeprecationWarning` | 0.7.0 |
 
 `DeprecationWarning` is hidden by default outside `__main__`; run with `python -W error::DeprecationWarning`
 or under pytest to find the calls.
@@ -253,5 +262,8 @@ Same inputs and same code, different numbers. None of these raises an error.
   `FeatureMasking`, `scheduler="step"`, best-weight restoration, early-stopping direction, seeding,
   and MPS selection change trained embeddings. A run with a fixed `random_state` will not reproduce
   0.1.2 numbers.
-- **`EmbedKit` defaults (0.4.0, 0.5.0).** Section 4. The self-supervised output is PCA, so any
-  downstream result built on it changes.
+- **`EmbedKit` defaults (0.4.0, 0.5.0, 0.6.0).** Section 4. In 0.5.0 the self-supervised output
+  was PCA; in 0.6.0 it is the input centred and L2-normalised, and with labels the output is the
+  input itself unless a candidate wins on held-out rows. Any downstream result built on it changes.
+- **float64 input to the baselines and hubness reductions (0.6.0).** Kept in float64 instead of
+  being rounded to float32 first. Results for float32 input are unchanged.
