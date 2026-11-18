@@ -133,7 +133,8 @@ print(f"Raw kNN accuracy (k=5): {acc_raw:.3f}\n")
 print("=" * 60)
 print("Stage 2 — Unsupervised refinement (self-supervised)")
 print("=" * 60)
-# method="refiner" trains the contrastive refiner; the self-supervised default is PCA (E6/E7).
+# method="refiner" trains the contrastive refiner; without labels the default centres and
+# L2-normalises, and with labels it selects a transform by validation (WP 7.2).
 ek = EmbedKit(mode="self_supervised", method="refiner", target_dim="auto", epochs=80,
               eval_every=20, device=device)
 X_train_u = ek.fit_transform(X_train)

@@ -10,7 +10,7 @@ from embedkit.improvement.losses import RankNContrastLoss, SupConLoss
 from embedkit.improvement.model import EmbeddingRefiner
 from embedkit.improvement.trainer import Trainer
 
-KW = dict(id_methods=["TwoNN"], device="cpu", random_state=0)
+KW = dict(id_methods=["TwoNN"], device="cpu", random_state=0, strategy="fixed")
 
 
 def _classes(n=120, d=16, c=3, seed=0):

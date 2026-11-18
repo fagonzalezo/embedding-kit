@@ -451,7 +451,7 @@ def test_float64_analysis_equals_float32_analysis():
     r64 = fit_analyzer(X64)
     r32 = fit_analyzer(X64.astype(np.float32))
     assert r64.suggested_target_dim == r32.suggested_target_dim
-    assert r64.suggested_k == r32.suggested_k
+    assert r64.k == r32.k
     assert r64.hubness.k_skewness == pytest.approx(r32.hubness.k_skewness, abs=1e-9)
     assert r64.geometry.isotropy.isotropy_score == pytest.approx(
         r32.geometry.isotropy.isotropy_score, abs=1e-9)

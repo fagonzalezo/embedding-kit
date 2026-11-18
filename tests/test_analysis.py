@@ -120,7 +120,7 @@ class TestEmbedKitAnalyzer:
     def test_report_fields(self, small_X):
         from embedkit.analysis.report import EmbedKitAnalyzer
         report = EmbedKitAnalyzer(id_methods=["TwoNN"]).fit(small_X)
-        assert report.suggested_k > 0
+        assert report.k > 0
         assert report.suggested_target_dim > 0
         assert set(report.calibration) == {
             "k_skewness", "antihub_ratio", "distance_cv", "neighbor_consistency", "uniformity"}

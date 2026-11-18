@@ -645,8 +645,8 @@ Release as 0.6.0.
 | 6.2 | Class collapse | implemented (2026-11-13): `train_nc1`/`val_nc1`, `SupConLoss(spread_weight)` |
 | 6.3 | Run E8 | done (2026-11-14; `docs/BENCHMARK_SUPERVISED.md`) |
 | 7.1 | Run E4 | done (2026-11-17): 35 natural sets; 2 of 9 rules kept (hubness and antihubs, Euclidean kNN), the rest removed from the report (outcome below) |
-| 7.2 | Selection-based auto-configuration | not started |
-| 7.3 | Robustness and scaling | in progress (2026-11-17): input validation done (`validate_embeddings` at every public entry point); E9 timings not started |
+| 7.2 | Selection-based auto-configuration | done (2026-11-17): `strategy="select"` default; decisions and deviations in "WP 7.2 notes" |
+| 7.3 | Robustness and scaling | in progress (2026-11-17): input validation done (`validate_embeddings` at every public entry point); E9 harness built, analyzer runs submitted (arrays 3083006, 3083007) |
 | 7.4 | Documentation | in progress (2026-11-17): `docs/MIGRATION.md` (0.1.2 to 0.5.0) written and extended for the E4 changes; manual and skill passages on recommendations updated; full README and manual pass not started |
 
 ### Phase 1 notes (2026-11-10)
@@ -1342,6 +1342,38 @@ Euclidean kNN). On the secondary outcome, R4 with PCA on the linear probe passes
 - E5 check (not decisive): the kept rules fire on 0% to 38% of the damaged variants; the
   hubness reductions recover the most under noise damage (median +3.6 points, significant on 69%).
 
+### WP 7.2 notes (2026-11-17)
+
+Decisions by the user (2026-11-17), after E4: without labels the default is `CenterNormalize`
+(centre + L2); with labels the candidates are the training-free fixes plus the supervised
+refiner; a candidate replaces `Identity` only with a significant gain (paired bootstrap interval
+above 0), not by plain argmax.
+
+- **Implemented** in `embedkit/api.py`: `strategy="select"` (default) and `"fixed"` (0.5.0
+  behaviour; any explicit `method` implies it). Candidates: `Identity`, `CenterNormalize`, PCA
+  at 64/128/256 below d (or the given `target_dim`) with L2, and in supervised and regression
+  mode the refiner of the mode at `min(128, d // 2)` (E8's output dimension). Criterion: 10-NN
+  accuracy, or 10-NN regression R^2 for continuous targets, cosine by default
+  (`selection_metric`), on a stratified 20% hold-out (`val_fraction`). Winner refitted on all
+  rows; `selected_`, `selection_report_`, `strategy_`, `mode_`.
+- **Deviations from the WP text.** (1) Label-free selection: `knn_overlap`, E2's label-free
+  candidate, ranks refiner runs against each other but always ranks `Identity` first (overlap
+  1), so without labels there is no selection; the user chose a fixed `CenterNormalize`.
+  (2) "the baselines suggested by WP 7.1's rules": the two kept rules point to hubness
+  reductions, which change the neighbour search, not the embedding, so they cannot be
+  `transform` outputs; they stay as report advice. The candidates are the E4 interventions that
+  did not lose on most sets (centring, PCA). (3) The analysis is not moved inside the training
+  part but dropped from `select`: no decision reads it (`analysis_report` is `None`); `fixed`
+  still computes it on all rows for `suggested_target_dim`.
+- `mode="auto"` (new default): self-supervised without labels, supervised with them. With
+  `mode="self_supervised"` and labels, the labels only choose among training-free candidates.
+- `suggested_k` became `report.k` and `suggested_sigma` is `report.kernel.sigma` (deprecated
+  aliases until 0.7.0): nothing in the library read them.
+- Benchmark arms that used `EmbedKit(mode=...)` without `method` (E1's supervised arm, E8's
+  arms) now pass `strategy="fixed"`, so they still measure the refiner.
+- Not done: no benchmark of the selection itself on the E4 sets (it would reuse E4's numbers:
+  Identity unless a fix is significantly better on validation). E9 times it.
+
 ## Open points for the next session
 
 All design decisions in this plan are confirmed.
@@ -1356,10 +1388,10 @@ All design decisions in this plan are confirmed.
    note. The open phase 4 findings (normalised anisotropic rows, spiked spectra at d = 1,024,
    near-threshold flips, the cosine antihub reading) go to phase 7. The user also kept
    calibration on by default with 20 draws.
-2. **Phase 7 is in progress** (released as 0.6.0). WP 7.1 (E4) is done: see "WP 7.1 outcome".
-   Next: WP 7.2 (selection; E4 says `pca-auto` must not be the default and names `center_l2`
-   and the hubness reductions as candidates), E9 timings (WP 7.3) and the documentation pass
-   (WP 7.4). The cluster clone is still at 15e9a08; pull before the next cluster job.
+2. **Phase 7 is in progress** (released as 0.6.0). WP 7.1 (E4) and WP 7.2 (selection) are
+   done. Left: E9 (WP 7.3; harness `benchmarks/e9.py`, analyzer arrays 3083006 and 3083007
+   submitted 2026-11-17, EmbedKit targets to run on the WP 7.2 commit) and the documentation
+   pass (WP 7.4: README led by the benchmark results, manual and skill for the 0.6.0 API).
 3. **Benchmark results:** new experiments commit only their reports and summaries, as E8 does;
    per-run JSON stays on the cluster. E8's per-run files exist only on Occidata
    (`$BASE/embedding-kit/benchmarks/results/e8/`); the local copies were deleted on 2026-11-14

@@ -1,4 +1,4 @@
-"""EmbedKit(method="pca"): the self-supervised default after E6/E7 (gate outcome C)."""
+"""EmbedKit(method="pca"): the fixed self-supervised configuration (E6/E7, gate outcome C)."""
 
 import numpy as np
 import pytest
@@ -7,7 +7,7 @@ import torch
 from embedkit import EmbedKit
 from embedkit.baselines import PCAReduce
 
-KW = dict(id_methods=["TwoNN"], device="cpu")
+KW = dict(id_methods=["TwoNN"], device="cpu", strategy="fixed")  # the fixed configurations
 
 
 def _unit(Z):

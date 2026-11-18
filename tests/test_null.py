@@ -260,7 +260,7 @@ class TestReportCalibration:
                   n_calibration=300, n_null_draws=3)
         small = EmbedKitAnalyzer(**kw).fit(_gaussian(600, 16, "flat", 0))
         large = EmbedKitAnalyzer(**kw).fit(_gaussian(2400, 16, "flat", 0))
-        assert small.suggested_k == 12 and large.suggested_k == 24
+        assert small.k == 12 and large.k == 24
         assert small.calibration_k == large.calibration_k == 9  # round(sqrt(300) / 2)
         fixed = EmbedKitAnalyzer(k=7, **kw).fit(_gaussian(600, 16, "flat", 0))
         assert fixed.calibration_k == 7

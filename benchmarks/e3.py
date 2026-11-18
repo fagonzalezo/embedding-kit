@@ -238,7 +238,7 @@ def report_record(report) -> dict:
                 scale_curve={str(k): v for k, v in idr.scale_curve.items()},
                 scale_max_deviation=idr.scale_max_deviation,
                 reference_method=idr.reference_method),
-        suggested_k=report.suggested_k, suggested_target_dim=report.suggested_target_dim,
+        suggested_k=report.k, suggested_target_dim=report.suggested_target_dim,
         calibration_k=report.calibration_k,
     )
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, field, replace
 
 import numpy as np
@@ -77,8 +78,7 @@ class EmbedKitReport(BaseResult):
     hubness: HubnessResult
     geometry: GeometryBundle
     kernel: KernelDiagnosticsResult
-    suggested_k: int
-    suggested_sigma: float
+    k: int
     suggested_target_dim: int
     recommendations: list[str]
     input_shape: tuple[int, int]
@@ -88,6 +88,20 @@ class EmbedKitReport(BaseResult):
     properties: list[str] = field(default_factory=list)
     metric: str = "euclidean"
     calibration_k: int | None = None
+
+    @property
+    def suggested_k(self) -> int:
+        """Deprecated alias of :attr:`k`, the neighbourhood size the report used (WP 7.2)."""
+        warnings.warn("EmbedKitReport.suggested_k is deprecated and will be removed in 0.7.0; "
+                      "use report.k (the k the report used)", DeprecationWarning, stacklevel=2)
+        return self.k
+
+    @property
+    def suggested_sigma(self) -> float:
+        """Deprecated alias of ``kernel.sigma``, the RBF bandwidth of the kernel diagnostics."""
+        warnings.warn("EmbedKitReport.suggested_sigma is deprecated and will be removed in 0.7.0; "
+                      "use report.kernel.sigma", DeprecationWarning, stacklevel=2)
+        return self.kernel.sigma
 
     def to_dataframe(self) -> pd.DataFrame:
         dc = self.geometry.distance_concentration
@@ -134,8 +148,7 @@ class EmbedKitReport(BaseResult):
             ("Kernel", "top_k_eigen_ratio", self.kernel.top_k_eigen_ratio),
             ("Kernel", "sigma", self.kernel.sigma),
             ("Kernel", "centered_kernel_alignment", self.kernel.centered_kernel_alignment),
-            ("Summary", "suggested_k", self.suggested_k),
-            ("Summary", "suggested_sigma", self.suggested_sigma),
+            ("Summary", "k", self.k),
             ("Summary", "suggested_target_dim", self.suggested_target_dim),
             ("Summary", "n_outside_null", self.n_outside_null),
             ("Summary", "metric", self.metric),
@@ -216,9 +229,8 @@ class EmbedKitReport(BaseResult):
         print("\n[Recommendations]")
         for rec in self.recommendations:
             print(f"  • {rec}")
-        print("\n[Auto-config]")
-        print(f"  suggested_k          : {self.suggested_k}")
-        print(f"  suggested_sigma      : {self.suggested_sigma:.4f}")
+        print("\n[Settings]")
+        print(f"  k                    : {self.k}")
         print(f"  suggested_target_dim : {self.suggested_target_dim}")
         print(f"{'='*60}\n")
 
@@ -350,8 +362,6 @@ class EmbedKitAnalyzer(BaseAnalyzer):
         kernel = KernelDiagnostics(random_state=self.random_state)
         kernel_result = kernel.fit(X, y)
 
-        suggested_k = k
-        suggested_sigma = kernel_result.sigma
         ref_id = id_result.reference_estimate
         if np.isnan(ref_id):
             ref_id = max(2, d // 4)
@@ -374,8 +384,7 @@ class EmbedKitAnalyzer(BaseAnalyzer):
             hubness=hub_result,
             geometry=geo_bundle,
             kernel=kernel_result,
-            suggested_k=suggested_k,
-            suggested_sigma=suggested_sigma,
+            k=k,
             suggested_target_dim=suggested_target_dim,
             recommendations=recommendations,
             properties=properties,

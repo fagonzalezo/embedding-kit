@@ -93,7 +93,8 @@ def e1_methods(dataset) -> list[Method]:
     if labelled:
         m.append(Method(
             "embedkit_supervised",
-            lambda s, ds, dev: EmbedKit(mode="supervised", random_state=s, device=dev),
+            lambda s, ds, dev: EmbedKit(mode="supervised", strategy="fixed", random_state=s,
+                                        device=dev),
             deterministic=False, fit_with_labels=True, family="embedkit_supervised",
         ))
     return m
@@ -385,8 +386,8 @@ def e8_methods(dataset) -> list[Method]:
 
         def make(s, ds, dev):
             extra = {key: (v() if callable(v) else v) for key, v in kw.items()}
-            t = EmbedKit(mode=mode, target_dim=extra.pop("target_dim", k), random_state=s,
-                         device=dev, **extra)
+            t = EmbedKit(mode=mode, strategy="fixed", target_dim=extra.pop("target_dim", k),
+                         random_state=s, device=dev, **extra)
             return wrap(t, s) if wrap else t
         return Method(name, make, deterministic=False, fit_with_labels=True, family=family,
                       params=dict(mode=mode, target_dim=k, **{
@@ -443,8 +444,9 @@ def e8_methods(dataset) -> list[Method]:
     if top > k:
         m.append(Method(
             f"nested-d{k}",
-            lambda s, ds, dev: _Prefix(EmbedKit(mode="supervised", target_dim=top,
-                                                nested_dims=(k,), random_state=s, device=dev), k),
+            lambda s, ds, dev: _Prefix(EmbedKit(mode="supervised", strategy="fixed",
+                                                target_dim=top, nested_dims=(k,),
+                                                random_state=s, device=dev), k),
             deterministic=False, fit_with_labels=True, family="supcon_nested",
             params=dict(target_dim=top, dim=k), metrics=E8_CLASS_METRICS))
 

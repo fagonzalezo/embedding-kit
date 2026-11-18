@@ -15,10 +15,15 @@ print("=== Before refinement ===")
 report_before = EmbedKitAnalyzer(id_methods=["TwoNN"]).fit(X)
 report_before.print_summary()
 
-# The self-supervised default is PCA at the suggested dimension plus L2 normalisation: in the
-# E1, E6 and E7 benchmarks the trained refiner never beat it (docs/BENCHMARK_E6_E7.md).
-X_pca = EmbedKit(mode="self_supervised", target_dim="auto").fit_transform(X)
-print(f"PCA default shape: {X_pca.shape}")
+# Without labels the default (strategy="select") centres and L2-normalises: no label-free score
+# can tell whether a transform helps, and in E4 PCA to the suggested dimension lost accuracy on
+# 32 of 35 natural sets. With labels, EmbedKit().fit(X, y) chooses by validation instead.
+X_default = EmbedKit().fit_transform(X)
+print(f"Default (centre + L2) shape: {X_default.shape}")
+
+# PCA at the report's suggested dimension, as a fixed configuration.
+X_pca = EmbedKit(method="pca", target_dim="auto").fit_transform(X)
+print(f"PCA shape: {X_pca.shape}")
 
 print("\nRefining embedding (self-supervised, trained refiner) ...")
 ek = EmbedKit(mode="self_supervised", method="refiner", epochs=50, eval_every=10,

@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+### Changed (WP 7.2: selection-based configuration)
+- `EmbedKit` has `strategy="select"` as the default (`"fixed"` is the 0.5.0 behaviour; any
+  explicit `method` implies it). Without labels it returns the input centred and L2-normalised
+  (`CenterNormalize`): no label-free score can tell whether a transform helps (`knn_overlap`
+  gives the unchanged input the top score), and in E4 PCA to `suggested_target_dim`, the 0.5.0
+  default, lost accuracy on 32 of 35 natural sets, while centring + L2 was the most consistent
+  small gain on Euclidean kNN (16 up, 1 down).
+- With labels, `fit(X, y)` holds out 20% of the rows (`val_fraction`, stratified), fits
+  `Identity`, `CenterNormalize`, PCA at 64, 128 and 256 below d (L2-normalised) and, in
+  supervised and regression mode, the refiner of the mode at `min(128, d // 2)`, scores each by
+  10-NN accuracy (classes) or 10-NN regression R^2 on the held-out rows (`selection_metric`,
+  cosine by default), and keeps `Identity` unless a candidate beats it with a paired bootstrap
+  interval (95%, 2,000 resamples) above 0. The winner is refitted on all rows. New attributes:
+  `selected_`, `selection_report_` (the table), `strategy_`, `mode_`. Fewer than 20 rows to fit
+  or to score: `Identity` with a warning.
+- `mode="auto"` is the new default: self-supervised without labels, supervised with them;
+  continuous targets need `mode="regression"`.
+- Under `strategy="select"` no analysis report is computed (`analysis_report` is `None`); no
+  decision reads it.
+- `EmbedKitReport.suggested_k` is now `report.k` and `suggested_sigma` is `report.kernel.sigma`;
+  the old names warn (`DeprecationWarning`) and go in 0.7.0. Nothing in the library read them.
+- Bundles of an `Identity` or `CenterNormalize` result store `arrays.npz` (no `model.pt`);
+  `save_bundle` takes `model=None` and `arrays=`.
+
 ### Changed (WP 7.1: experiment E4)
 - The report's recommendations are cut to the rules E4 validated. E4 ran the report and every
   training-free fix (centring, standardising, ZCA, conceptors, PCA and PCA-whitening at E1's
