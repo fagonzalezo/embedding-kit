@@ -15,6 +15,10 @@
   a float64 copy of the input (two times its float32 size); the fitted mean is the same. At
   1e6 × 4,096 the peak memory of `EmbedKit().fit(X)` fell from 49.8 GB to 17.8 GB.
 
+### Removed (WP 8.5)
+- `EmbedKitReport.suggested_k` and `suggested_sigma`, deprecated in 0.6.0: use `report.k` and
+  `report.kernel.sigma`.
+
 ### Changed (WP 8.4: diagnostics that are still uncalibrated)
 - `CalibratedStatistic` gains `uncalibrated` (`None`, or why the null is not calibrated for this
   statistic here; `.calibrated` is the boolean) and `z_interval` (95% over 2,000 resamples of

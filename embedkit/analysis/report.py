@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import warnings
 from dataclasses import dataclass, field, replace
 
 import numpy as np
@@ -135,20 +134,6 @@ class EmbedKitReport(BaseResult):
     properties: list[str] = field(default_factory=list)
     metric: str = "euclidean"
     calibration_k: int | None = None
-
-    @property
-    def suggested_k(self) -> int:
-        """Deprecated alias of :attr:`k`, the neighbourhood size the report used (WP 7.2)."""
-        warnings.warn("EmbedKitReport.suggested_k is deprecated and will be removed in 0.7.0; "
-                      "use report.k (the k the report used)", DeprecationWarning, stacklevel=2)
-        return self.k
-
-    @property
-    def suggested_sigma(self) -> float:
-        """Deprecated alias of ``kernel.sigma``, the RBF bandwidth of the kernel diagnostics."""
-        warnings.warn("EmbedKitReport.suggested_sigma is deprecated and will be removed in 0.7.0; "
-                      "use report.kernel.sigma", DeprecationWarning, stacklevel=2)
-        return self.kernel.sigma
 
     def to_dataframe(self) -> pd.DataFrame:
         dc = self.geometry.distance_concentration

@@ -118,16 +118,15 @@ def test_save_load_roundtrip(tmp_path, labels):
     np.testing.assert_allclose(back.transform(X), ek.transform(X), atol=1e-5)
 
 
-def test_report_k_and_deprecated_aliases():
+def test_report_k_and_removed_aliases():
     from embedkit import EmbedKitAnalyzer
 
     X = np.random.default_rng(0).standard_normal((300, 8)).astype(np.float32)
     r = EmbedKitAnalyzer(id_methods=["TwoNN"], calibrate=False, id_bootstrap=0,
                          id_scale_curve=False).fit(X)
-    with pytest.warns(DeprecationWarning, match="report.k"):
-        assert r.suggested_k == r.k
-    with pytest.warns(DeprecationWarning, match="kernel.sigma"):
-        assert r.suggested_sigma == r.kernel.sigma
+    assert r.k == 9 and r.kernel.sigma > 0
+    # Deprecated in 0.6.0, removed in 0.7.0 (WP 8.5).
+    assert not hasattr(r, "suggested_k") and not hasattr(r, "suggested_sigma")
 
 
 # ---------------------------------------------------------------------------------------------

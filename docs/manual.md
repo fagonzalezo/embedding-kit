@@ -264,8 +264,7 @@ print(f"lambda_1/lambda_k: {result.top_k_eigen_ratio:.3g}")
 | `kernel.sigma` | The RBF bandwidth of the kernel diagnostics (median pairwise distance). Replaces `suggested_sigma` |
 | `suggested_target_dim` | `clip(1.5 × ID, max(4, ID), D)` with ID the reference estimate (TwoNN by default). No benchmark supports the factor 1.5, and PCA to it lost accuracy on 32 of 35 E4 sets. Only `EmbedKit(strategy="fixed", target_dim="auto")` reads it |
 
-`report.suggested_k` and `report.suggested_sigma` still work but emit a `DeprecationWarning` and go
-in 0.7.0; nothing in the library reads them.
+`report.suggested_k` and `report.suggested_sigma`, deprecated in 0.6.0, were removed in 0.7.0.
 
 **Class:** `EmbedKitAnalyzer(k, id_methods, metric, random_state, calibrate, null_model, n_null_draws, n_calibration, z_threshold, id_bootstrap, id_scale_curve)`
 

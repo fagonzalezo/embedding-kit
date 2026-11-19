@@ -771,7 +771,7 @@ The items come from "Open findings" in the WP 4.5 notes and from "Limitations an
 | 8.2 | Selection on a subsample of rows | done (2026-11-19): `selection_max_rows=50_000`; criteria 1 and 2 met, criterion 3 missed at d = 128 by a fixed cost (see "WP 8.2 outcome") |
 | 8.3 | Benchmark the default selection (E10) | in progress (2026-11-19): 35 sets done in E10; regression and 25 extra sets designed (see "WP 8.3 design and criteria") |
 | 8.4 | Diagnostics still uncalibrated | done (2026-11-19): flags, z intervals, DANCo fix; one residual near miss left unflagged (see "WP 8.4 outcome") |
-| 8.5 | Deprecations and 0.7.0 | to do (confirmed 2026-11-18) |
+| 8.5 | Deprecations and 0.7.0 | in progress (2026-11-19): `suggested_k` / `suggested_sigma` removed; R1 decision, MIGRATION 0.6.0 to 0.7.0 and the release wait for WP 8.3 |
 
 ### Phase 1 notes (2026-11-10)
 

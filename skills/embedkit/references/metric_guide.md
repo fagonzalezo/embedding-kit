@@ -172,7 +172,7 @@ hurts retrieval diversity and model calibration. `AlignUniformLoss` optimizes th
 
 Applies an RBF kernel `K(x_i, x_j) = exp(−||x_i − x_j||² / (2σ²))` on a subsample and analyzes
 the spectrum of the centred kernel `Kc = HKH`. Sigma is the median pairwise distance
-(`report.kernel.sigma`; `suggested_sigma` is a deprecated alias removed in 0.7.0).
+(`report.kernel.sigma`; `suggested_sigma` was removed in 0.7.0).
 
 | Attribute | Meaning |
 |---|---|

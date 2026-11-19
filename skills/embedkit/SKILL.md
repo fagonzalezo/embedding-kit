@@ -116,8 +116,8 @@ report = analyzer.fit(X, y=None)    # y enables centered_kernel_alignment
 | `report.n_outside_null` | `int` | Calibrated statistics (not flagged `uncalibrated`) with \|z\| > `z_threshold` (3); replaces `severity` |
 | `report.properties` | `list[str]` | Descriptive statements (spectrum, mean direction, uniformity vs null); anisotropy is a property, not a recommendation |
 | `report.recommendations` | `list[str]` | Actions, Euclidean metric only: more hubness or more antihubs than the null (the two rules E4 kept). Otherwise "No recommendation: ..." |
-| `report.k` | `int` | The kNN size the report used (replaces `suggested_k`, a deprecated alias removed in 0.7.0) |
-| `report.kernel.sigma` | `float` | The RBF bandwidth of the kernel diagnostics (replaces `suggested_sigma`, deprecated likewise) |
+| `report.k` | `int` | The kNN size the report used (replaces `suggested_k`, removed in 0.7.0) |
+| `report.kernel.sigma` | `float` | The RBF bandwidth of the kernel diagnostics (replaces `suggested_sigma`, removed in 0.7.0) |
 | `report.suggested_target_dim` | `int` | ≈ 1.5 × TwoNN ID. Descriptive: PCA to it lost accuracy on 32 of 35 E4 sets. Only `EmbedKit(strategy="fixed", target_dim="auto")` reads it |
 
 ---

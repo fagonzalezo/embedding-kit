@@ -231,8 +231,6 @@ check).
 | `KernelDiagnosticsResult.kernel_alignment` | `centered_kernel_alignment` | `DeprecationWarning` | Same |
 | `KernelDiagnosticsResult.condition_number` | `top_k_eigen_ratio` | `DeprecationWarning` | No date |
 | `embedkit.utils.neighbors.clear_cache()` | none (delete) | `DeprecationWarning` | "Next release" (0.1.3 changelog); still present |
-| `EmbedKitReport.suggested_k` | `report.k` | `DeprecationWarning` | 0.7.0 |
-| `EmbedKitReport.suggested_sigma` | `report.kernel.sigma` | `DeprecationWarning` | 0.7.0 |
 
 `DeprecationWarning` is hidden by default outside `__main__`; run with `python -W error::DeprecationWarning`
 or under pytest to find the calls.
