@@ -768,7 +768,7 @@ The items come from "Open findings" in the WP 4.5 notes and from "Limitations an
 | 7.3 | Robustness and scaling | done (2026-11-18): input validation (`validate_embeddings` at every public entry point); E9 time and memory table in `docs/manual.md` §3.5 (`benchmarks/results/e9/REPORT.md`; all 48 cells finished) |
 | 7.4 | Documentation | done (2026-11-18; released as 0.6.0): README rewritten around the benchmark results; manual and skill brought to the 0.6.0 API (every code block executed); `docs/MIGRATION.md` extended to 0.6.0; E9 table added |
 | 8.1 | Branch, tags and distribution | done (2026-11-18): PR #1 merged into `main` (`c8ce3f6`, CI green); tags `v0.1.3` to `v0.6.0` pushed; no PyPI |
-| 8.2 | Selection on a subsample of rows | in progress (2026-11-18): `selection_max_rows=50_000` implemented; E10 and E9b runs; criteria in "WP 8.2 design and criteria" |
+| 8.2 | Selection on a subsample of rows | done (2026-11-19): `selection_max_rows=50_000`; criteria 1 and 2 met, criterion 3 missed at d = 128 by a fixed cost (see "WP 8.2 outcome") |
 | 8.3 | Benchmark the default selection (E10) | to do (confirmed 2026-11-18): with extra high-hubness sets for R1 |
 | 8.4 | Diagnostics still uncalibrated | to do (confirmed 2026-11-18): flag normalised rows only |
 | 8.5 | Deprecations and 0.7.0 | to do (confirmed 2026-11-18) |
@@ -1568,6 +1568,52 @@ the subsample chose exactly as well. The criteria are therefore restated here, b
    most 3 times the input.
 4. **GPU (E9b GPU).** Descriptive, no bar. The times go into manual §3.5.
 
+### WP 8.2 outcome (2026-11-19)
+
+Runs at commit `99c82ec`: E10 (job 3084794 and the smoke task 3084793; 35 sets), E9b CPU
+(3084795, 3084796; `48CPUNodes`, 16 CPUs), E9b GPU (3084808, 3084809; `RTX8000Nodes`). Reports:
+`benchmarks/results/e10/REPORT.md`, `benchmarks/results/e9b/REPORT.md`,
+`benchmarks/results/e9b_gpu/REPORT.md` (`benchmarks/report_e10.py`, `report_e9.py --experiment`).
+
+1. **Choice quality.**
+   - Cap 5,000 binds on 26 sets and is significantly worse on 4: cifar100_dinov2 −2.3, and
+     emotion_bge −3.5, emotion_e5 −6.2, emotion_minilm −3.6. Those fail because the 1,000
+     validation rows of the subsample cannot show the refiner's gain, so identity is kept.
+     Fail.
+   - Cap 10,000 binds on 22 sets and is significantly worse on none. It picks the same
+     candidate on 21. Pass.
+   - Cap 20,000 binds on 6 sets and is worse on none, with the same candidate on all 6. Pass.
+   - The default cap (50,000) binds on no E4 set: none has more than 50,000 training rows. The
+     criterion is therefore met with nothing to test. The evidence for 50,000 is that 10,000
+     and 20,000 pass. At n = 1e6 on synthetic data, the GPU runs give the same choice
+     (identity) with the cap and without it at d = 128 and 1,024.
+   - Secondary outcomes: cap 10,000 is worse on 1 set in Euclidean kNN and on 1 in the probe;
+     cap 5,000 on 5 and 4.
+2. **Time.** Met at every d. `embedkit_labels` at 1e6 against 1.5 × (`embedkit_labels` at
+   5e4 + `embedkit` at 1e6): 114 s ≤ 171 s (d = 128), 161 s ≤ 243 s (1,024),
+   404 s ≤ 607 s (4,096). In 0.6.0 the same fits took 1.8 h, 3.5 h and 9.7 h.
+3. **Memory.** Met for `embedkit` at every d. At 1e6 × 4,096 its peak fell from 49.8 GB to
+   17.8 GB with the copy-free refit.
+   - For `embedkit_labels`, peak − RSS before `fit` is 2.16 GB at d = 128, against
+     2 × X = 1.02 GB. **Missed.** At d = 1,024 it is 2.79 ≤ 8.19, and at d = 4,096 it is
+     9.51 ≤ 32.8.
+   - The 2.16 GB is the fixed cost of scoring the candidates on the 50,000-row subsample. It
+     is the same at n = 5e4, 1e5 and 1e6 (2.15, 2.16, 2.16 GB; 2.8 and 9.5 GB at d = 1,024
+     and 4,096). It does not grow with n.
+   - The criterion assumed a cost proportional to X, which does not hold when X is small.
+     The miss is recorded as such. Nothing was changed to meet it.
+4. **GPU** (n = 1e6). With the default cap: 1.4, 2.1 and 5.0 min. With all rows: 2.8 h, 4.2 h,
+   and d = 4,096 still running when this was written.
+   - In manual §3.5, as is the CPU table.
+
+WP 8.3 preview (same E10 runs, no criteria applied yet):
+- The default picks the refiner on 22 sets and identity on 13.
+- It is significantly better than identity on 21 sets, by +0.8 to +15.0 points, and never
+  worse.
+- Regret against the best candidate in hindsight is 0 on 26 sets and at most 1.2 points
+  (newsgroups_mpnet). Where it is not 0, identity was kept and `center_l2`, PCA or the refiner
+  was slightly better.
+
 ## Open points for the next session
 
 All design decisions in this plan are confirmed, including phase 8's (2026-11-18).
@@ -1585,7 +1631,7 @@ All design decisions in this plan are confirmed, including phase 8's (2026-11-18
 2. **Phase 7 is done** and was tagged `v0.6.0` locally on 2026-11-18 (WP 7.1 E4, WP 7.2
    selection, WP 7.3 validation and E9, WP 7.4 documentation). Every phase of this plan is now
    done or dropped. Phase 8 (confirmed 2026-11-18, to be released as 0.7.0) collects what is
-   left. Start with WP 8.1.
+   left. WP 8.1 and 8.2 are done (2026-11-19); continue with WP 8.3.
 3. **Benchmark results:** new experiments commit only their reports and summaries, as E8 does;
    per-run JSON stays on the cluster. E8's per-run files exist only on Occidata
    (`$BASE/embedding-kit/benchmarks/results/e8/`); the local copies were deleted on 2026-11-14

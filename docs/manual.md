@@ -1020,32 +1020,53 @@ The analyzer's time hardly grows with n: the neighbour statistics use a subsampl
 four times the input at d = 4,096, because the input is copied (float32 conversion, centring)
 before it is subsampled. Calibration accounts for most of the time at small n.
 
-`EmbedKit().fit(X)` without labels (centre and L2-normalise):
+`EmbedKit().fit(X)` without labels (centre and L2-normalise). Rows 1,000 and 10,000 are E9
+(0.6.0); rows from 50,000 are E9b (after WP 8.2, `benchmarks/results/e9b/REPORT.md`, same machine
+and settings):
 
 | n \ d | 128 | 1,024 | 4,096 |
 |---|---|---|---|
 | 1,000 | < 0.1 s / 0.6 GB | < 0.1 s / 0.6 GB | < 0.1 s / 0.7 GB |
 | 10,000 | < 0.1 s / 0.6 GB | 0.1 s / 0.7 GB | 0.3 s / 1.1 GB |
-| 100,000 | 0.1 s / 0.8 GB | 0.7 s / 1.9 GB | 2.6 s / 5.5 GB |
-| 1,000,000 | 1.1 s / 2.2 GB | 6.7 s / 12.9 GB | 25 s / 49.8 GB |
+| 50,000 | 0.1 s / 0.7 GB | 0.3 s / 1.0 GB | 1.1 s / 2.3 GB |
+| 100,000 | 0.1 s / 0.7 GB | 0.6 s / 1.2 GB | 2.2 s / 3.1 GB |
+| 1,000,000 | 1.1 s / 1.2 GB | 5.9 s / 4.9 GB | 22 s / 17.8 GB |
 
-`EmbedKit().fit(X, y)` with class labels (selection, with the supervised refiner as a candidate):
+The centring is now refitted without a float64 copy of the input: at 1e6 × 4,096 the peak fell
+from 49.8 GB in 0.6.0 to 17.8 GB, about 1.4 GB above the input and the interpreter.
+
+`EmbedKit().fit(X, y)` with class labels (selection, with the supervised refiner as a candidate).
+Rows 1,000 and 10,000 are E9 (0.6.0, and unchanged since: below `selection_max_rows` the
+selection is that of 0.6.0); rows from 50,000 are E9b:
 
 | n \ d | 128 | 1,024 | 4,096 |
 |---|---|---|---|
 | 1,000 | 10 s / 1.0 GB | 11 s / 1.0 GB | 15 s / 1.2 GB |
 | 10,000 | 28 s / 1.2 GB | 37 s / 1.4 GB | 2.2 min / 3.4 GB |
-| 100,000 | 4.0 min / 3.0 GB | 5.8 min / 5.8 GB | 12.8 min / 20.1 GB |
-| 1,000,000 | 1.8 h / 9.7 GB | 3.5 h / 46.0 GB | 9.7 h / 182 GB |
+| 50,000 | 1.9 min / 2.8 GB | 2.6 min / 3.6 GB | 6.4 min / 11.0 GB |
+| 100,000 | 1.9 min / 2.8 GB | 2.6 min / 3.8 GB | 6.4 min / 11.8 GB |
+| 1,000,000 | 1.9 min / 3.3 GB | 2.7 min / 7.5 GB | 6.7 min / 26.5 GB |
 
-This table is 0.6.0, which selected on all the rows. Training the refiner candidate on CPU is
-almost all of this time. From 1e5 to 1e6 rows it grew 27 to 45 times, not 10. `Identity` was
-selected in every cell, so no model was refitted. When the refiner wins, it is trained a second
-time on all rows, which adds roughly 1.25 times the first training. At 1e6 × 4,096 the input in
-float64 (centring + L2, PCA) and the training copies needed about 11 times the input in memory.
-Since WP 8.2 the selection uses at most `selection_max_rows` rows (50,000 by default), so above
-that its cost no longer grows with n; the refit of a winning refiner on all the rows still
-does. The measurements after WP 8.2 (E9b) are pending.
+Above 50,000 rows the selection uses a stratified subsample of `selection_max_rows` rows, so
+its time and its memory beyond the input no longer grow with n: about 2.2 GB at d up to 1,024
+and 9.5 GB at d = 4,096, at every n. In 0.6.0, which selected on all the rows, the 1e6 row took
+1.8 h / 9.7 GB, 3.5 h / 46 GB and 9.7 h / 182 GB. `Identity` was selected in every cell, so no
+model was refitted. When the refiner or PCA wins, it is fitted again on all the rows, and that
+refit still grows with n (E9b does not measure it): the refiner is trained on all the rows, and
+the PCA refit makes a float64 copy of the input.
+
+On a GPU (Quadro RTX 8000, 20 CPUs; E9b GPU, `benchmarks/results/e9b_gpu/REPORT.md`), at
+n = 1e6:
+
+| | 128 | 1,024 | 4,096 |
+|---|---|---|---|
+| `selection_max_rows=50_000` (default) | 1.4 min / 4.0 GB | 2.1 min / 8.2 GB | 5.0 min / 26.6 GB |
+| `selection_max_rows=None` (all rows) | 2.8 h / 10.5 GB | 4.2 h / 46.1 GB | pending |
+
+On the 35 E4 sets (E10, `benchmarks/results/e10/REPORT.md`), a cap of 10,000 or 20,000 rows
+chose as well as the selection on all the rows on every set it applied to; a cap of 5,000 was
+significantly worse on 4 of 26 sets (by 2.3 to 6.2 points). No E4 set has more than 50,000
+training rows, so the default cap itself does not bind there.
 
 ---
 

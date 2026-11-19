@@ -8,14 +8,18 @@
   fits only the winner on all the rows. In E9, selection on all the rows took 1.8 to 9.7 hours at
   a million rows on 16 CPUs. Inputs of more than 50,000 rows can therefore get a different
   choice than in 0.6.0; `selection_max_rows=None` restores the 0.6.0 selection.
-  `selection_report_.attrs` gains `n_rows` and `n_selection_rows`.
+  `selection_report_.attrs` gains `n_rows` and `n_selection_rows`. Measured (E9b): 1.9 to
+  6.7 minutes at a million rows on the same CPUs, the same at 5e4 and 1e5 rows. On the E4 sets
+  (E10), caps of 10,000 and 20,000 chose as well as all the rows; 5,000 did not.
 - When `Identity` or `CenterNormalize` is the result, the refit on all the rows no longer makes
-  a float64 copy of the input (two times its float32 size); the fitted mean is the same.
+  a float64 copy of the input (two times its float32 size); the fitted mean is the same. At
+  1e6 × 4,096 the peak memory of `EmbedKit().fit(X)` fell from 49.8 GB to 17.8 GB.
 
 ### Added
 - Benchmarks: experiment E10 (`run.py --experiment e10`, `cluster/e10.slurm.sh`), the default
   selection and its candidates on the E4 sets; `e9.py --experiment` and the
   `embedkit_labels_all` target for the E9 rerun after WP 8.2.
+- `benchmarks/report_e10.py`: the WP 8.2 verdicts and the WP 8.3 preview from E10.
 
 ## 0.6.0 (unreleased)
 

@@ -35,3 +35,7 @@ benchmarks/results/e5/*/
 # E4 per-run results stay on the cluster too (WP 7.1)
 benchmarks/results/e4/*/
 benchmarks/results/e9/*.json
+# E10 and E9b per-run results stay on the cluster too (WP 8.2)
+benchmarks/results/e10/*/
+benchmarks/results/e9b/*.json
+benchmarks/results/e9b_gpu/*.json
