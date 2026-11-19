@@ -771,7 +771,7 @@ The items come from "Open findings" in the WP 4.5 notes and from "Limitations an
 | 8.2 | Selection on a subsample of rows | done (2026-11-19): `selection_max_rows=50_000`; criteria 1 and 2 met, criterion 3 missed at d = 128 by a fixed cost (see "WP 8.2 outcome") |
 | 8.3 | Benchmark the default selection (E10) | done (2026-11-19): never significantly worse than raw on 64 sets, better on 43; R1 kept on 60 sets (5 of 5 firing sets up); `docs/BENCHMARK_SELECTION.md` (see "WP 8.3 outcome") |
 | 8.4 | Diagnostics still uncalibrated | done (2026-11-19): flags, z intervals, DANCo fix; one residual near miss left unflagged (see "WP 8.4 outcome") |
-| 8.5 | Deprecations and 0.7.0 | in progress (2026-11-19): `suggested_k` / `suggested_sigma` removed; `docs/MIGRATION.md` extended to 0.7.0; R1 kept by WP 8.3, so no removal; the release is left |
+| 8.5 | Deprecations and 0.7.0 | done (2026-11-19; released as 0.7.0, tag `v0.7.0`): `suggested_k` / `suggested_sigma` removed; `docs/MIGRATION.md` extended to 0.7.0; R1 kept by WP 8.3, so nothing else removed |
 
 ### Phase 1 notes (2026-11-10)
 
@@ -1792,7 +1792,7 @@ All design decisions in this plan are confirmed, including phase 8's (2026-11-18
 2. **Phase 7 is done** and was tagged `v0.6.0` locally on 2026-11-18 (WP 7.1 E4, WP 7.2
    selection, WP 7.3 validation and E9, WP 7.4 documentation). Every phase of this plan is now
    done or dropped. Phase 8 (confirmed 2026-11-18, to be released as 0.7.0) collects what is
-   left. WP 8.1 to 8.4 are done (2026-11-19); WP 8.5 has the release left.
+   left. Phase 8 is done and was tagged `v0.7.0` on 2026-11-19 (no PyPI).
 3. **Benchmark results:** new experiments commit only their reports and summaries, as E8 does;
    per-run JSON stays on the cluster. E8's per-run files exist only on Occidata
    (`$BASE/embedding-kit/benchmarks/results/e8/`); the local copies were deleted on 2026-11-14

@@ -1,6 +1,20 @@
 # Changelog
 
-## Unreleased (phase 8, toward 0.7.0)
+## 0.7.0 (unreleased)
+
+Phase 8 of `docs/IMPLEMENTATION_PLAN.md`: the branch merged and the tags pushed (WP 8.1),
+selection on a subsample of rows (WP 8.2), the benchmark of the default selection on 64 sets with
+the hubness rule retested on 60 (WP 8.3, `docs/BENCHMARK_SELECTION.md`), the statistics the null
+model does not calibrate flagged (WP 8.4), and the 0.6.0 deprecations removed (WP 8.5).
+`docs/MIGRATION.md` now runs from 0.1.2 to 0.7.0.
+
+### Breaking changes since 0.6.0 (summary; details below)
+- `EmbedKitReport.suggested_k` and `suggested_sigma` are removed (WP 8.5).
+- `report.n_outside_null` counts calibrated statistics only, and no antihub recommendation is
+  made on rows normalised upstream (WP 8.4).
+- With more than 50,000 rows, `EmbedKit` with labels selects on a stratified subsample
+  (`selection_max_rows`), so its choice can differ from 0.6.0; `selection_max_rows=None`
+  restores the 0.6.0 selection (WP 8.2).
 
 ### Changed (WP 8.2: selection on a subsample of rows)
 - `EmbedKit(selection_max_rows=50_000)`, new: with more rows than that, `strategy="select"` fits
