@@ -224,7 +224,7 @@ _DANCO_CACHE: dict = {}
 
 
 def _danco_with_clipped_angles(base):
-    """skdim's DANCo with the cosine of each neighbour angle clipped to [-1, 1] (WP 8.4).
+    """skdim's DANCo with the cosine of each neighbour angle clipped to [-1, 1].
 
     skdim 0.3.4 clips it at 1 only. When two neighbour vectors point in exactly opposite
     directions, as on a low-dimensional cube mapped linearly into many dimensions, rounding

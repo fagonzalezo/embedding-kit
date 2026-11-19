@@ -58,7 +58,7 @@ class EmbedKit:
     refitted on all the rows. ``selected_`` names it and ``selection_report_`` holds the table.
     Most gains in E4 were below one point, so the interval keeps noise from picking a transform.
 
-    **Large inputs (WP 8.2).** With more than ``selection_max_rows`` rows (50,000 by default), the
+    **Large inputs.** With more than ``selection_max_rows`` rows (50,000 by default), the
     candidates are fitted and scored on a random subsample of that many rows (stratified by
     class), split as above; only the winner is fitted on all the rows. In E9, selection on all
     the rows took 1.8 to 9.7 hours at a million rows on 16 CPUs, up to 11 times the input in

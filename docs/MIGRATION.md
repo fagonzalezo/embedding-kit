@@ -1,11 +1,11 @@
-# Migrating from EmbedKit 0.1.2 to 0.6.0
+# Migrating from EmbedKit 0.1.2 to 0.7.0
 
 This note is for code written against EmbedKit 0.1.2 (analysis reports, `EmbedKit(...)`, `Trainer`,
 losses, augmentations, saved bundles). It lists every breaking change, the version that made it and
 what to do. `CHANGELOG.md` has the reasons and the measurements; `docs/manual.md` describes the
 current API.
 
-Version path: 0.1.2 -> 0.1.3 -> 0.2.0 -> 0.4.0 -> 0.5.0 -> 0.6.0. There is no 0.3.0. The "Since" column
+Version path: 0.1.2 -> 0.1.3 -> 0.2.0 -> 0.4.0 -> 0.5.0 -> 0.6.0 -> 0.7.0. There is no 0.3.0. The "Since" column
 below says which release introduced each change. Releases 0.2.0 and 0.4.0 are mostly additions
 (`embedkit.evaluation`, `embedkit.baselines`, `embedkit.hubness_reduction`, `MatryoshkaLoss`, the
 `residual` and `linear` refiners); only their breaking parts are listed.
@@ -19,6 +19,17 @@ Quick triage:
 - You build `Trainer`, losses and augmentations yourself: section 5.
 - You rely on FAISS being installed with the package: section 6.
 
+Coming from 0.6.0, the changes are the rows marked 0.7.0:
+
+- `report.suggested_k` and `report.suggested_sigma` are gone: use `report.k` and
+  `report.kernel.sigma` (section 1).
+- `report.n_outside_null` counts only the statistics the null is calibrated for, and on rows with
+  a common norm (normalised upstream) the antihub recommendation is no longer made. Each
+  `report.calibration[name]` has new `uncalibrated` and `z_interval` fields (section 1).
+- `EmbedKit` with labels on more than 50,000 rows chooses on a subsample of 50,000 rows
+  (`selection_max_rows`) and can choose differently than 0.6.0 did (section 4).
+- DANCo returns a finite value where it returned `NaN` on some inputs (section 2).
+
 ## 1. Analysis report (`EmbedKitAnalyzer`, `EmbedKitReport`)
 
 | Since | 0.1.2 | Now | What to do |
@@ -28,7 +39,11 @@ Quick triage:
 | 0.5.0 | Participation-ratio recommendations ("highly anisotropic ... consider whitening") | Gone from `recommendations`. `report.properties` holds descriptive sentences about the spectrum, dominant coordinates, mean direction and (when calibrated) uniformity, with no thresholds | Read `report.properties` for them. Anisotropy is not treated as a defect |
 | 0.5.0 | "No major issues detected. Embedding geometry looks healthy." | "No recommendation: no statistic is beyond its null range or a fixed rule." The ID/D rule (0.1 and 0.3) is the only fixed rule left | Update any string match |
 | 0.6.0 | 0.5.0 recommendations for more concentrated distances, a less stable kNN graph, hubness under cosine, and ID/D below 0.1 or 0.3 | Removed: in experiment E4 none predicted the gain of its fix on 35 natural classification sets. Only two remain, under `metric="euclidean"`: more hubness and more antihubs than the null, both naming a hubness-reducing search. The statistics and z-scores are unchanged in `report.calibration` and `report.intrinsic_dim`. The no-action message is now "No recommendation: no statistic with a validated rule is beyond its null range." | Read the z-scores yourself if you relied on those rules; update string matches |
-| 0.6.0 | `report.suggested_k`, `report.suggested_sigma` | `report.k` (the neighbourhood size the report used) and `report.kernel.sigma`. The old names still work with a `DeprecationWarning` and go in 0.7.0; `to_dataframe()` has `Summary/k` and no `Summary/suggested_k` or `Summary/suggested_sigma` rows | Rename |
+| 0.6.0, 0.7.0 | `report.suggested_k`, `report.suggested_sigma` | `report.k` (the neighbourhood size the report used) and `report.kernel.sigma`. In 0.6.0 the old names worked with a `DeprecationWarning`; 0.7.0 removed them (`AttributeError`). `to_dataframe()` has `Summary/k` and no `Summary/suggested_k` or `Summary/suggested_sigma` rows | Rename |
+| 0.7.0 | Every calibrated statistic was treated as calibrated | Each `report.calibration[name]` has `uncalibrated`: `None`, or a sentence saying why the null does not calibrate this statistic in this setting (`.calibrated` is the boolean). Flagged: on rows with a common norm, the antihub ratio, `distance_cv` and uniformity; under `metric="cosine"`, k-skewness and the antihub ratio; under `metric="euclidean"` above 256 dimensions, neighbour consistency (`embedkit.analysis.report.uncalibrated_statistics`). Their z-scores are still computed and shown | Check `.calibrated` before reading a z-score as evidence |
+| 0.7.0 | `n_outside_null` counted every calibrated statistic beyond the threshold | Counts only the statistics with `.calibrated` true. The same data can give a smaller count | Count `abs(c.z_score) > z_threshold` over `report.calibration` yourself for the 0.6.0 number |
+| 0.7.0 | The antihub recommendation could be made on any rows under `metric="euclidean"` | Not made when the antihub ratio is flagged, that is on rows normalised upstream (a common norm); when uniformity is flagged, `properties` says it is not compared with the null. A recommendation whose `z_interval` reaches below `z_threshold` adds that the reading is near the threshold | Update string matches; read `z_interval` for how firm a reading is |
+| 0.7.0 | `CalibratedStatistic` had the z-score only | Also `z_interval`: a 95% interval for the z-score over 2,000 resamples of the null draws (`(nan, nan)` with fewer than 3 draws). It narrows as `n_null_draws` grows. `to_dataframe()` adds `Calibration/<name>_z_lo`, `<name>_z_hi` and `<name>_calibrated` rows. `calibrate()` and `calibrated_statistic()` take a new `std_floor` | Additive; filter the new rows out if you match row names |
 | 0.5.0 | `EmbedKitAnalyzer(metric=...)` took any string, and only some analyzers used it | Only `"euclidean"` and `"cosine"`; anything else raises `ValueError`. Every analyzer honours it. With `"cosine"` the rows are L2-normalised once and the whole report, isotropy included, describes the normalised rows; a zero-norm row raises `ValueError` | Pass `"euclidean"` or `"cosine"`. `HubnessAnalyzer` and `NeighborConsistency` on their own still accept any scikit-learn metric |
 | 0.5.0 | `suggested_target_dim` from the median across ID estimators | `1.5 x` the TwoNN estimate (same clipping to `[max(4, ID), d]`). If TwoNN is not in `id_methods` or fails, the first method that succeeded (`reference_method`) | Pin `target_dim` explicitly if you need the old value |
 | 0.5.0 | `fit` ran the analyzers only | By default also runs the null calibration (`n_null_draws + 1` evaluations of five statistics on `n_calibration` rows) and the ID bootstrap and scale curve. New arguments: `calibrate`, `null_model`, `n_null_draws`, `n_calibration`, `z_threshold`, `id_bootstrap`, `id_scale_curve` | `calibrate=False, id_bootstrap=0, id_scale_curve=False` skips the extra work (this is what `EmbedKit.fit` uses) |
@@ -65,6 +80,7 @@ report.print_summary()                                                  # also l
 | 0.5.0 | `IntrinsicDimensionEstimator(aggregate="median")` | Argument removed (passing it raises `TypeError`) | Delete it |
 | 0.5.0 | `result.uncertainty` (standard deviation across methods) | Renamed `between_method_spread`. It is not a sampling uncertainty. `standard_errors` and `intervals` (bootstrap, per estimator) cover sampling error only | Rename |
 | 0.1.3 | Methods ran in a thread pool (TwoNN varied between runs with the same seed) | Sequential. Exact duplicate rows are removed first (`n_duplicates_removed`). A non-finite or non-positive estimate is a failure: warning, `NaN`, left out of the spread. `random_state` reaches every estimator that accepts it | Expect `NaN` entries in `estimates` instead of a zero or infinite value |
+| 0.7.0 | DANCo returned `NaN` (a failure, left out of the spread) on some low-dimensional data mapped linearly into many dimensions | Finite: rounding made the cosine of a neighbour angle slightly below -1, and scikit-dimension clips it at 1 only. Where it was already finite the value is unchanged | Expect a DANCo estimate where there was `NaN` |
 | 0.5.0 | Not available | `IntrinsicDimensionEstimator(n_bootstrap=20, scale_curve=True)` by default, so `fit` is slower; `ESS` is a supported method (about 100 s per fit at n = 5,000) | `n_bootstrap=0, scale_curve=False` for the old cost |
 
 `scale_plateau` and `plateau_tolerance` appeared during the 0.5.0 development and were replaced by
@@ -114,6 +130,7 @@ the defaults.
 | Since | 0.1.2 | Now | What to do |
 |---|---|---|---|
 | 0.6.0 | `EmbedKit().fit(X)` built one configuration | New `strategy="select"` (default). Without labels: the input centred and L2-normalised (`CenterNormalize`); no analysis report. With labels: `Identity`, `CenterNormalize`, PCA at 64/128/256 (+ L2) and, in supervised or regression mode, the refiner at `min(128, d // 2)` are fitted on 80% of the rows and scored by 10-NN accuracy (cosine) or 10-NN regression R^2 on the rest; a candidate replaces `Identity` only with a paired-bootstrap interval above 0; the winner is refitted on all rows. `selected_`, `selection_report_` and `strategy_` record it | `strategy="fixed"` (or any explicit `method`) for the 0.5.0 behaviour |
+| 0.7.0 | `strategy="select"` fitted and scored the candidates on all the rows | New `selection_max_rows=50_000`: with more rows than that, the candidates are fitted and scored on a random subsample of that many rows (stratified by class) and only the winner is fitted on all the rows. Selection at a million rows takes minutes instead of hours. The choice on such inputs can differ from 0.6.0's. `selection_report_.attrs` records `n_rows` and `n_selection_rows` | `selection_max_rows=None` for the 0.6.0 behaviour. Caps below about 10,000 rows chose less well in the benchmarks |
 | 0.6.0 | `mode="self_supervised"` was the default, so `fit(X, y)` ignored `y` except for the report | `mode="auto"`: `"self_supervised"` without labels, `"supervised"` with them; continuous targets raise unless `mode="regression"` | Pass `mode="self_supervised"` to keep labels out of training (they are then used only to select among training-free candidates) |
 | 0.6.0 | Bundles held `model.pt` | An `Identity` or `CenterNormalize` result saves `arrays.npz` instead (the training mean), and `config.json` has `strategy` and `selected` | Older bundles load as before |
 | 0.4.0 | `mode="self_supervised"` trained a refiner (MLP, `KNNPairs(5)`, NT-Xent + 0.5 `AlignUniformLoss`) | New `method="auto"` is `"pca"` without labels: the top `target_dim` principal directions followed by L2 normalisation, no training. `transform`, `dim=`, `save` and `load` work as before. In E1, E6 and E7 the refiner never beat the better of PCA and PCA-whitening | `method="refiner"` trains the refiner. With `method="pca"`, setting `augmentation`, `loss`, `nested_dims` or a non-linear `architecture` raises `ValueError` |
@@ -121,7 +138,7 @@ the defaults.
 | 0.4.0 | `early_stopping_patience=10`, `val_split=0.1`, `monitor="k_skewness"` | Defaults `"auto"`, `None` and `"auto"`. Self-supervised: no early stopping, all rows used for training, `k_skewness` only logged. Supervised and regression: patience 10, 10% of rows held out, best weights restored | Pass `early_stopping_patience=10, val_split=0.1, monitor="k_skewness"` for the 0.1.2 behaviour |
 | 0.5.0 | `mode="supervised"`: `SupConLoss(0.07)` + 0.5 `AlignUniformLoss`, MLP, `k_skewness` monitor | `SupConLoss(0.07)` alone on the residual adapter, monitored by `val_knn_accuracy` | See the snippet below |
 | 0.5.0 | No regression mode | `mode="regression"`: `RankNContrastLoss` on an MLP with `GaussianNoise(0.05)` views, monitored by `val_ridge_r2`; warns with 1000 rows or fewer | Additive |
-| 0.5.0 | `analysis_report` held the full report | With `strategy="fixed"`, `fit` runs the report with `calibrate=False, id_bootstrap=0, id_scale_curve=False`, since it reads only `suggested_target_dim`; with `strategy="select"` (the default since WP 7.2) it runs none and `analysis_report` is `None`. `analysis_report.n_outside_null` and `.calibration` are `None`, and the calibrated recommendations are absent | Run `EmbedKitAnalyzer().fit(X)` yourself for the full report |
+| 0.5.0 | `analysis_report` held the full report | With `strategy="fixed"`, `fit` runs the report with `calibrate=False, id_bootstrap=0, id_scale_curve=False`, since it reads only `suggested_target_dim`; with `strategy="select"` (the default since 0.6.0) it runs none and `analysis_report` is `None`. `analysis_report.n_outside_null` and `.calibration` are `None`, and the calibrated recommendations are absent | Run `EmbedKitAnalyzer().fit(X)` yourself for the full report |
 | 0.1.3, 0.5.0 | `target_dim="auto"` | Can differ: 0.1.3 changed the ID estimates (duplicates removed, sequential runs); 0.5.0 uses 1.5 x TwoNN (Pets 22 to 24, digits 12 to 13) | Pass `target_dim=` to pin it |
 | 0.1.3 | `random_state` did not reproduce a run | Two fits with the same `random_state` return identical arrays on CPU. The initial weights come from `random_state`, so numbers differ from 0.1.2 | Re-run baselines; do not expect 0.1.2 numbers |
 | 0.4.0 | `config.json` had `mode`, `target_dim`, `hidden_dim`, `n_layers`, `input_dim` and the training settings | Also `method`, `architecture`, `nested_dims` | Bundles from 0.1.2 still load (section 6) |
@@ -223,7 +240,7 @@ the baselines, the hubness reductions) raises `ValueError` for NaN or infinite v
 or drop such rows before the call (`embedkit.utils.validation.validate_embeddings` runs the same
 check).
 
-## 7. Deprecated aliases still accepted in 0.6.0
+## 7. Deprecated aliases still accepted in 0.7.0
 
 | Alias | Replacement | Warning | Removal |
 |---|---|---|---|
@@ -231,6 +248,9 @@ check).
 | `KernelDiagnosticsResult.kernel_alignment` | `centered_kernel_alignment` | `DeprecationWarning` | Same |
 | `KernelDiagnosticsResult.condition_number` | `top_k_eigen_ratio` | `DeprecationWarning` | No date |
 | `embedkit.utils.neighbors.clear_cache()` | none (delete) | `DeprecationWarning` | "Next release" (0.1.3 changelog); still present |
+
+`report.suggested_k` and `report.suggested_sigma`, deprecated in 0.6.0, were removed in 0.7.0
+(section 1).
 
 `DeprecationWarning` is hidden by default outside `__main__`; run with `python -W error::DeprecationWarning`
 or under pytest to find the calls.
@@ -263,5 +283,12 @@ Same inputs and same code, different numbers. None of these raises an error.
 - **`EmbedKit` defaults (0.4.0, 0.5.0, 0.6.0).** Section 4. In 0.5.0 the self-supervised output
   was PCA; in 0.6.0 it is the input centred and L2-normalised, and with labels the output is the
   input itself unless a candidate wins on held-out rows. Any downstream result built on it changes.
+- **`EmbedKit` on more than 50,000 rows (0.7.0).** With labels, the choice is made on a
+  subsample (section 4), so it can differ from 0.6.0's; the fitted winner is then the same
+  transform fitted on all the rows.
+- **Report counts and recommendations (0.7.0).** `n_outside_null` leaves out flagged statistics,
+  and the antihub recommendation is not made on rows with a common norm (section 1).
+- **DANCo (0.7.0).** Finite where it was `NaN` (section 2), which also changes
+  `between_method_spread` when DANCo is in `id_methods`.
 - **float64 input to the baselines and hubness reductions (0.6.0).** Kept in float64 instead of
   being rounded to float32 first. Results for float32 input are unchanged.

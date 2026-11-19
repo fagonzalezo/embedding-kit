@@ -52,7 +52,7 @@ def uncalibrated_statistics(metric: str, d: int, normalised: bool) -> dict[str, 
     """The calibrated statistics whose null is not calibrated in this setting, with the reason.
 
     From E3 (``benchmarks/results/e3/summary_gauss.csv``): data drawn from the null family,
-    whose z-scores should fall inside +-3; the bar is 95% of cells (WP 8.4).
+    whose z-scores should fall inside +-3; the bar is 95% of cells.
 
     - Rows with a common norm (``normalised``): the antihub ratio (51% of cells inside),
       ``distance_cv`` (0%) and uniformity (0%) under either metric, for rows normalised with
@@ -302,7 +302,7 @@ class EmbedKitAnalyzer(BaseAnalyzer):
         null failed the E3 bar in the setting at hand (normalised rows; under cosine,
         k-skewness and the antihub ratio; under Euclidean distance above d = 256, neighbour
         consistency) is marked ``uncalibrated`` with the reason, raises nothing and is not
-        counted (WP 8.4, :func:`uncalibrated_statistics`). With ``calibrate=False`` the report
+        counted (:func:`uncalibrated_statistics`). With ``calibrate=False`` the report
         makes no recommendation. Rows that arrive with a common norm (relative spread under
         1e-3, for instance embeddings normalised upstream) are compared with null draws
         normalised to that norm, under either metric; a Gaussian null with varying norms made

@@ -57,12 +57,12 @@ class CalibratedStatistic(BaseResult):
         and 97.5% quantiles of the z-score over 2,000 resamples (with replacement) of the
         draws. With 20 draws a z between 3 and 4 often falls on the other side of 3 in
         another run (E3, WP 4.5); an interval that contains the threshold marks such a
-        reading. ``(nan, nan)`` with fewer than 3 draws. (WP 8.4.)
+        reading. ``(nan, nan)`` with fewer than 3 draws.
     uncalibrated:
         ``None`` when the null is calibrated for this statistic in this setting; otherwise the
         reason it is not (for instance rows normalised upstream). The report draws no
         recommendation from an uncalibrated statistic and leaves it out of
-        ``n_outside_null``. (WP 8.4.)
+        ``n_outside_null``.
     """
 
     observed: float
