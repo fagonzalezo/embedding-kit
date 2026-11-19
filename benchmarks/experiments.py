@@ -598,5 +598,114 @@ def e4_methods(dataset) -> list[Method]:
     return m
 
 
+# --------------------------------------------------------------------------------------------
+# E10 (WP 8.2 and WP 8.3): the default selection on the E4 sets
+# --------------------------------------------------------------------------------------------
+
+E10_CAPS = (5_000, 10_000, 20_000)  # selection_max_rows values below the default that bind
+E10_DEFAULT_CAP = 50_000            # EmbedKit's default selection_max_rows (WP 8.2)
+
+
+class _Selected:
+    """``EmbedKit`` with ``strategy="select"`` that records its choice in ``get_params``.
+
+    ``selection_report`` is the candidate table as a JSON string (the result record keeps only
+    scalars and lists of scalars).
+    """
+
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+    def fit(self, X, y=None):
+        from embedkit import EmbedKit
+
+        self.ek_ = EmbedKit(**self.kwargs).fit(X, y)
+        return self
+
+    def transform(self, X):
+        return self.ek_.transform(X)
+
+    def get_params(self) -> dict:
+        ek = getattr(self, "ek_", None)
+        if ek is None:
+            return {}
+        t = ek.selection_report_
+        return dict(selection_max_rows=ek.selection_max_rows, selected=ek.selected_,
+                    mode=ek.mode_,
+                    n_selection_rows=None if t is None else int(t.attrs["n_selection_rows"]),
+                    selection_report=None if t is None else t.to_json(orient="records"))
+
+
+class _PcaL2:
+    """PCA to ``k`` followed by L2 normalisation: the ``pca-k`` candidate of the selection."""
+
+    def __init__(self, k: int):
+        self.k = k
+
+    def fit(self, X, y=None):
+        self.pca_ = B.PCAReduce(self.k).fit(X)
+        return self
+
+    def transform(self, X):
+        Z = self.pca_.transform(X)
+        norms = np.linalg.norm(Z, axis=1, keepdims=True)
+        return (Z / np.where(norms > 1e-12, norms, 1.0)).astype(np.float32)
+
+    def get_params(self) -> dict:
+        return dict(k=self.k)
+
+
+def e10_methods(dataset) -> list[Method]:
+    """E10: ``EmbedKit()`` with labels (the default selection) and each of its candidates.
+
+    - ``select``: the default, ``selection_max_rows=50_000``.
+    - ``select-all``: ``selection_max_rows=None`` (the 0.6.0 selection), only where the cap
+      binds (more than 50,000 training rows); elsewhere ``select`` is the same configuration.
+    - ``select-cap<c>`` for ``c`` in ``E10_CAPS`` below the number of training rows (WP 8.2:
+      does a subsample choose as well as all the rows?).
+    - The candidates on their own, each fitted on all the training rows, for the best choice
+      in hindsight (WP 8.3): ``identity``, ``center_l2``, ``pca_l2-<k>`` (64, 128, 256 below d)
+      and ``refiner`` (the supervised refiner at ``min(128, d // 2)``, ``strategy="fixed"``).
+
+    Classification sets only (the E4 sets); the regression and extra hubness sets of WP 8.3
+    are added separately.
+    """
+    from embedkit import EmbedKit
+
+    if dataset.y_train is None or dataset.meta.get("task") != "classification":
+        return []
+    n, d = dataset.X_train.shape
+    sel = dict(fit_with_labels=True, deterministic=False, family="select")
+
+    def select(cap=E10_DEFAULT_CAP):
+        return lambda s, ds, dev: _Selected(random_state=s, device=dev, selection_max_rows=cap)
+
+    m = [Method("select", select(), params=dict(selection_max_rows=E10_DEFAULT_CAP), **sel)]
+    if n > E10_DEFAULT_CAP:
+        m.append(Method("select-all", select(None), params=dict(selection_max_rows=None),
+                        **sel))
+    for cap in E10_CAPS:
+        if cap < n:
+            m.append(Method(f"select-cap{cap}", select(cap),
+                            params=dict(selection_max_rows=cap), **sel))
+    m += [
+        Method("identity", lambda s, ds, dev: B.Identity(), family="candidate"),
+        Method("center_l2", lambda s, ds, dev: B.CenterNormalize(), family="candidate"),
+    ]
+    for k in (64, 128, 256):
+        if k < d:
+            m.append(Method(f"pca_l2-{k}", lambda s, ds, dev, k=k: _PcaL2(k),
+                            family="candidate", params=dict(k=k)))
+    t = min(128, max(1, d // 2))
+    m.append(Method(
+        "refiner",
+        lambda s, ds, dev: EmbedKit(mode="supervised", strategy="fixed", method="refiner",
+                                    target_dim=t, random_state=s, device=dev),
+        deterministic=False, fit_with_labels=True, family="candidate",
+        params=dict(target_dim=t)))
+    return [_with_metrics(x, E5_METRICS) for x in m]
+
+
 EXPERIMENTS: dict[str, Callable] = {"e1": e1_methods, "e4": e4_methods, "e5": e5_methods,
-                                    "e6": e6_methods, "e7": e7_methods, "e8": e8_methods}
+                                    "e6": e6_methods, "e7": e7_methods, "e8": e8_methods,
+                                    "e10": e10_methods}

@@ -16,9 +16,15 @@ threads, the torch device, version and commit, and a status: ``ok``, ``timeout``
 killed at ``--timeout`` seconds), ``oom_or_killed`` (SIGKILL, typically the OOM killer),
 ``oom`` (``MemoryError``) or ``error`` (with the message).
 
-One JSON per cell under ``<results>/e9/``, named ``<target>__n<n>__d<d>.json``; finished cells
-are skipped unless ``--force`` (a recorded timeout or error counts as finished). New targets
-are one line in ``TARGETS``. ``benchmarks/report_e9.py`` builds the tables.
+One JSON per cell under ``<results>/<experiment>/``, named ``<target>__n<n>__d<d>.json``;
+finished cells are skipped unless ``--force`` (a recorded timeout or error counts as finished).
+New targets are one line in ``TARGETS``. ``benchmarks/report_e9.py`` builds the tables.
+
+``--experiment`` (default ``e9``) names the results directory. ``e9`` holds the 0.6.0
+measurements (WP 7.3): there ``embedkit_labels`` selected on all the rows. ``e9b`` is the rerun
+after WP 8.2, where the default ``EmbedKit`` selects on at most ``selection_max_rows`` (50,000)
+rows; ``embedkit_labels_all`` pins ``selection_max_rows=None`` (the 0.6.0 selection) for the
+GPU cells.
 """
 
 from __future__ import annotations
@@ -83,11 +89,22 @@ def _embedkit_labels(X, y):
     return _embedkit_info(model)
 
 
+def _embedkit_labels_all(X, y):
+    from embedkit import EmbedKit
+    model = EmbedKit(random_state=0, selection_max_rows=None).fit(X, y)
+    return _embedkit_info(model)
+
+
 def _embedkit_info(model):
     trainer = getattr(model, "_trainer", None)
+    table = getattr(model, "selection_report_", None)
+    attrs = dict(table.attrs) if table is not None else {}
     return dict(method=getattr(model, "method_", None),
                 target_dim=getattr(model, "_config", {}).get("target_dim"),
-                device=str(getattr(trainer, "device", None)))
+                device=str(getattr(trainer, "device", None)),
+                selected=getattr(model, "selected_", None),
+                selection_max_rows=getattr(model, "selection_max_rows", None),
+                n_selection_rows=attrs.get("n_selection_rows"))
 
 
 TARGETS = {
@@ -95,6 +112,7 @@ TARGETS = {
     "analyzer_fast": (_analyzer_fast, False),
     "embedkit": (_embedkit, False),
     "embedkit_labels": (_embedkit_labels, True),
+    "embedkit_labels_all": (_embedkit_labels_all, True),
 }
 
 
@@ -296,12 +314,16 @@ def main(argv=None):
     p.add_argument("--n", "--rows", dest="n", nargs="+", type=int, default=[1_000, 10_000])
     p.add_argument("--d", "--dims", dest="d", nargs="+", type=int, default=[128])
     p.add_argument("--results", default=str(HERE / "results"))
+    p.add_argument("--experiment", default="e9",
+                   help="results subdirectory and the record's experiment field (default: e9)")
     p.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT,
                    help="seconds per cell before the child is killed (default: 3 h)")
     p.add_argument("--force", action="store_true", help="rerun cells that already have a file")
     p.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--child-out", default=None, help=argparse.SUPPRESS)
     args = p.parse_args(argv)
+    global EXPERIMENT
+    EXPERIMENT = args.experiment
 
     if args.child:
         run_child(args.targets[0], args.n[0], args.d[0], Path(args.child_out))

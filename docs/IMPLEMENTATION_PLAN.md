@@ -767,8 +767,8 @@ The items come from "Open findings" in the WP 4.5 notes and from "Limitations an
 | 7.2 | Selection-based auto-configuration | done (2026-11-17): `strategy="select"` default; decisions and deviations in "WP 7.2 notes" |
 | 7.3 | Robustness and scaling | done (2026-11-18): input validation (`validate_embeddings` at every public entry point); E9 time and memory table in `docs/manual.md` §3.5 (`benchmarks/results/e9/REPORT.md`; all 48 cells finished) |
 | 7.4 | Documentation | done (2026-11-18; released as 0.6.0): README rewritten around the benchmark results; manual and skill brought to the 0.6.0 API (every code block executed); `docs/MIGRATION.md` extended to 0.6.0; E9 table added |
-| 8.1 | Branch, tags and distribution | to do (confirmed 2026-11-18): PR to `main`, push tags, no PyPI |
-| 8.2 | Selection on a subsample of rows | to do (confirmed 2026-11-18): `selection_max_rows=50_000` |
+| 8.1 | Branch, tags and distribution | done (2026-11-18): PR #1 merged into `main` (`c8ce3f6`, CI green); tags `v0.1.3` to `v0.6.0` pushed; no PyPI |
+| 8.2 | Selection on a subsample of rows | in progress (2026-11-18): `selection_max_rows=50_000` implemented; E10 and E9b runs; criteria in "WP 8.2 design and criteria" |
 | 8.3 | Benchmark the default selection (E10) | to do (confirmed 2026-11-18): with extra high-hubness sets for R1 |
 | 8.4 | Diagnostics still uncalibrated | to do (confirmed 2026-11-18): flag normalised rows only |
 | 8.5 | Deprecations and 0.7.0 | to do (confirmed 2026-11-18) |
@@ -1513,6 +1513,60 @@ above 0), not by plain argmax.
   that would be a new default, left for after 0.6.0.
 - Per-cell JSON is ignored by git (`benchmarks/results/e9/*.json`); `REPORT.md` and
   `summary_e9.csv` are committed.
+
+### WP 8.2 design and criteria, fixed before the runs (2026-11-18)
+
+**Change** (`embedkit/api.py`, branch `phase8/subsample-selection`):
+- `EmbedKit(selection_max_rows=50_000)`. With more rows, `strategy="select"` draws a subsample
+  of that size, stratified by class when every class has 2 rows. It splits the subsample as
+  before (`val_fraction`), fits and scores the candidates on it, and refits only the winner on
+  all the rows.
+- With `n <= selection_max_rows`, the split and every number are those of 0.6.0. A test checks
+  this.
+- The memory fix: `Identity` and `CenterNormalize` are now refitted on all the rows without the
+  float64 copy that the baselines make. The PCA refit (`initialize_from_data`, a float64 SVD of
+  all the rows) is unchanged: it costs memory only when PCA wins at large n, which none of the
+  E9 cells will test.
+
+**Runs:**
+- **E10** (`run.py --experiment e10`, `cluster/e10.slurm.sh`): the 35 E4 sets, test stage, one
+  seed, on GPU. It runs these arms:
+  - `select` (the default);
+  - `select-all` (`None`), only where the 50,000 cap binds;
+  - `select-cap5000`, `-cap10000` and `-cap20000`, where each binds;
+  - the candidates fitted on their own (`identity`, `center_l2`, `pca_l2-k`, `refiner`), for
+    WP 8.3.
+- **E9b** (`e9.py --experiment e9b`, the E9 machine and settings): `embedkit` and
+  `embedkit_labels` at n in {50,000, 1e5, 1e6} × d in {128, 1,024, 4,096} on CPU.
+- **E9b GPU** (`--experiment e9b_gpu`): `embedkit_labels` and `embedkit_labels_all` at n = 1e6 on
+  `RTX8000Nodes`.
+
+**Criteria.** The WP text asked for agreement "on every set". With about 100 (set, cap)
+comparisons, each tested at 2.5% one-sided, that would fail by chance about 2.5 times even if
+the subsample chose exactly as well. The criteria are therefore restated here, before any run:
+
+1. **Choice quality (E10).** Compare `select-cap<c>` with the selection on all the rows.
+   - The selection on all the rows is `select` where n is at most 50,000, and `select-all`
+     otherwise.
+   - The measure is test cosine 10-NN accuracy, the selection's own criterion. The test is a
+     paired bootstrap over test points: 2,000 resamples, 95% interval.
+   - A (set, cap) pair fails when the interval lies entirely below 0.
+   - A cap passes when at most 1 of the sets it binds on fails, and that failure loses less
+     than 1 point.
+   - The default cap passes when none of the sets it binds on (more than 50,000 training rows)
+     fails.
+   - Also reported: how often the capped selection picks the same candidate, and Euclidean
+     kNN and the linear probe as secondary outcomes.
+2. **Time (E9b, CPU).** For each d, the `embedkit_labels` fit at n = 1e6 takes at most
+   1.5 × (the `embedkit_labels` fit at n = 50,000 + the `embedkit` fit at n = 1e6).
+   - The `embedkit` fit at n = 1e6 is the cost that every fit pays on all the rows: input
+     validation and one pass over the data.
+   - This holds when `Identity` or `CenterNormalize` wins. A winning refiner or PCA is fitted
+     on all the rows, and that refit is excluded.
+3. **Memory (E9b, CPU).** At n = 1e6, for `embedkit` and `embedkit_labels`, the peak RSS minus
+   the RSS before `fit` is at most 2 times the size of X. Together with X itself, that is at
+   most 3 times the input.
+4. **GPU (E9b GPU).** Descriptive, no bar. The times go into manual §3.5.
 
 ## Open points for the next session
 

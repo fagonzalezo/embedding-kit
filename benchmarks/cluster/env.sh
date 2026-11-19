@@ -78,6 +78,10 @@ E7_SETS=(cifar100_dinov2 banking77_mpnet stsb_mpnet pets_resnet50 synthetic_anis
 # n = E9_N[i / 3], d = E9_D[i % 3] (12 tasks, 0-11).
 E9_N=(1000 10000 100000 1000000)
 E9_D=(128 1024 4096)
+# E9b (WP 8.2): the rerun after selection on a subsample; 50,000 is the default
+# selection_max_rows. Chosen with E9_NS=E9B_N (9 tasks, 0-8) or E9_NS=E9B_GPU_N (3 tasks, 0-2).
+E9B_N=(50000 100000 1000000)
+E9B_GPU_N=(1000000)
 
 check_clean() {
   # Results must match the commit recorded in each result file.

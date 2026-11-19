@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased (phase 8, toward 0.7.0)
+
+### Changed (WP 8.2: selection on a subsample of rows)
+- `EmbedKit(selection_max_rows=50_000)`, new: with more rows than that, `strategy="select"` fits
+  and scores the candidates on a random subsample of that many rows (stratified by class) and
+  fits only the winner on all the rows. In E9, selection on all the rows took 1.8 to 9.7 hours at
+  a million rows on 16 CPUs. Inputs of more than 50,000 rows can therefore get a different
+  choice than in 0.6.0; `selection_max_rows=None` restores the 0.6.0 selection.
+  `selection_report_.attrs` gains `n_rows` and `n_selection_rows`.
+- When `Identity` or `CenterNormalize` is the result, the refit on all the rows no longer makes
+  a float64 copy of the input (two times its float32 size); the fitted mean is the same.
+
+### Added
+- Benchmarks: experiment E10 (`run.py --experiment e10`, `cluster/e10.slurm.sh`), the default
+  selection and its candidates on the E4 sets; `e9.py --experiment` and the
+  `embedkit_labels_all` target for the E9 rerun after WP 8.2.
+
 ## 0.6.0 (unreleased)
 
 Phase 7 of `docs/IMPLEMENTATION_PLAN.md`: experiment E4 (which diagnostics predict which fix, on

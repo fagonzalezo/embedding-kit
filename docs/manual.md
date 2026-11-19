@@ -694,6 +694,7 @@ scaled to unit L2 norm (`CenterNormalize`); nothing is trained and no analysis r
 | Criterion | 10-NN accuracy for class labels, 10-NN regression R^2 for continuous targets, on the held-out rows, with `selection_metric` (`"cosine"` by default, or `"euclidean"`). `knn_overlap` is not used. |
 | Significance rule | A candidate replaces `Identity` only when its paired bootstrap interval of the per-row gain over `Identity` (95%, 2,000 resamples of the held-out rows) lies above 0. Among the candidates that pass, the best held-out score wins. |
 | Result | `Identity` when none passes, so the output is never worse than the input by this criterion. The winner is refitted on all rows. |
+| Large inputs | With more than `selection_max_rows` rows (default 50,000), the split, the candidates and the scores use a random subsample of that many rows, stratified by class; only the winner is fitted on all the rows. `None` selects on all the rows (the 0.6.0 behaviour). |
 
 Most gains in E4 were under one point, so the interval keeps noise from choosing a transform. The
 selection procedure itself has not been benchmarked on the E4 sets; it reuses their findings.
@@ -709,8 +710,9 @@ After `fit`: `selected_` names the winner (`"identity"`, `"center_l2"`, `"pca-12
 | `beats_identity` | `diff_lo > 0` |
 | `selected` | The winner |
 
-`selection_report_.attrs` holds the criterion, `k`, the metric, the number of fit and held-out rows
-and the number of resamples. With fewer than 20 rows to fit or to score (about 100 rows or fewer
+`selection_report_.attrs` holds the criterion, `k`, the metric, the number of fit and held-out rows,
+the number of resamples, the number of input rows (`n_rows`) and the number of rows the
+selection used (`n_selection_rows`). With fewer than 20 rows to fit or to score (about 100 rows or fewer
 at `val_fraction=0.2`), `fit` warns and returns `Identity`; pass `strategy="fixed"` to build a
 configuration anyway.
 
@@ -772,7 +774,7 @@ embeddings. For regression the MLP with noise views beat the linear refiner, the
 PCA on all 4 datasets; with 1000 training rows or fewer no refiner reliably beat the raw embeddings,
 and a fixed regression refiner warns.
 
-**Class:** `EmbedKit(mode="auto", strategy="select", method="auto", augmentation="auto", loss="auto", target_dim="auto", hidden_dim=256, n_layers=2, architecture="auto", epochs=100, batch_size=256, optimizer="adam", lr=3e-4, weight_decay=1e-4, scheduler="cosine", eval_every=5, early_stopping_patience="auto", monitor="auto", val_split=None, device=None, id_methods=None, random_state=42, nested_dims=None, val_fraction=0.2, selection_metric="cosine")`
+**Class:** `EmbedKit(mode="auto", strategy="select", method="auto", augmentation="auto", loss="auto", target_dim="auto", hidden_dim=256, n_layers=2, architecture="auto", epochs=100, batch_size=256, optimizer="adam", lr=3e-4, weight_decay=1e-4, scheduler="cosine", eval_every=5, early_stopping_patience="auto", monitor="auto", val_split=None, device=None, id_methods=None, random_state=42, nested_dims=None, val_fraction=0.2, selection_metric="cosine", selection_max_rows=50000)`
 
 `nested_dims=None` (default), `"auto"` or a sequence trains nested prefixes of a refiner, readable with
 `transform(X, dim=m)`; see `MatryoshkaLoss` above.
@@ -1036,12 +1038,14 @@ before it is subsampled. Calibration accounts for most of the time at small n.
 | 100,000 | 4.0 min / 3.0 GB | 5.8 min / 5.8 GB | 12.8 min / 20.1 GB |
 | 1,000,000 | 1.8 h / 9.7 GB | 3.5 h / 46.0 GB | 9.7 h / 182 GB |
 
-Training the refiner candidate on CPU is almost all of this time. From 1e5 to 1e6 rows it grew 27
-to 45 times, not 10. `Identity` was selected in every cell, so no model was refitted. When the refiner wins, it is
-trained a second time on all rows, which adds roughly 1.25 times the first training. For n in the
-millions, train on a GPU, or select on a subsample of rows and then fit the chosen method with
-`strategy="fixed"`. At 1e6 × 4,096 the input in float64 (centring + L2, PCA) and the training copies
-need about 11 times the input in memory.
+This table is 0.6.0, which selected on all the rows. Training the refiner candidate on CPU is
+almost all of this time. From 1e5 to 1e6 rows it grew 27 to 45 times, not 10. `Identity` was
+selected in every cell, so no model was refitted. When the refiner wins, it is trained a second
+time on all rows, which adds roughly 1.25 times the first training. At 1e6 × 4,096 the input in
+float64 (centring + L2, PCA) and the training copies needed about 11 times the input in memory.
+Since WP 8.2 the selection uses at most `selection_max_rows` rows (50,000 by default), so above
+that its cost no longer grows with n; the refit of a winning refiner on all the rows still
+does. The measurements after WP 8.2 (E9b) are pending.
 
 ---
 

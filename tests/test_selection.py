@@ -128,3 +128,68 @@ def test_report_k_and_deprecated_aliases():
         assert r.suggested_k == r.k
     with pytest.warns(DeprecationWarning, match="kernel.sigma"):
         assert r.suggested_sigma == r.kernel.sigma
+
+
+# ---------------------------------------------------------------------------------------------
+# WP 8.2: selection on a subsample of rows
+# ---------------------------------------------------------------------------------------------
+
+
+def test_selection_on_a_subsample_refits_the_winner_on_all_rows():
+    from embedkit.api import _l2, _pca
+
+    X, y = _noisy_classes(n=2500)
+    ek = EmbedKit(mode="self_supervised", selection_max_rows=1500, **KW).fit(X, y)
+    t = ek.selection_report_
+    assert t.attrs["n_rows"] == 2500 and t.attrs["n_selection_rows"] == 1500
+    assert t.attrs["n_val"] == 300 and t.attrs["n_fit"] == 1200
+    assert ek.selected_.startswith("pca-"), t
+    # the winner is fitted on all 2500 rows, not on the subsample
+    k = int(ek.selected_.split("-")[1])
+    mean, comps, _ = _pca(X)
+    np.testing.assert_allclose(ek.transform(X), _l2((X - mean) @ comps[:k].T), atol=1e-4)
+
+
+def test_the_subsample_is_stratified_by_class():
+    from embedkit.api import _selection_subsample
+
+    y = np.repeat([0, 1, 2], [9000, 900, 100])
+    sub = _selection_subsample(y, 1000, True, 0)
+    assert len(sub) == 1000 and np.all(np.diff(sub) > 0)
+    np.testing.assert_array_equal(np.bincount(y[sub]), [900, 90, 10])
+
+
+@pytest.mark.parametrize("cap", [None, 600, 10_000])
+def test_a_cap_that_does_not_bind_changes_nothing(cap):
+    X, y = _noisy_classes(n=600, d=100)
+    ref = EmbedKit(mode="self_supervised", selection_max_rows=None, **KW).fit(X, y)
+    ek = EmbedKit(mode="self_supervised", selection_max_rows=cap, **KW).fit(X, y)
+    pd.testing.assert_frame_equal(ek.selection_report_, ref.selection_report_)
+    assert ek.selection_report_.attrs["n_selection_rows"] == 600
+
+
+def test_regression_selection_on_a_subsample():
+    rng = np.random.default_rng(0)
+    X = rng.standard_normal((400, 12)).astype(np.float32)
+    y = X[:, 0] * 2 + 0.1 * rng.standard_normal(400)
+    ek = EmbedKit(mode="regression", epochs=1, eval_every=100, selection_max_rows=200,
+                  **KW).fit(X, y)
+    assert ek.selection_report_.attrs["n_selection_rows"] == 200
+    assert ek.transform(X).shape[0] == 400
+
+
+@pytest.mark.parametrize("cap", [0, 1, 2.5, True, "50000"])
+def test_invalid_selection_max_rows_raises(cap):
+    X, y = _noisy_classes(n=200, d=20)
+    with pytest.raises(ValueError, match="selection_max_rows"):
+        EmbedKit(mode="self_supervised", selection_max_rows=cap, **KW).fit(X, y)
+
+
+def test_baseline_refit_matches_the_baseline_fit():
+    from embedkit.api import _fitted_baseline
+
+    X = (np.random.default_rng(0).standard_normal((500, 64)) * 3 + 7).astype(np.float32)
+    fast, ref = _fitted_baseline("center_l2", X), CenterNormalize().fit(X)
+    assert fast.mean_.dtype == np.float64
+    np.testing.assert_allclose(fast.mean_, ref.mean_, rtol=0, atol=1e-12)
+    np.testing.assert_array_equal(fast.transform(X), ref.transform(X))

@@ -202,6 +202,9 @@ ek = EmbedKit(
                                 # fixed: auto = report.suggested_target_dim, but pass an int
     val_fraction=0.2,           # select: rows held out to score the candidates
     selection_metric="cosine",  # select: "cosine" | "euclidean" kNN
+    selection_max_rows=50_000,  # select: candidates fitted and scored on at most this many rows
+                                # (stratified subsample); the winner is refitted on all rows;
+                                # None = all rows (0.6.0)
     epochs=100,
     batch_size=256,
     lr=3e-4,

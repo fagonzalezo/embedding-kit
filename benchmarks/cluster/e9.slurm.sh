@@ -36,19 +36,32 @@
 # TIMEOUT of the job costs only unfinished work: resubmit the task IDs, for example
 # `sbatch --array=11 e9.slurm.sh`; add --force in E9_ARGS to repeat a recorded failure
 # (E9_ARGS=--force).
-# Results: $REPO/benchmarks/results/e9/ (they stay on the cluster). Submit from this directory.
+# E9b (WP 8.2), the rerun after selection on a subsample, into results/e9b (CPU) and
+# results/e9b_gpu (GPU); E9_NS names the n list in env.sh:
+#   E9_NS=E9B_N TARGET=embedkit_labels E9_ARGS="--experiment e9b" sbatch --array=0-8%4 e9.slurm.sh
+#   E9_NS=E9B_N TARGET=embedkit E9_ARGS="--experiment e9b" sbatch --array=0-8%4 e9.slurm.sh
+#   E9_NS=E9B_GPU_N TARGET=embedkit_labels E9_ARGS="--experiment e9b_gpu" sbatch --array=0-2%2 \
+#     --partition=RTX8000Nodes --gres=gpu:1 --cpus-per-task=20 --mem=200G e9.slurm.sh
+#   (and TARGET=embedkit_labels_all for the 0.6.0 selection on the GPU; 20 CPUs for 200G there,
+#   at 10,200 MB per CPU)
+# With a GPU allocated the container runs with --nv.
+# Results: $REPO/benchmarks/results/<experiment>/ (they stay on the cluster). Submit from this
+# directory.
 set -euo pipefail
 source "$SLURM_SUBMIT_DIR/env.sh"
 check_clean
 TARGET=${TARGET:-analyzer}
-N=${E9_N[$(( SLURM_ARRAY_TASK_ID / ${#E9_D[@]} ))]}
+declare -n NS=${E9_NS:-E9_N}
+N=${NS[$(( SLURM_ARRAY_TASK_ID / ${#E9_D[@]} ))]}
 D=${E9_D[$(( SLURM_ARRAY_TASK_ID % ${#E9_D[@]} ))]}
+NV=()
+[ -n "${SLURM_JOB_GPUS:-}${CUDA_VISIBLE_DEVICES:-}" ] && NV=(--nv)
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 # E9 measures the library as a user would run it: all the CPUs for BLAS as well, unlike env.sh's
 # half (which protects the many small fits of the linear probe).
 export OPENBLAS_NUM_THREADS=$SLURM_CPUS_PER_TASK
 # shellcheck disable=SC2086
-srun singularity exec "$CONTAINER" "$PY" "$REPO/benchmarks/e9.py" --targets "$TARGET" \
+srun singularity exec "${NV[@]}" "$CONTAINER" "$PY" "$REPO/benchmarks/e9.py" --targets "$TARGET" \
   --n "$N" --d "$D" --results "$REPO/benchmarks/results" --timeout 85000 ${E9_ARGS:-}
 echo "embedkit-e9 $TARGET n=$N d=$D done"
 exit 0

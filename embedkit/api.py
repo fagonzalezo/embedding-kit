@@ -57,6 +57,15 @@ class EmbedKit:
     default never returns something worse than the input by its own criterion. The winner is
     refitted on all the rows. ``selected_`` names it and ``selection_report_`` holds the table.
     Most gains in E4 were below one point, so the interval keeps noise from picking a transform.
+
+    **Large inputs (WP 8.2).** With more than ``selection_max_rows`` rows (50,000 by default), the
+    candidates are fitted and scored on a random subsample of that many rows (stratified by
+    class), split as above; only the winner is fitted on all the rows. In E9, selection on all
+    the rows took 1.8 to 9.7 hours at a million rows on 16 CPUs, up to 11 times the input in
+    memory, mostly for fitting candidates that lost. The refit costs nothing more for
+    ``Identity`` and little for ``CenterNormalize`` and PCA; a refiner that wins is trained on
+    all the rows. ``selection_report_.attrs`` records ``n_rows`` and ``n_selection_rows``.
+    ``None`` selects on all the rows (the 0.6.0 behaviour).
     Under ``"select"`` no analysis report is computed (``analysis_report`` is ``None``): no
     decision reads it. Run :class:`~embedkit.analysis.report.EmbedKitAnalyzer` for one.
 
@@ -132,6 +141,7 @@ class EmbedKit:
         nested_dims: Sequence[int] | Literal["auto"] | None = None,
         val_fraction: float = 0.2,
         selection_metric: Literal["cosine", "euclidean"] = "cosine",
+        selection_max_rows: int | None = 50_000,
     ):
         self.mode = mode
         self.strategy = strategy
@@ -158,6 +168,7 @@ class EmbedKit:
         self.nested_dims = nested_dims
         self.val_fraction = val_fraction
         self.selection_metric = selection_metric
+        self.selection_max_rows = selection_max_rows
 
         self.analysis_report: EmbedKitReport | None = None
         self._trainer: Trainer | None = None
@@ -211,7 +222,17 @@ class EmbedKit:
                 "candidates only")
         if not 0.0 < self.val_fraction < 1.0:
             raise ValueError(f"val_fraction must be in (0, 1), got {self.val_fraction!r}")
-        tr, va = _selection_split(y, self.val_fraction, classes, self.random_state)
+        cap = self.selection_max_rows
+        if cap is not None and (isinstance(cap, bool) or not isinstance(cap, (int, np.integer))
+                                or cap < 2):
+            raise ValueError(f"selection_max_rows must be an integer of at least 2 or None, "
+                             f"got {cap!r}")
+        if cap is not None and n > cap:
+            sub = _selection_subsample(y, int(cap), classes, self.random_state)
+            tr, va = _selection_split(y[sub], self.val_fraction, classes, self.random_state)
+            tr, va = sub[tr], sub[va]
+        else:
+            tr, va = _selection_split(y, self.val_fraction, classes, self.random_state)
         if len(va) < _MIN_VAL_ROWS or len(tr) < _MIN_VAL_ROWS:
             warnings.warn(
                 f"Too few rows to select a transform ({len(tr)} to fit, {len(va)} to score, "
@@ -268,7 +289,8 @@ class EmbedKit:
         table["selected"] = table["candidate"] == winner
         table.attrs.update(criterion=("knn_accuracy" if classes else "knn_regression_r2"),
                            k=_SELECTION_K, metric=self.selection_metric, n_fit=len(tr),
-                           n_val=len(va), n_boot=_N_BOOT)
+                           n_val=len(va), n_boot=_N_BOOT, n_rows=n,
+                           n_selection_rows=len(tr) + len(va))
 
         # Refit the winner on all the rows.
         if winner in ("identity", "center_l2"):
@@ -310,7 +332,7 @@ class EmbedKit:
         self._baseline = None
 
     def _fit_baseline(self, X_np: np.ndarray, name: str) -> EmbedKit:
-        self._baseline = (Identity() if name == "identity" else CenterNormalize()).fit(X_np)
+        self._baseline = _fitted_baseline(name, X_np)
         self._trainer = None
         self.method_, self.selected_ = name, name
         self.nested_dims_ = None
@@ -638,7 +660,8 @@ _PARAMS = {name: name for name in (
     "hidden_dim", "n_layers", "architecture", "epochs", "batch_size", "optimizer", "lr",
     "weight_decay", "scheduler", "eval_every", "early_stopping_patience", "monitor",
     "val_split", "device", "id_methods", "random_state", "nested_dims", "val_fraction",
-    "selection_metric")} | {"augmentation": "augmentation_cfg", "loss": "loss_cfg"}
+    "selection_metric", "selection_max_rows")} | {
+    "augmentation": "augmentation_cfg", "loss": "loss_cfg"}
 
 
 def _restore_selection(obj: EmbedKit, cfg: dict) -> None:
@@ -678,6 +701,34 @@ def _selection_split(y, fraction: float, classes: bool, random_state):
             stratify = y
     return train_test_split(idx, test_size=fraction, random_state=random_state,
                             stratify=stratify)
+
+
+def _selection_subsample(y, size: int, classes: bool, random_state) -> np.ndarray:
+    """Sorted indices of ``size`` rows to select on, stratified by class when every class has 2."""
+    from sklearn.model_selection import train_test_split
+
+    idx = np.arange(len(y))
+    stratify = None
+    if classes:
+        _, counts = np.unique(y, return_counts=True)
+        if counts.min() >= 2 and len(counts) <= min(size, len(y) - size):
+            stratify = y
+    sub, _ = train_test_split(idx, train_size=size, random_state=random_state,
+                              stratify=stratify)
+    return np.sort(sub)
+
+
+def _fitted_baseline(name: str, X: np.ndarray):
+    """``Identity`` or ``CenterNormalize`` fitted on validated ``X``.
+
+    The same result as ``.fit(X)``, without the float64 copy of ``X`` that the baselines make
+    (two times a float32 input; at a million rows of 4,096 columns, 33 GB).
+    """
+    base = Identity() if name == "identity" else CenterNormalize()
+    base.n_features_in_ = base.n_features_out_ = X.shape[1]
+    if name == "center_l2":
+        base.mean_ = X.mean(axis=0, dtype=np.float64)
+    return base
 
 
 def _pca(X: np.ndarray):

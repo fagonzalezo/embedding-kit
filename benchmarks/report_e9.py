@@ -1,11 +1,12 @@
 """Experiment E9 tables (WP 7.3): time and memory of ``fit`` over n and d
 
-    python benchmarks/report_e9.py [--results benchmarks/results] [--out benchmarks/results/e9]
+    python benchmarks/report_e9.py [--results benchmarks/results] [--experiment e9b]
 
-Reads the cell files written by ``benchmarks/e9.py`` (``<results>/e9/*.json``) and writes
+Reads the cell files written by ``benchmarks/e9.py`` (``<results>/<experiment>/*.json``,
+``e9`` by default) and writes
 ``REPORT.md`` (one table per target: rows n, columns d, each cell "wall time of fit / peak
 resident memory of the process in GB (1 GB = 1e9 bytes)", or the status when the cell did not
-finish) and ``summary_e9.csv`` (one row per cell, every scalar field).
+finish) and ``summary_<experiment>.csv`` (one row per cell, every scalar field).
 """
 
 from __future__ import annotations
@@ -100,8 +101,13 @@ def machine_note(df: pd.DataFrame) -> str:
     return "\n".join(parts)
 
 
-def render(df: pd.DataFrame) -> str:
-    out = ["# E9: time and memory of `fit` (WP 7.3)", "",
+TITLES = {"e9": "E9: time and memory of `fit` (WP 7.3)",
+          "e9b": "E9b: time and memory of `fit` after WP 8.2 (selection on a subsample), CPU",
+          "e9b_gpu": "E9b: time and memory of `fit` after WP 8.2, GPU"}
+
+
+def render(df: pd.DataFrame, experiment: str = "e9") -> str:
+    out = [f"# {TITLES.get(experiment, experiment)}", "",
            "Each cell is one `fit` in a fresh process on synthetic float32 data (10 classes, "
            "power-law spectrum, generated in chunks; `benchmarks/e9.py`). Entries are "
            "\"wall time of `fit` / peak resident memory of the process\" (GB = 1e9 bytes). The "
@@ -134,16 +140,18 @@ def render(df: pd.DataFrame) -> str:
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("--results", default=str(HERE / "results"))
-    p.add_argument("--out", default=None, help="default: <results>/e9")
+    p.add_argument("--experiment", default="e9", help="results subdirectory (e9, e9b)")
+    p.add_argument("--out", default=None, help="default: <results>/<experiment>")
     args = p.parse_args(argv)
-    e9_dir = Path(args.results) / "e9"
+    e9_dir = Path(args.results) / args.experiment
     out = Path(args.out or e9_dir)
     df = load_cells(e9_dir)
     if df.empty:
         sys.exit(f"No E9 results under {e9_dir}")
     out.mkdir(parents=True, exist_ok=True)
-    df.sort_values(["target", "n", "d"]).to_csv(out / "summary_e9.csv", index=False)
-    (out / "REPORT.md").write_text(render(df) + "\n")
+    df.sort_values(["target", "n", "d"]).to_csv(out / f"summary_{args.experiment}.csv",
+                                                index=False)
+    (out / "REPORT.md").write_text(render(df, args.experiment) + "\n")
     print(f"wrote {out / 'REPORT.md'}")
 
 
