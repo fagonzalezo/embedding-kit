@@ -1603,7 +1603,8 @@ Runs at commit `99c82ec`: E10 (job 3084794 and the smoke task 3084793; 35 sets),
    - The criterion assumed a cost proportional to X, which does not hold when X is small.
      The miss is recorded as such. Nothing was changed to meet it.
 4. **GPU** (n = 1e6). With the default cap: 1.4, 2.1 and 5.0 min. With all rows: 2.8 h, 4.2 h,
-   and d = 4,096 still running when this was written.
+   and d = 4,096 stopped by the user after 5.1 h, unfinished, to free the GPU for WP 8.3
+   (2026-11-19).
    - In manual §3.5, as is the CPU table.
 
 WP 8.3 preview (same E10 runs, no criteria applied yet):

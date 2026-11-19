@@ -1060,7 +1060,7 @@ n = 1e6:
 | | 128 | 1,024 | 4,096 |
 |---|---|---|---|
 | `selection_max_rows=50_000` (default) | 1.4 min / 4.0 GB | 2.1 min / 8.2 GB | 5.0 min / 26.6 GB |
-| `selection_max_rows=None` (all rows) | 2.8 h / 10.5 GB | 4.2 h / 46.1 GB | pending |
+| `selection_max_rows=None` (all rows) | 2.8 h / 10.5 GB | 4.2 h / 46.1 GB | > 5.1 h (stopped) |
 
 On the 35 E4 sets (E10, `benchmarks/results/e10/REPORT.md`), a cap of 10,000 or 20,000 rows
 chose as well as the selection on all the rows on every set it applied to; a cap of 5,000 was
