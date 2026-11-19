@@ -49,7 +49,7 @@ class TestMetric:
                   n_calibration=200, id_bootstrap=3)
         a = _numbers(EmbedKitAnalyzer(**kw).fit(X))
         b = _numbers(EmbedKitAnalyzer(**kw).fit(X * scale))
-        keep = ~a.index.str.contains("_null_|_z$|n_outside_null", regex=True)
+        keep = ~a.index.str.contains("_null_|_z$|_z_lo$|_z_hi$|n_outside_null", regex=True)
         assert a.index.str.endswith("_observed").sum() == len(CALIBRATED_STATISTICS)
         pd.testing.assert_series_equal(a[keep], b[keep], rtol=1e-3, atol=1e-5)
 

@@ -15,6 +15,21 @@
   a float64 copy of the input (two times its float32 size); the fitted mean is the same. At
   1e6 × 4,096 the peak memory of `EmbedKit().fit(X)` fell from 49.8 GB to 17.8 GB.
 
+### Changed (WP 8.4: diagnostics that are still uncalibrated)
+- `CalibratedStatistic` gains `uncalibrated` (`None`, or why the null is not calibrated for this
+  statistic here; `.calibrated` is the boolean) and `z_interval` (95% over 2,000 resamples of
+  the null draws). Flagged, from the E3 misses: on rows with a common norm, the antihub ratio,
+  `distance_cv` and uniformity; under cosine, k-skewness and the antihub ratio; under Euclidean
+  distance above d = 256, neighbour consistency (`uncalibrated_statistics`). A flagged
+  statistic raises no recommendation, so **on rows normalised upstream the antihub
+  recommendation is no longer made**, and **`n_outside_null` counts calibrated statistics
+  only**. `to_dataframe()` adds `<name>_z_lo`, `<name>_z_hi` and `<name>_calibrated`.
+- A recommendation whose z interval reaches below `z_threshold` says that the reading is near
+  the threshold (the recommendation itself is still made, as E4 validated it).
+- DANCo no longer returns NaN on low-dimensional data mapped linearly into many dimensions
+  (scikit-dimension 0.3.4 clipped the cosine of neighbour angles at 1 only).
+- `calibrate()` and `calibrated_statistic()` take `std_floor`.
+
 ### Added
 - Benchmarks: experiment E10 (`run.py --experiment e10`, `cluster/e10.slurm.sh`), the default
   selection and its candidates on the E4 sets; `e9.py --experiment` and the
@@ -24,6 +39,7 @@
   sources (`gte`, `distilroberta`, `glove`, `vit`, `convnext`), for the R1 retest and E10; E10
   on E8's four regression sets (`E10_REGRESSION_SETS`, `mode="regression"`, kNN R^2);
   `cluster/e4x_precheck.slurm.sh`.
+- `benchmarks/check_e3_flags.py`: the WP 8.4 acceptance check on the E3 null cells.
 
 ## 0.6.0 (unreleased)
 

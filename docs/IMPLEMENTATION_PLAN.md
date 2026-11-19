@@ -770,7 +770,7 @@ The items come from "Open findings" in the WP 4.5 notes and from "Limitations an
 | 8.1 | Branch, tags and distribution | done (2026-11-18): PR #1 merged into `main` (`c8ce3f6`, CI green); tags `v0.1.3` to `v0.6.0` pushed; no PyPI |
 | 8.2 | Selection on a subsample of rows | done (2026-11-19): `selection_max_rows=50_000`; criteria 1 and 2 met, criterion 3 missed at d = 128 by a fixed cost (see "WP 8.2 outcome") |
 | 8.3 | Benchmark the default selection (E10) | in progress (2026-11-19): 35 sets done in E10; regression and 25 extra sets designed (see "WP 8.3 design and criteria") |
-| 8.4 | Diagnostics still uncalibrated | to do (confirmed 2026-11-18): flag normalised rows only |
+| 8.4 | Diagnostics still uncalibrated | done (2026-11-19): flags, z intervals, DANCo fix; one residual near miss left unflagged (see "WP 8.4 outcome") |
 | 8.5 | Deprecations and 0.7.0 | to do (confirmed 2026-11-18) |
 
 ### Phase 1 notes (2026-11-10)
@@ -1674,6 +1674,62 @@ WP 8.3 preview (same E10 runs, no criteria applied yet):
    - Euclidean kNN and the probe.
 
 **Output.** `docs/BENCHMARK_SELECTION.md` and the README numbers.
+
+### WP 8.4 outcome (2026-11-19)
+
+Done in code and checked against E3, with no new runs. The E3 null cells
+(`benchmarks/results/e3/summary_gauss.csv`) were the evidence, and
+`benchmarks/check_e3_flags.py` applies the report's own flag rule to them
+(`benchmarks/results/e3/FLAGS_WP84.md`).
+
+- **Flags** (`uncalibrated_statistics` in `embedkit/analysis/report.py`;
+  `CalibratedStatistic.uncalibrated`, with the reason).
+  - Each flag follows a statistic that missed the bar of 95% of null cells inside ±3.
+  - On rows with a common norm, under either metric, the antihub ratio, `distance_cv` and
+    uniformity are flagged. On the `power1_l2` cells they were inside in 51%, 0% and 0%.
+  - Flat normalised rows (`flat_l2`) were calibrated, but the report cannot tell them apart
+    reliably. All normalised rows are therefore flagged, which follows the user's decision to
+    flag only.
+  - Under cosine, k-skewness is flagged (76% with `i^-0.5`, 40% at d = 1,024), and so is the
+    antihub ratio (89% over all cells, 0% for spiked spectra at d = 1,024).
+  - Under Euclidean distance with d > 256, neighbour consistency is flagged (89% at d = 1,024,
+    40% spiked). At d ≤ 256 it was 99%. E3 tested only 32, 256 and 1,024, so the cut-off is the
+    largest d that passed.
+  - A flagged statistic keeps its z, raises no recommendation, and is left out of
+    `n_outside_null`.
+  - The only recommendation this removes is R2 (antihubs, Euclidean) on rows normalised
+    upstream. R1, Euclidean k-skewness, is never flagged, so WP 8.3's R1 retest is not
+    affected.
+- **Acceptance.**
+  - Without the flags, 11 (family, metric, statistic) groups miss the bar. With them, 1 does:
+    `distance_cv` under cosine in the `mean` family, 42 of 45 cells (93%). Its misses have |z|
+    of 3.06, 3.23 and 3.26.
+  - **Left unflagged, a judgement call reported here.** That group is not one of WP 8.4's
+    cases. Three or more misses in 45 cells happen about 40% of the time when each cell misses
+    with probability 5%. `distance_cv` drives no recommendation since WP 7.1. Flagging it
+    under cosine would be the strict reading of the bar.
+- **Near-threshold flips.** `CalibratedStatistic.z_interval` gives the 2.5% and 97.5% quantiles
+  of z over 2,000 resamples of the null draws, with the antihub floor applied in each resample.
+  - A recommendation whose interval reaches below `z_threshold` says that the reading is near
+    the threshold.
+  - Firing still uses z > 3, the rule E4 validated.
+  - No more draws are taken: the default stays at 20, the user's decision of 2026-11-14.
+  - There is no bar for this item. The interval describes the uncertainty and does not change
+    any decision.
+- **DANCo NaN.** The cause is a bug in scikit-dimension 0.3.4: `_loc_angles` clips the cosine of
+  neighbour angles at +1 but not at −1. On a 2-d cube mapped linearly into 256 dimensions,
+  opposite neighbour vectors give a cosine just below −1, and `arccos` returns NaN.
+  - EmbedKit now uses a DANCo subclass that clips both sides.
+  - The 15 NaN cells of `cube2` read about 2.1 to 2.2 (true ID 2), and so does the one
+    Swiss-roll NaN.
+  - The estimate is bit-identical wherever scikit-dimension's was finite (tested).
+- Tests: `tests/test_uncalibrated.py`. `tests/test_metric_kernel.py` now also excludes the z
+  intervals, which depend on the null as z does. The full suite passes.
+- API changes for MIGRATION (WP 8.5):
+  - `n_outside_null` counts calibrated statistics only;
+  - no antihub recommendation on normalised rows;
+  - new fields `uncalibrated` and `z_interval`;
+  - three new dataframe rows per statistic.
 
 ## Open points for the next session
 

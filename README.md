@@ -44,8 +44,9 @@ digits (raw pixels) and synthetic sets are also in E1 to E8.
   of 35 sets under cosine kNN and 14 of 35 under Euclidean kNN (median +0.4 points), worse on 6 and 3.
 - **The diagnostics have limits** ([`docs/BENCHMARK_DIAGNOSTICS.md`](docs/BENCHMARK_DIAGNOSTICS.md),
   E3 and E5). The k-NN intrinsic-dimension estimators read 14 to 29% low at ID 20, and their
-  intervals cover sampling error only. Rows normalised upstream with a power-law spectrum are not
-  calibrated by the null model.
+  intervals cover sampling error only. Where the null model is not calibrated (rows normalised
+  upstream, some statistics under cosine, neighbour consistency above d = 256) the report marks
+  the statistic as uncalibrated and draws no recommendation from it.
 
 **Where gains were measured: the supervised refiner**
 

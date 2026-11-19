@@ -52,6 +52,17 @@ class CalibratedStatistic(BaseResult):
     z_score:
         ``(observed - null_mean) / null_std``; 0 when the null has no spread and the observed
         value equals its mean, and +-inf when it has no spread and the value differs.
+    z_interval:
+        A 95% interval for ``z_score`` that reflects the finite number of null draws: the 2.5%
+        and 97.5% quantiles of the z-score over 2,000 resamples (with replacement) of the
+        draws. With 20 draws a z between 3 and 4 often falls on the other side of 3 in
+        another run (E3, WP 4.5); an interval that contains the threshold marks such a
+        reading. ``(nan, nan)`` with fewer than 3 draws. (WP 8.4.)
+    uncalibrated:
+        ``None`` when the null is calibrated for this statistic in this setting; otherwise the
+        reason it is not (for instance rows normalised upstream). The report draws no
+        recommendation from an uncalibrated statistic and leaves it out of
+        ``n_outside_null``. (WP 8.4.)
     """
 
     observed: float
@@ -61,6 +72,13 @@ class CalibratedStatistic(BaseResult):
     null_model: str
     n_draws: int
     n_samples: int
+    z_interval: tuple[float, float] = (float("nan"), float("nan"))
+    uncalibrated: str | None = None
+
+    @property
+    def calibrated(self) -> bool:
+        """True when the null is calibrated for this statistic in this setting."""
+        return self.uncalibrated is None
 
 
 class _GaussianNull:
@@ -184,36 +202,70 @@ def calibrate(
     model: NullModel = "gaussian",
     n_draws: int = 20,
     random_state: int | None = None,
+    std_floor: dict[str, float] | None = None,
 ) -> dict[str, CalibratedStatistic]:
-    """Compute ``stat_fn(X)`` and compare each of its values with the null distribution."""
+    """Compute ``stat_fn(X)`` and compare each of its values with the null distribution.
+
+    ``std_floor`` maps a statistic to a floor on its null standard deviation (the report
+    floors the antihub ratio, a proportion of a count, at one count).
+    """
     X = _to_numpy(X)
     observed = stat_fn(X)
     null = null_distribution(stat_fn, X, model=model, n_draws=n_draws, random_state=random_state)
+    floors = std_floor or {}
     return {
-        key: calibrated_statistic(observed[key], null[key], model, X.shape[0])
+        key: calibrated_statistic(observed[key], null[key], model, X.shape[0],
+                                  std_floor=floors.get(key, 0.0))
         for key in observed
     }
 
 
+_Z_BOOT = 2000  # resamples of the null draws behind CalibratedStatistic.z_interval
+
+
+def _z(diff, std):
+    """``diff / std``, with 0 for 0 / 0 and +-inf for a non-zero ``diff`` over 0."""
+    diff, std = np.asarray(diff, dtype=np.float64), np.asarray(std, dtype=np.float64)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return np.where(std > 0, diff / std, np.where(diff == 0, 0.0, np.sign(diff) * np.inf))
+
+
+def _floored(std, floor: float):
+    """``std``, raised to ``floor`` where it is below it (or NaN)."""
+    if not floor:
+        return std
+    std = np.asarray(std, dtype=np.float64)
+    return np.where(std >= floor, std, floor)
+
+
+def _z_interval(observed: float, null_values: np.ndarray, std_floor: float = 0.0
+                ) -> tuple[float, float]:
+    m = len(null_values)
+    if m < 3:
+        return (float("nan"), float("nan"))
+    idx = np.random.default_rng(0).integers(0, m, size=(_Z_BOOT, m))
+    draws = null_values[idx]
+    z = _z(float(observed) - draws.mean(axis=1), _floored(draws.std(axis=1, ddof=1), std_floor))
+    lo, hi = np.quantile(z, [0.025, 0.975], method="inverted_cdf")
+    return (float(lo), float(hi))
+
+
 def calibrated_statistic(
-    observed: float, null_values: np.ndarray, model: str, n_samples: int
+    observed: float, null_values: np.ndarray, model: str, n_samples: int,
+    std_floor: float = 0.0,
 ) -> CalibratedStatistic:
+    """Compare ``observed`` with ``null_values``; ``std_floor`` floors the null sd."""
     null_values = np.asarray(null_values, dtype=np.float64)
     mean = float(null_values.mean())
-    std = float(null_values.std(ddof=1))
-    diff = float(observed) - mean
-    if std > 0:
-        z = diff / std
-    elif diff == 0:
-        z = 0.0
-    else:
-        z = float(np.sign(diff) * np.inf)
+    std = float(_floored(null_values.std(ddof=1), std_floor))
+    z = float(_z(float(observed) - mean, std))
     return CalibratedStatistic(
         observed=float(observed),
         null_mean=mean,
         null_std=std,
-        z_score=float(z),
+        z_score=z,
         null_model=model,
         n_draws=len(null_values),
         n_samples=int(n_samples),
+        z_interval=_z_interval(observed, null_values, std_floor),
     )

@@ -162,6 +162,17 @@ five 80% row subsets of each clean set.
 
 ## Limitations and open findings
 
+**WP 8.4 (0.7.0).** The cases below are now marked in the report: a statistic whose null missed
+the bar in the setting at hand carries `uncalibrated` (the reason), raises no recommendation and
+is not counted in `n_outside_null` (`uncalibrated_statistics` in `embedkit/analysis/report.py`).
+With the flags, every (family, metric, statistic) of the E3 null cells meets the bar except
+`distance_cv` under cosine with a large mean (`mean` family, 42 of 45 cells, the three misses at
+|z| 3.06 to 3.26), left unflagged (`benchmarks/check_e3_flags.py`,
+`benchmarks/results/e3/FLAGS_WP84.md`). Each z now has a 95% interval over resamples of the null
+draws (`z_interval`), and a recommendation whose interval reaches below the threshold says so.
+DANCo's NaN on `cube2` was a bug in scikit-dimension 0.3.4 (the cosine of neighbour angles was
+clipped at 1 but not at -1); EmbedKit clips both sides, and DANCo reads about 2.1 to 2.2 there.
+
 - **Rows normalised upstream with an anisotropic spectrum are not calibrated.** The null is fitted to
   rows already on the sphere, and its draws, normalised again, are more isotropic than the data:
   `distance_cv` and uniformity z of +8 to +11 and a false antihub recommendation in about half of the

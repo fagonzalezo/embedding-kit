@@ -111,9 +111,9 @@ report = analyzer.fit(X, y=None)    # y enables centered_kernel_alignment
 | `report.hubness` | `HubnessResult` | k-occurrence distribution, skewness, hub/antihub ratios |
 | `report.geometry` | `GeometryBundle` | Distance concentration, isotropy, neighbor consistency, uniformity |
 | `report.kernel` | `KernelDiagnosticsResult` | Centred RBF kernel: effective rank, spectral gap, `top_k_eigen_ratio` (`condition_number` is a deprecated alias), kernel alignment |
-| `report.calibration` | `dict[str, CalibratedStatistic]` | k-skewness, antihub ratio, distance CV, neighbour consistency, uniformity against a null model: `observed`, `null_mean`, `null_std`, `z_score`; `None` if `calibrate=False` |
+| `report.calibration` | `dict[str, CalibratedStatistic]` | k-skewness, antihub ratio, distance CV, neighbour consistency, uniformity against a null model: `observed`, `null_mean`, `null_std`, `z_score`, `z_interval`, `uncalibrated`; `None` if `calibrate=False` |
 | `report.calibration_k` | `int` | The `k` used by the calibration |
-| `report.n_outside_null` | `int` | Calibrated statistics with \|z\| > `z_threshold` (3); replaces `severity` |
+| `report.n_outside_null` | `int` | Calibrated statistics (not flagged `uncalibrated`) with \|z\| > `z_threshold` (3); replaces `severity` |
 | `report.properties` | `list[str]` | Descriptive statements (spectrum, mean direction, uniformity vs null); anisotropy is a property, not a recommendation |
 | `report.recommendations` | `list[str]` | Actions, Euclidean metric only: more hubness or more antihubs than the null (the two rules E4 kept). Otherwise "No recommendation: ..." |
 | `report.k` | `int` | The kNN size the report used (replaces `suggested_k`, a deprecated alias removed in 0.7.0) |
@@ -392,7 +392,9 @@ EmbedKit slots into common ML stacks. For detailed patterns with code, read
 **Don't L2-normalize before analysis.** Run `EmbedKitAnalyzer` on the raw embeddings. If you
 search by cosine, pass `metric="cosine"`: the analyzer normalises the rows itself and every
 statistic then describes the normalised rows. Rows already normalised upstream are calibrated
-against a null normalised to the same norm, which is reliable only for flat spectra.
+against a null normalised to the same norm, which is reliable only for flat spectra: the report
+marks the antihub ratio, `distance_cv` and uniformity of such rows as uncalibrated
+(`calibration[name].uncalibrated`) and draws no recommendation from them.
 
 **`NTXentLoss` requires normalized embeddings.** `EmbeddingRefiner` defaults to
 `normalize_output=True` for this reason. If you swap in a different loss (e.g., `TripletLoss`
