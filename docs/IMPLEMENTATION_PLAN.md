@@ -769,7 +769,7 @@ The items come from "Open findings" in the WP 4.5 notes and from "Limitations an
 | 7.4 | Documentation | done (2026-11-18; released as 0.6.0): README rewritten around the benchmark results; manual and skill brought to the 0.6.0 API (every code block executed); `docs/MIGRATION.md` extended to 0.6.0; E9 table added |
 | 8.1 | Branch, tags and distribution | done (2026-11-18): PR #1 merged into `main` (`c8ce3f6`, CI green); tags `v0.1.3` to `v0.6.0` pushed; no PyPI |
 | 8.2 | Selection on a subsample of rows | done (2026-11-19): `selection_max_rows=50_000`; criteria 1 and 2 met, criterion 3 missed at d = 128 by a fixed cost (see "WP 8.2 outcome") |
-| 8.3 | Benchmark the default selection (E10) | to do (confirmed 2026-11-18): with extra high-hubness sets for R1 |
+| 8.3 | Benchmark the default selection (E10) | in progress (2026-11-19): 35 sets done in E10; regression and 25 extra sets designed (see "WP 8.3 design and criteria") |
 | 8.4 | Diagnostics still uncalibrated | to do (confirmed 2026-11-18): flag normalised rows only |
 | 8.5 | Deprecations and 0.7.0 | to do (confirmed 2026-11-18) |
 
@@ -1613,6 +1613,67 @@ WP 8.3 preview (same E10 runs, no criteria applied yet):
 - Regret against the best candidate in hindsight is 0 on 26 sets and at most 1.2 points
   (newsgroups_mpnet). Where it is not 0, identity was kept and `center_l2`, PCA or the refiner
   was slightly better.
+
+### WP 8.3 design and criteria, fixed before the runs (2026-11-19)
+
+**What the WP 8.2 runs already give.**
+- E10 ran the WP 8.3 classification half on the 35 E4 sets: `select` against `identity`, test
+  cosine 10-NN. The acceptance rule (fixed in the WP 8.3 text on 2026-11-18, before E10) gives:
+  significantly worse on 0 of 35, significantly better on 21. The results are in "WP 8.2
+  outcome".
+- E10 is reused as is. The new runs extend it to the regression sets and to the extra sets
+  below.
+
+**Regression.**
+- E10 on E8's four regression sets: `synthetic_regression`, `synthetic_regression_ties`,
+  `yelp_mpnet` and `fluorescence_esm2`.
+- Arms:
+  - `select`, with `mode="regression"`;
+  - the candidates on their own: `identity`, `center_l2`, `pca_l2-k` and the regression
+    refiner (`strategy="fixed"`, `target_dim=min(128, d // 2)`).
+- Primary outcome: test kNN R² (cosine, k = 10), the selection's own criterion, with the same
+  paired bootstrap over test points (the per-point terms average to R²).
+
+**Extra sets for R1.**
+- New encoders on the 10 E4 sources, chosen before any of their statistics was computed. They
+  were picked for diversity of architecture and training, not for expected hubness:
+  - Text (sentence-transformers, `Normalize` removed, `max_seq_length` 256, as in E4):
+    - `gte` (`thenlper/gte-base`, mean pooling, 768);
+    - `distilroberta` (`all-distilroberta-v1`, 768);
+    - `glove` (`average_word_embeddings_glove.6B.300d`: mean of static word vectors, 300).
+  - Images (torchvision, each weights' own preprocessing: resize 256 (ViT) or 236 (ConvNeXt),
+    centre crop 224, fp32):
+    - `vit` (`vit_b_16` IMAGENET1K_V1, class token before the head, 768);
+    - `convnext` (`convnext_tiny` IMAGENET1K_V1, pooled features before the last linear
+      layer, 768).
+- That gives 25 sets, `E4X_SETS`. Every one of them enters the analysis whatever its hubness:
+  there is no screening.
+- Each extra set gets E4's diagnostics (both metrics), E4's training-free gain grid and E10.
+- **Pre-check.** The analyzer changed since E4 (commit `15e9a08`) only in input validation and
+  in the recommendation text. Before the new sets are mixed with the old ones, the Euclidean
+  report of one original set (`agnews_minilm`) is rerun at the new commit. Its `z_k_skewness`
+  must match E4's to 1e-6. If it does not, the 35 original sets are rerun too.
+
+**Acceptance.**
+1. **Default against raw.** For every set (35 + 25 classification, 4 regression), `select` is
+   significantly worse than `identity` on none of them. A set fails when the interval lies
+   entirely below 0. If one fails, the WP 8.3 text says what to examine: first `val_fraction`
+   and the significance rule, then the candidate list.
+2. **R1.** WP 7.1's keep rule, unchanged, on the 60 sets: Euclidean kNN, Spearman with a
+   95% interval from 2,000 bootstrap resamples of the 10 source data sets, and a significant
+   gain on at least half of the firing sets.
+   - If R1 passes, it stays.
+   - If it fails, it is removed in WP 8.5, as decided.
+   - R2 and R1-cosine are reported on the 60 sets with no decision attached.
+   - The analysis is written to `benchmarks/results/e4x/`; `results/e4/REPORT.md` is left as
+     it is.
+3. Reported, with no bar:
+   - how often each candidate is chosen;
+   - regret against the best candidate in hindsight;
+   - fit time;
+   - Euclidean kNN and the probe.
+
+**Output.** `docs/BENCHMARK_SELECTION.md` and the README numbers.
 
 ## Open points for the next session
 

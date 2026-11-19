@@ -1,6 +1,6 @@
-# E10: the default selection on the E4 sets (WP 8.2, WP 8.3)
+# E10: the default selection (WP 8.2, WP 8.3)
 
-35 sets. Test stage, one seed. Primary outcome: test cosine 10-NN accuracy; intervals: paired bootstrap over test points (2,000 resamples, 95%). Criteria: `docs/IMPLEMENTATION_PLAN.md`, "WP 8.2 design and criteria".
+35 sets. Test stage, one seed. Primary outcome: test cosine 10-NN accuracy (kNN R^2 on regression sets); intervals: paired bootstrap over test points (2,000 resamples, 95%). Criteria: `docs/IMPLEMENTATION_PLAN.md`, "WP 8.2 design and criteria".
 
 ## WP 8.2 verdicts (primary outcome)
 
@@ -95,7 +95,12 @@
 | vs_identity | knn_accuracy_euclidean | 35 | 0 | 22 |
 | vs_identity | linear_probe_c1 | 35 | 1 | 10 |
 
-## WP 8.3 preview: the default against the input and the best candidate
+## WP 8.3: the default against the input
+
+Primary outcome: test cosine 10-NN accuracy (classification) or kNN R^2 (regression); differences in points (x 100).
+
+- E4: 35 sets; significantly worse on 0; significantly better on 21
+- **pass**: the default is significantly worse than the input on 0 of 35 sets
 
 | set | choice | reference choice | rows used | diff (points) | 95% interval |
 |---|---|---|---|---|---|
@@ -135,7 +140,9 @@
 | stl10_dinov2 | identity | identity | 5000 | +0.00 | [+0.00, +0.00] |
 | stl10_resnet50 | identity | identity | 5000 | +0.00 | [+0.00, +0.00] |
 
-Chosen candidates: `refiner-128` 22, `identity` 13
+## WP 8.3: chosen candidates and the best in hindsight
+
+- E4: `refiner-128` 22, `identity` 13; regret 0 on 26 of 35, largest 1.18 points
 
 | set | chosen | select | identity | best in hindsight | best | regret (points) |
 |---|---|---|---|---|---|---|

@@ -269,8 +269,18 @@ E4_TEXT_ENCODERS = ("mpnet", "minilm", "bge", "e5")
 E4_SETS = tuple(
     [f"{s}_{e}" for s in E4_IMAGE_SOURCES for e in E4_IMAGE_ENCODERS]
     + [f"{s}_{e}" for s in E4_TEXT_SOURCES for e in E4_TEXT_ENCODERS])
-for _name in E4_SETS:
+# WP 8.3: 25 extra sets on the same sources with five more encoders (E4X), for the R1 retest and
+# E10. cluster/env.sh has the same list.
+E4X_IMAGE_ENCODERS = ("vit", "convnext")
+E4X_TEXT_ENCODERS = ("gte", "distilroberta", "glove")
+E4X_SETS = tuple(
+    [f"{s}_{e}" for s in E4_IMAGE_SOURCES for e in E4X_IMAGE_ENCODERS]
+    + [f"{s}_{e}" for s in E4_TEXT_SOURCES for e in E4X_TEXT_ENCODERS])
+for _name in E4_SETS + E4X_SETS:
     LOADERS.setdefault(_name, _cached(_name, "classification"))
+# WP 8.3: E8's four regression sets, for E10.
+E10_REGRESSION_SETS = ("synthetic_regression", "synthetic_regression_ties", "yelp_mpnet",
+                       "fluorescence_esm2")
 
 LOCAL = ("pets_resnet50", "digits", "synthetic_anisotropic", "synthetic_regression",
          "synthetic_regression_ties")

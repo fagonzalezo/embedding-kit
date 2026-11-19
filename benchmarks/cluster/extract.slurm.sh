@@ -18,7 +18,9 @@
 # E4 (WP 7.1): the 31 new natural sets (E4_GPU_SETS in env.sh) instead; the array bound is the
 # number of sets minus 1 (30) and %2 keeps at most 2 GPUs:
 #   SETS=E4_GPU_SETS sbatch --array=0-30%2 extract.slurm.sh
-# (SETS names an array of env.sh, GPU_SETS or E4_GPU_SETS; the header's 0-5%2 is for GPU_SETS.)
+# WP 8.3: the 25 extra sets:  SETS=E4X_SETS sbatch --array=0-24%2 extract.slurm.sh
+# (SETS names an array of env.sh, GPU_SETS, E4_GPU_SETS or E4X_SETS; the header's 0-5%2 is for
+# GPU_SETS.)
 # The ANN-Benchmarks sets need no GPU:  sbatch extract_cpu.slurm.sh
 set -euo pipefail
 source "$SLURM_SUBMIT_DIR/env.sh"
@@ -26,7 +28,8 @@ check_clean
 case "${SETS:-GPU_SETS}" in
   GPU_SETS)    ALL=("${GPU_SETS[@]}") ;;
   E4_GPU_SETS) ALL=("${E4_GPU_SETS[@]}") ;;
-  *) echo "SETS=${SETS} is not GPU_SETS or E4_GPU_SETS"; exit 1 ;;
+  E4X_SETS)    ALL=("${E4X_SETS[@]}") ;;
+  *) echo "SETS=${SETS} is not GPU_SETS, E4_GPU_SETS or E4X_SETS"; exit 1 ;;
 esac
 if [ "$SLURM_ARRAY_TASK_ID" -ge "${#ALL[@]}" ]; then
   echo "array task $SLURM_ARRAY_TASK_ID is out of range: ${SETS:-GPU_SETS} has ${#ALL[@]} sets"; exit 1

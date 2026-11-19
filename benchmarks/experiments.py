@@ -604,6 +604,7 @@ def e4_methods(dataset) -> list[Method]:
 
 E10_CAPS = (5_000, 10_000, 20_000)  # selection_max_rows values below the default that bind
 E10_DEFAULT_CAP = 50_000            # EmbedKit's default selection_max_rows (WP 8.2)
+E10_REGRESSION_METRICS = ("knn_r2",)  # WP 8.3 regression sets: kNN R^2 (cosine, k = 10)
 
 
 class _Selected:
@@ -667,18 +668,23 @@ def e10_methods(dataset) -> list[Method]:
       in hindsight (WP 8.3): ``identity``, ``center_l2``, ``pca_l2-<k>`` (64, 128, 256 below d)
       and ``refiner`` (the supervised refiner at ``min(128, d // 2)``, ``strategy="fixed"``).
 
-    Classification sets only (the E4 sets); the regression and extra hubness sets of WP 8.3
-    are added separately.
+    Classification sets (E4, and the WP 8.3 extra sets E4X) are scored on ``E5_METRICS``.
+    Regression sets (WP 8.3: E8's four) run in ``mode="regression"`` (the selection and the
+    refiner) and are scored on ``E10_REGRESSION_METRICS`` (kNN R^2, cosine, k = 10).
     """
     from embedkit import EmbedKit
 
-    if dataset.y_train is None or dataset.meta.get("task") != "classification":
+    task = dataset.meta.get("task")
+    if dataset.y_train is None or task not in ("classification", "regression"):
         return []
+    regression = task == "regression"
     n, d = dataset.X_train.shape
     sel = dict(fit_with_labels=True, deterministic=False, family="select")
+    mode = dict(mode="regression") if regression else {}
 
     def select(cap=E10_DEFAULT_CAP):
-        return lambda s, ds, dev: _Selected(random_state=s, device=dev, selection_max_rows=cap)
+        return lambda s, ds, dev: _Selected(random_state=s, device=dev, selection_max_rows=cap,
+                                            **mode)
 
     m = [Method("select", select(), params=dict(selection_max_rows=E10_DEFAULT_CAP), **sel)]
     if n > E10_DEFAULT_CAP:
@@ -699,11 +705,12 @@ def e10_methods(dataset) -> list[Method]:
     t = min(128, max(1, d // 2))
     m.append(Method(
         "refiner",
-        lambda s, ds, dev: EmbedKit(mode="supervised", strategy="fixed", method="refiner",
-                                    target_dim=t, random_state=s, device=dev),
+        lambda s, ds, dev: EmbedKit(mode="regression" if regression else "supervised",
+                                    strategy="fixed", method="refiner", target_dim=t,
+                                    random_state=s, device=dev),
         deterministic=False, fit_with_labels=True, family="candidate",
         params=dict(target_dim=t)))
-    return [_with_metrics(x, E5_METRICS) for x in m]
+    return [_with_metrics(x, E10_REGRESSION_METRICS if regression else E5_METRICS) for x in m]
 
 
 EXPERIMENTS: dict[str, Callable] = {"e1": e1_methods, "e4": e4_methods, "e5": e5_methods,

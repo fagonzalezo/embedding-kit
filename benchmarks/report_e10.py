@@ -12,10 +12,12 @@ before the runs"):
   interval lies entirely below 0. A cap passes when at most 1 of the sets it binds on fails, and
   that failure loses less than 1 point. The default cap (``select`` against ``select-all``)
   passes when none fails.
-* WP 8.3, the default against the input. ``select`` against ``identity``, same test. Reported
-  here; WP 8.3 sets its own criteria. Also the best candidate in hindsight (``identity``,
-  ``center_l2``, ``pca_l2-k``, ``refiner``, each fitted on all the training rows) and how often
-  each candidate is chosen.
+* WP 8.3, the default against the input ("WP 8.3 design and criteria"). ``select`` against
+  ``identity``, same test, on every set: E4's 35, the 25 extra sets (E4X) and E8's four
+  regression sets, where the outcome is test kNN R^2 (cosine, k = 10). A set fails when the
+  interval lies entirely below 0; the default passes when no set fails. Also the best
+  candidate in hindsight (``identity``, ``center_l2``, ``pca_l2-k``, ``refiner``, each fitted on
+  all the training rows) and how often each candidate is chosen.
 
 Euclidean kNN and the linear probe are secondary outcomes (same comparisons, reported only).
 Writes ``REPORT.md`` and ``summary_e10.csv`` to ``--out``.
@@ -35,10 +37,12 @@ import pandas as pd
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
+import bench_datasets as D  # noqa: E402
 from run import decode_per_point  # noqa: E402
 
 N_BOOT = 2000
 PRIMARY = "knn_accuracy"  # cosine 10-NN, the selection's own criterion
+PRIMARY_REGRESSION = "knn_r2"  # cosine 10-NN R^2, the selection's criterion in regression
 SECONDARY = ("knn_accuracy_euclidean", "linear_probe_c1")
 CAPS = (5_000, 10_000, 20_000)
 CANDIDATES = ("identity", "center_l2", "pca_l2-64", "pca_l2-128", "pca_l2-256", "refiner")
@@ -86,21 +90,36 @@ def compare(runs: dict, a: str, b: str, metric: str):
     return paired(pa, pb)
 
 
+def group(name: str) -> str:
+    if name in getattr(D, "E10_REGRESSION_SETS", ()):
+        return "regression"
+    return "E4X" if name in getattr(D, "E4X_SETS", ()) else "E4"
+
+
+def primary_metric(runs: dict) -> str:
+    for r in runs.values():
+        if PRIMARY_REGRESSION in r.get("metrics", {}):
+            return PRIMARY_REGRESSION
+    return PRIMARY
+
+
 def analyse(data: dict) -> pd.DataFrame:
     rows = []
     for name, runs in sorted(data.items()):
         full = "select-all" if "select-all" in runs else "select"
         pairs = [(f"select-cap{c}", full, f"cap{c}") for c in CAPS]
         pairs += [("select", "select-all", "default_cap"), ("select", "identity", "vs_identity")]
+        prim = primary_metric(runs)
         for a, b, kind in pairs:
-            for metric in (PRIMARY, *SECONDARY):
+            for metric in (prim, *SECONDARY):
                 res = compare(runs, a, b, metric)
                 if res is None:
                     continue
                 diff, lo, hi = res
                 pa, pb = runs[a]["params"], runs[b]["params"]
-                rows.append(dict(dataset=name, comparison=kind, method=a, reference=b,
-                                 metric=metric, diff=diff, lo=lo, hi=hi, worse=hi < 0,
+                rows.append(dict(dataset=name, group=group(name), comparison=kind, method=a,
+                                 reference=b, metric=metric, primary=metric == prim,
+                                 diff=diff, lo=lo, hi=hi, worse=hi < 0,
                                  better=lo > 0, selected=pa.get("selected"),
                                  reference_selected=pb.get("selected"),
                                  n_selection_rows=pa.get("n_selection_rows"),
@@ -112,17 +131,19 @@ def oracle_table(data: dict) -> pd.DataFrame:
     rows = []
     for name, runs in sorted(data.items()):
         sel = runs.get("select", {})
-        if "metrics" not in sel:
+        prim = primary_metric(runs)
+        if "metrics" not in sel or prim not in sel["metrics"]:
             continue
-        cands = {c: runs[c]["metrics"][PRIMARY][0] for c in CANDIDATES
-                 if c in runs and "metrics" in runs[c] and PRIMARY in runs[c]["metrics"]}
+        cands = {c: runs[c]["metrics"][prim][0] for c in CANDIDATES
+                 if c in runs and "metrics" in runs[c] and prim in runs[c]["metrics"]}
         if not cands:
             continue
         best = max(cands, key=cands.get)
         selected = sel["params"].get("selected")
-        rows.append(dict(dataset=name, selected=selected, select=sel["metrics"][PRIMARY][0],
-                         identity=cands.get("identity"), best=best, best_value=cands[best],
-                         regret=cands[best] - sel["metrics"][PRIMARY][0],
+        value = sel["metrics"][prim][0]
+        rows.append(dict(dataset=name, group=group(name), metric=prim, selected=selected,
+                         select=value, identity=cands.get("identity"), best=best,
+                         best_value=cands[best], regret=cands[best] - value,
                          select_fit_time=sel.get("fit_time"),
                          refiner_fit_time=runs.get("refiner", {}).get("fit_time")))
     return pd.DataFrame(rows)
@@ -130,7 +151,7 @@ def oracle_table(data: dict) -> pd.DataFrame:
 
 def verdicts(df: pd.DataFrame) -> list[str]:
     out = []
-    prim = df[df.metric == PRIMARY]
+    prim = df[df.primary]
     for c in CAPS:
         sub = prim[prim.comparison == f"cap{c}"]
         if sub.empty:
@@ -156,8 +177,25 @@ def verdicts(df: pd.DataFrame) -> list[str]:
     return out
 
 
-def fmt_rows(df: pd.DataFrame, kind: str, metric: str) -> list[str]:
-    sub = df[(df.comparison == kind) & (df.metric == metric)]
+def verdict_vs_identity(df: pd.DataFrame) -> list[str]:
+    out = []
+    sub = df[df.primary & (df.comparison == "vs_identity")]
+    for g, part in sub.groupby("group", sort=False):
+        fails = part[part.worse]
+        listed = ", ".join(f"{r.dataset} {100 * r.diff:+.2f}" for r in fails.itertuples())
+        out.append(f"- {g}: {len(part)} sets; significantly worse on {len(fails)}"
+                   + (f" ({listed})" if len(fails) else "")
+                   + f"; significantly better on {int(part.better.sum())}")
+    fails = sub[sub.worse]
+    out.append(f"- **{'pass' if fails.empty else 'FAIL'}**: the default is significantly worse "
+               f"than the input on {len(fails)} of {len(sub)} sets")
+    return out
+
+
+def fmt_rows(df: pd.DataFrame, kind: str, metric: str | None = None) -> list[str]:
+    """``metric=None``: each set's primary outcome."""
+    sub = df[(df.comparison == kind)
+             & (df.primary if metric is None else df.metric == metric)]
     if sub.empty:
         return ["(none)"]
     lines = ["| set | choice | reference choice | rows used | diff (points) | 95% interval |",
@@ -174,30 +212,34 @@ def fmt_rows(df: pd.DataFrame, kind: str, metric: str) -> list[str]:
 def render(df: pd.DataFrame, oracle: pd.DataFrame, data: dict) -> str:
     errors = [(s, m, r["error"]) for s, runs in data.items() for m, r in runs.items()
               if "error" in r]
-    out = ["# E10: the default selection on the E4 sets (WP 8.2, WP 8.3)", "",
-           f"{len(data)} sets. Test stage, one seed. Primary outcome: test cosine 10-NN accuracy; "
+    out = ["# E10: the default selection (WP 8.2, WP 8.3)", "",
+           f"{len(data)} sets. Test stage, one seed. Primary outcome: test cosine 10-NN accuracy "
+           "(kNN R^2 on regression sets); "
            "intervals: paired bootstrap over test points (2,000 resamples, 95%). Criteria: "
            "`docs/IMPLEMENTATION_PLAN.md`, \"WP 8.2 design and criteria\".", "",
            "## WP 8.2 verdicts (primary outcome)", "", *verdicts(df), ""]
     for c in CAPS:
         out += [f"### Cap {c:,} against selection on all rows", "",
-                *fmt_rows(df, f"cap{c}", PRIMARY), ""]
+                *fmt_rows(df, f"cap{c}"), ""]
     out += ["### Default cap 50,000 against selection on all rows", "",
-            *fmt_rows(df, "default_cap", PRIMARY), ""]
+            *fmt_rows(df, "default_cap"), ""]
     out += ["## Secondary outcomes (count of sets significantly worse / better)", "",
             "| comparison | metric | sets | worse | better |", "|---|---|---|---|---|"]
-    for (kind, metric), g in df.groupby(["comparison", "metric"]):
-        if metric == PRIMARY:
-            continue
+    for (kind, metric), g in df[~df.primary].groupby(["comparison", "metric"]):
         out.append(f"| {kind} | {metric} | {len(g)} | {int(g.worse.sum())} | "
                    f"{int(g.better.sum())} |")
-    out += ["", "## WP 8.3 preview: the default against the input and the best candidate", ""]
-    out += fmt_rows(df, "vs_identity", PRIMARY)
+    out += ["", "## WP 8.3: the default against the input", "",
+            "Primary outcome: test cosine 10-NN accuracy (classification) or kNN R^2 "
+            "(regression); differences in points (x 100).", "", *verdict_vs_identity(df), ""]
+    out += fmt_rows(df, "vs_identity")
     if not oracle.empty:
-        counts = Counter(oracle.selected)
-        out += ["", "Chosen candidates: " + ", ".join(f"`{k}` {v}" for k, v in
-                                                       counts.most_common()), "",
-                "| set | chosen | select | identity | best in hindsight | best | regret "
+        out += ["", "## WP 8.3: chosen candidates and the best in hindsight", ""]
+        for g, part in oracle.groupby("group", sort=False):
+            counts = Counter(part.selected)
+            out.append(f"- {g}: " + ", ".join(f"`{k}` {v}" for k, v in counts.most_common())
+                       + f"; regret 0 on {int((part.regret <= 0).sum())} of {len(part)}, "
+                       f"largest {100 * part.regret.max():.2f} points")
+        out += ["", "| set | chosen | select | identity | best in hindsight | best | regret "
                 "(points) |", "|---|---|---|---|---|---|---|"]
         for r in oracle.itertuples():
             out.append(f"| {r.dataset} | {r.selected} | {r.select:.4f} | {r.identity:.4f} | "

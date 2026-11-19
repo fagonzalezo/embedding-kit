@@ -23,11 +23,19 @@
 # (CIFAR, 50,000 x 2,048; AG News, 120,000 rows) train the refiner up to three times. Finished
 # (set, method) files are skipped, so a TIMEOUT costs only unfinished work: resubmit the task
 # IDs, for example `sbatch --array=3,17 e10.slurm.sh`.
+# WP 8.3: the 25 extra sets and E8's four regression sets (E4X_SETS, E10_REG_SETS in env.sh):
+#   SETS=E4X_SETS sbatch --array=0-24%2 e10.slurm.sh
+#   SETS=E10_REG_SETS sbatch --array=0-3%2 e10.slurm.sh
 # Results: $REPO/benchmarks/results/e10/ (they stay on the cluster). Submit from this directory.
 set -euo pipefail
 source "$SLURM_SUBMIT_DIR/env.sh"
 check_clean
-SET=${E4_SETS[$SLURM_ARRAY_TASK_ID]}
+case " E4_SETS E4X_SETS E10_REG_SETS " in *" ${SETS:-E4_SETS} "*) ;; *) echo "SETS=$SETS is not one of: E4_SETS E4X_SETS E10_REG_SETS"; exit 1 ;; esac
+declare -n ALL=${SETS:-E4_SETS}
+if [ "$SLURM_ARRAY_TASK_ID" -ge "${#ALL[@]}" ]; then
+  echo "array task $SLURM_ARRAY_TASK_ID is out of range: ${SETS:-E4_SETS} has ${#ALL[@]} sets"; exit 1
+fi
+SET=${ALL[$SLURM_ARRAY_TASK_ID]}
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 srun singularity exec --nv "$CONTAINER" "$PY" "$REPO/benchmarks/run.py" --experiment e10 \
   --datasets "$SET" --data-root "$DATA" --stages test --seeds 1 --device cuda

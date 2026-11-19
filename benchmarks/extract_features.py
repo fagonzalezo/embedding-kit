@@ -69,6 +69,10 @@ MODELS = {
     "minilm": "sentence-transformers/all-MiniLM-L6-v2",
     "bge": "BAAI/bge-base-en-v1.5",
     "e5": "intfloat/e5-base-v2",
+    # WP 8.3 extra text encoders (E4X), chosen for diversity before any statistic was seen.
+    "gte": "thenlper/gte-base",
+    "distilroberta": "sentence-transformers/all-distilroberta-v1",
+    "glove": "sentence-transformers/average_word_embeddings_glove.6B.300d",
 }
 # Pinned revisions (commit hashes) of E4's text models and datasets. Offline nothing is known, so
 # they are empty: an unpinned one is resolved to the current commit hash before loading, loaded
@@ -269,14 +273,57 @@ def _resnet50_encoder(device: str):
     return encode
 
 
+def _torchvision_encoder(arch: str):
+    """WP 8.3 extra image encoders (E4X): a torchvision ImageNet classifier without its last
+    linear layer, with the weights' own preprocessing (``weights.transforms()``), in fp32.
+
+    ``vit``: ``vit_b_16`` IMAGENET1K_V1, the class token after the final layer norm (768).
+    ``convnext``: ``convnext_tiny`` IMAGENET1K_V1, the pooled, layer-normed features (768).
+    """
+    def make(device: str):
+        import torch
+        import torch.nn as nn
+        from torchvision import models
+
+        if arch == "vit":
+            weights = models.ViT_B_16_Weights.IMAGENET1K_V1
+            net = models.vit_b_16(weights=weights)
+            net.heads = nn.Identity()
+        else:
+            weights = models.ConvNeXt_Tiny_Weights.IMAGENET1K_V1
+            net = models.convnext_tiny(weights=weights)
+            net.classifier[2] = nn.Identity()
+        transform = weights.transforms()
+        net = net.to(device).eval()
+
+        def encode(images):
+            batch = torch.stack([transform(im.convert("RGB")) for im in images]).to(device)
+            return net(batch)
+
+        return encode
+
+    return make
+
+
 RESNET50_WEIGHTS_URL = "https://download.pytorch.org/models/resnet50-11ad3fa6.pth"
 IMAGE_ENCODERS = {"resnet50": _resnet50_encoder, "dinov2": _dinov2_encoder, "clip": _clip_encoder}
+E4X_IMAGE_ENCODERS = {"vit": _torchvision_encoder("vit"),
+                      "convnext": _torchvision_encoder("convnext")}
+IMAGE_ENCODERS.update(E4X_IMAGE_ENCODERS)
 IMAGE_ENCODER_META = {
     "resnet50": dict(model="torchvision/resnet50", model_revision="IMAGENET1K_V2 " +
                      RESNET50_WEIGHTS_URL, embedding="penultimate layer (fc removed)",
                      preprocessing="resize 256, centre crop 224, ImageNet normalisation, fp32"),
     "dinov2": dict(model=MODELS["dinov2"], embedding="pooler_output (CLS)"),
     "clip": dict(model=MODELS["clip"], embedding="get_image_features (projected)"),
+    "vit": dict(model="torchvision/vit_b_16", model_revision="IMAGENET1K_V1 "
+                "https://download.pytorch.org/models/vit_b_16-c867db91.pth",
+                embedding="class token after the final layer norm (heads removed)",
+                preprocessing="ViT_B_16_Weights.IMAGENET1K_V1.transforms(), fp32"),
+    "convnext": dict(model="torchvision/convnext_tiny", model_revision="IMAGENET1K_V1 "
+                     "https://download.pytorch.org/models/convnext_tiny-983f1562.pth",
+                     embedding="pooled, layer-normed features (last linear layer removed)",
+                     preprocessing="ConvNeXt_Tiny_Weights.IMAGENET1K_V1.transforms(), fp32"),
 }
 
 
@@ -543,6 +590,8 @@ TEXT_SOURCES = {
                        text="text", label="label", n_classes=20),
 }
 E4_TEXT_PREFIX = {"mpnet": "", "minilm": "", "bge": "", "e5": "query: "}
+E4X_TEXT_PREFIX = {"gte": "", "distilroberta": "", "glove": ""}  # WP 8.3 extra encoders
+TEXT_PREFIX = {**E4_TEXT_PREFIX, **E4X_TEXT_PREFIX}
 
 
 def _st_encoder(key: str, device: str, prefix: str = ""):
@@ -600,7 +649,7 @@ def _text_set(source: str, encoder: str):
                                f"{len(classes)}")
         train_set = set(ttr)
         n_test_in_train = int(sum(t in train_set for t in tte))
-        encode, emeta = _st_encoder(encoder, device, E4_TEXT_PREFIX[encoder])
+        encode, emeta = _st_encoder(encoder, device, TEXT_PREFIX[encoder])
         arrays = dict(X_train=encode(ttr, batch_size), y_train=ytr,
                       X_test=encode(tte, batch_size), y_test=yte, **extra)
         meta = dict(emeta, source=source, hf_dataset=spec["repo"], hf_config=spec["config"],
@@ -653,7 +702,7 @@ for _src in IMAGE_SOURCES:
     for _enc in IMAGE_ENCODERS:
         BUILDERS.setdefault(f"{_src}_{_enc}", _image_set(_src, _enc))
 for _src in TEXT_SOURCES:
-    for _enc in E4_TEXT_PREFIX:
+    for _enc in TEXT_PREFIX:
         BUILDERS.setdefault(f"{_src}_{_enc}", _text_set(_src, _enc))
 BUILDERS.pop("pets_resnet50", None)  # built by examples/04, not here
 

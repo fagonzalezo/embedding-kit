@@ -38,6 +38,15 @@ E4_SETS=(cifar10_resnet50 cifar10_dinov2 cifar10_clip cifar100_resnet50 cifar100
          emotion_e5 massive_mpnet massive_minilm massive_bge massive_e5 agnews_mpnet
          agnews_minilm agnews_bge agnews_e5 newsgroups_mpnet newsgroups_minilm newsgroups_bge
          newsgroups_e5)
+# WP 8.3: 25 extra sets with five more encoders on the same sources (bench_datasets.E4X_SETS,
+# same order), for the R1 retest (e4.slurm.sh) and E10 (e10.slurm.sh); and E8's four regression
+# sets for E10. Extraction:  SETS=E4X_SETS sbatch --array=0-24%2 extract.slurm.sh
+E4X_SETS=(cifar10_vit cifar10_convnext cifar100_vit cifar100_convnext stl10_vit stl10_convnext
+          pets_vit pets_convnext flowers102_vit flowers102_convnext banking77_gte
+          banking77_distilroberta banking77_glove emotion_gte emotion_distilroberta emotion_glove
+          massive_gte massive_distilroberta massive_glove agnews_gte agnews_distilroberta
+          agnews_glove newsgroups_gte newsgroups_distilroberta newsgroups_glove)
+E10_REG_SETS=(synthetic_regression synthetic_regression_ties yelp_mpnet fluorescence_esm2)
 # Datasets of experiment E1 (one array task each).
 E1_SETS=(pets_resnet50 digits synthetic_anisotropic cifar100_dinov2 stl10_clip banking77_mpnet stsb_mpnet)
 # Datasets of experiment E2 (one array task each; labelled sets only).

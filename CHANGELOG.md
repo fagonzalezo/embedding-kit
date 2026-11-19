@@ -19,7 +19,11 @@
 - Benchmarks: experiment E10 (`run.py --experiment e10`, `cluster/e10.slurm.sh`), the default
   selection and its candidates on the E4 sets; `e9.py --experiment` and the
   `embedkit_labels_all` target for the E9 rerun after WP 8.2.
-- `benchmarks/report_e10.py`: the WP 8.2 verdicts and the WP 8.3 preview from E10.
+- `benchmarks/report_e10.py`: the WP 8.2 verdicts and the WP 8.3 acceptance from E10.
+- Benchmarks (WP 8.3): 25 extra sets (`bench_datasets.E4X_SETS`), five more encoders on the E4
+  sources (`gte`, `distilroberta`, `glove`, `vit`, `convnext`), for the R1 retest and E10; E10
+  on E8's four regression sets (`E10_REGRESSION_SETS`, `mode="regression"`, kNN R^2);
+  `cluster/e4x_precheck.slurm.sh`.
 
 ## 0.6.0 (unreleased)
 
