@@ -60,7 +60,7 @@ Methods run one after another; running them in threads made results vary between
 
 **Ranges & interpretation:**
 - **The intervals cover sampling error only, not bias.** The k-NN estimators (TwoNN, MLE, MOM) read low at high ID: on a 20-sphere with n = 5,000 they give 15 to 17. `lPCA` counts linear dimensions, so it returns d + 1 for a d-sphere and is exact only for flat manifolds.
-- The report makes no recommendation from ID/D. The 0.1 and 0.3 rule was removed after experiment E4 (WP 7.1): it fired on all 35 natural classification sets, and PCA to `suggested_target_dim` lost kNN accuracy on 32 of them (median -5 points under cosine).
+- The report makes no recommendation from ID/D. The 0.1 and 0.3 rule was removed after experiment E4: it fired on all 35 natural classification sets, and PCA to `suggested_target_dim` lost kNN accuracy on 32 of them (median -5 points under cosine).
 
 ```python
 from embedkit.analysis.intrinsic_dim import IntrinsicDimensionEstimator
@@ -252,9 +252,15 @@ print(f"lambda_1/lambda_k: {result.top_k_eigen_ratio:.3g}")
 
 ### 1.8 Unified Analysis Report
 
-`EmbedKitAnalyzer` runs all seven analyzers in a single call and assembles the results into an `EmbedKitReport`. The report also holds a null-model calibration, a list of **properties** (descriptive statements about the spectrum, the dominant coordinates, the mean direction and, when calibrated, uniformity against the null; no thresholds) and a list of **recommendations** (actions). Only rules that experiment E4 (WP 7.1) found to predict the gain of their fix on 35 natural classification sets make a recommendation: more hubness or more antihubs than the null, under `metric="euclidean"`, each pointing to a hubness-reducing neighbour search (`embedkit.hubness_reduction`). E4 tested 9 rules; 7 failed. Distance concentration, neighbour consistency and ID/D are still computed and calibrated but raise no action; nor does anything under cosine (`benchmarks/results/e4/REPORT.md`). When no rule fires the report says "No recommendation: no statistic with a validated rule is beyond its null range.", which does not mean no fix can help, only that the report cannot tell which one would. Everything else in the report is descriptive.
+`EmbedKitAnalyzer` runs all seven analyzers in a single call and assembles the results into an `EmbedKitReport`. The report also holds a null-model calibration, a list of **properties** (descriptive statements about the spectrum, the dominant coordinates, the mean direction and, when calibrated, uniformity against the null; no thresholds) and a list of **recommendations** (actions). Only rules that experiment E4 found to predict the gain of their fix on 35 natural classification sets make a recommendation: more hubness or more antihubs than the null, under `metric="euclidean"`, each pointing to a hubness-reducing neighbour search (`embedkit.hubness_reduction`). E4 tested 9 rules; 7 failed. Distance concentration, neighbour consistency and ID/D are still computed and calibrated but raise no action; nor does anything under cosine (`benchmarks/results/e4/REPORT.md`). When no rule fires the report says "No recommendation: no statistic with a validated rule is beyond its null range.", which does not mean no fix can help, only that the report cannot tell which one would. Everything else in the report is descriptive.
 
-**Null-model calibration** (`calibrate=True`, the default). k-skewness, the antihub ratio, `distance_cv`, neighbour consistency and uniformity depend on n, d, k and the covariance spectrum, so a fixed threshold means something different on every dataset. The analyzer recomputes these five statistics on `n_null_draws` (default 20) data sets drawn from a null model of the same size as a subsample of `n_calibration` rows (default 2,000), with the same metric. The k of the calibration (`report.calibration_k`) is `k` when given, and otherwise the default rule applied to the calibration rows (22 for 2,000 rows), so that the z-scores do not change with the size of the data. Rows that arrive with a common norm (normalised upstream) are compared with null draws normalised to the same norm. `report.calibration[name]` holds the observed value, the null mean and standard deviation, the z-score, `z_interval` (a 95% interval for z over 2,000 resamples of the null draws: with 20 draws a z between 3 and 4 is not a stable reading, and a recommendation whose interval reaches below the threshold says so) and `uncalibrated` (`None`, or the reason the null is not calibrated for that statistic here; `.calibrated` is the boolean). `report.n_outside_null` counts the calibrated statistics with `|z| > z_threshold` (default 3); it replaces the old `severity`. The default `null_model="gaussian"` is a Gaussian with the data's mean (shrunk so that its squared norm is unbiased) and a covariance whose trace and `tr(Σ²)` match unbiased estimates from the data (`embedkit.analysis.null`); `"permuted"` permutes each column independently. The recommendations come from the z-scores (k-skewness and antihub ratio, Euclidean only), and with `calibrate=False` none is made. The calibration is itself limited (E3, `docs/BENCHMARK_DIAGNOSTICS.md`), and since 0.7.0 the report marks the statistics that missed the E3 bar (inside ±3 in at least 95% of Gaussian null cells) as uncalibrated (`embedkit.analysis.report.uncalibrated_statistics`): on rows with a common norm (normalised upstream; with a power-law spectrum the null is more isotropic than the data), the antihub ratio, `distance_cv` and uniformity; under cosine, k-skewness and the antihub ratio; under Euclidean distance above d = 256, neighbour consistency (spiked spectra at d = 1,024). An uncalibrated statistic keeps its z-score but raises no recommendation and is not counted in `n_outside_null`; in practice only the antihub recommendation on normalised rows is lost. With these flags every remaining (family, metric, statistic) of E3 meets the bar except `distance_cv` under cosine with a large mean (93% of cells, all three misses within 3.3; `benchmarks/results/e3/FLAGS_WP84.md`). Calibration costs `n_null_draws + 1` evaluations of the five statistics: about 50 s for 3,680 × 2,048 ResNet features on a laptop.
+**Null-model calibration** (`calibrate=True`, the default). k-skewness, the antihub ratio, `distance_cv`, neighbour consistency and uniformity depend on n, d, k and the covariance spectrum, so a fixed threshold means something different on every dataset. The analyzer recomputes these five statistics on `n_null_draws` (default 20) data sets drawn from a null model of the same size as a subsample of `n_calibration` rows (default 2,000), with the same metric. The k of the calibration (`report.calibration_k`) is `k` when given, and otherwise the default rule applied to the calibration rows (22 for 2,000 rows), so that the z-scores do not change with the size of the data. Rows that arrive with a common norm (normalised upstream) are compared with null draws normalised to the same norm. `report.calibration[name]` holds the observed value, the null mean and standard deviation, the z-score, `z_interval` (a 95% interval for z that reflects the limited number of null draws: with 20 draws, a z between 3 and 4 can land on either side of 3 when the analysis is rerun, and a recommendation whose interval reaches below the threshold says so; raise `n_null_draws` to settle such a reading) and `uncalibrated` (`None`, or the reason the null is not calibrated for that statistic here; `.calibrated` is the boolean). `report.n_outside_null` counts the calibrated statistics with `|z| > z_threshold` (default 3); it replaces the old `severity`. The default `null_model="gaussian"` is a Gaussian with the data's mean (shrunk so that its squared norm is unbiased) and a covariance whose trace and `tr(Σ²)` match unbiased estimates from the data (`embedkit.analysis.null`); `"permuted"` permutes each column independently. The recommendations come from the z-scores (k-skewness and antihub ratio, Euclidean only), and with `calibrate=False` none is made. The null model is not reliable everywhere: on data drawn from the null itself, some statistics fall outside ±3 too often in some settings (`docs/BENCHMARK_DIAGNOSTICS.md`). The report marks those statistics as uncalibrated, with the reason in `uncalibrated`:
+
+- rows normalised upstream (all rows with the same norm): the antihub ratio, `distance_cv` and uniformity, because with an uneven spectrum the null on the sphere is more isotropic than the data;
+- `metric="cosine"`: k-skewness and the antihub ratio;
+- `metric="euclidean"` with more than 256 dimensions: neighbour consistency.
+
+An uncalibrated statistic keeps its z-score, but raises no recommendation and is not counted in `n_outside_null`. In practice the only recommendation this removes is the antihub one on rows normalised upstream. One known weak spot is not flagged: `distance_cv` under cosine on data with a large common mean, whose z-scores occasionally land just beyond ±3 on null data. Calibration costs `n_null_draws + 1` evaluations of the five statistics: about 50 s for 3,680 × 2,048 ResNet features on a laptop.
 
 **Derived values.**
 
@@ -993,7 +999,7 @@ Measured in experiment E9 (`benchmarks/e9.py`, `benchmarks/results/e9/REPORT.md`
 cluster node (no GPU), with synthetic float32 data (10 classes, power-law spectrum). Each entry is
 the wall time of one `fit` in a fresh process and the peak resident memory of that process (GB =
 1e9 bytes); the peak includes the interpreter and torch (about 0.6 GB) and the input itself
-(16.4 GB at n = 1e6, d = 4,096). Every cell finished.
+(16.4 GB at n = 1e6, d = 4,096).
 
 `EmbedKitAnalyzer().fit(X)` (the defaults: calibration with 20 null draws, ID bootstrap and scale
 curve):
@@ -1019,9 +1025,7 @@ The analyzer's time hardly grows with n: the neighbour statistics use a subsampl
 four times the input at d = 4,096, because the input is copied (float32 conversion, centring)
 before it is subsampled. Calibration accounts for most of the time at small n.
 
-`EmbedKit().fit(X)` without labels (centre and L2-normalise). Rows 1,000 and 10,000 are E9
-(0.6.0); rows from 50,000 are E9b (after WP 8.2, `benchmarks/results/e9b/REPORT.md`, same machine
-and settings):
+`EmbedKit().fit(X)` without labels (centre and L2-normalise):
 
 | n \ d | 128 | 1,024 | 4,096 |
 |---|---|---|---|
@@ -1031,12 +1035,10 @@ and settings):
 | 100,000 | 0.1 s / 0.7 GB | 0.6 s / 1.2 GB | 2.2 s / 3.1 GB |
 | 1,000,000 | 1.1 s / 1.2 GB | 5.9 s / 4.9 GB | 22 s / 17.8 GB |
 
-The centring is now refitted without a float64 copy of the input: at 1e6 × 4,096 the peak fell
-from 49.8 GB in 0.6.0 to 17.8 GB, about 1.4 GB above the input and the interpreter.
+Memory stays close to the input itself: at 1e6 × 4,096 the peak is about 1.4 GB above the
+input, the interpreter included.
 
-`EmbedKit().fit(X, y)` with class labels (selection, with the supervised refiner as a candidate).
-Rows 1,000 and 10,000 are E9 (0.6.0, and unchanged since: below `selection_max_rows` the
-selection is that of 0.6.0); rows from 50,000 are E9b:
+`EmbedKit().fit(X, y)` with class labels (selection, with the supervised refiner as a candidate):
 
 | n \ d | 128 | 1,024 | 4,096 |
 |---|---|---|---|
@@ -1046,26 +1048,27 @@ selection is that of 0.6.0); rows from 50,000 are E9b:
 | 100,000 | 1.9 min / 2.8 GB | 2.6 min / 3.8 GB | 6.4 min / 11.8 GB |
 | 1,000,000 | 1.9 min / 3.3 GB | 2.7 min / 7.5 GB | 6.7 min / 26.5 GB |
 
-Above 50,000 rows the selection uses a stratified subsample of `selection_max_rows` rows, so
-its time and its memory beyond the input no longer grow with n: about 2.2 GB at d up to 1,024
-and 9.5 GB at d = 4,096, at every n. In 0.6.0, which selected on all the rows, the 1e6 row took
-1.8 h / 9.7 GB, 3.5 h / 46 GB and 9.7 h / 182 GB. `Identity` was selected in every cell, so no
-model was refitted. When the refiner or PCA wins, it is fitted again on all the rows, and that
-refit still grows with n (E9b does not measure it): the refiner is trained on all the rows, and
-the PCA refit makes a float64 copy of the input.
+Above `selection_max_rows` rows (50,000 by default) the candidates are fitted and scored on a
+stratified subsample of that size, so the selection's time, and its memory beyond the input,
+stop growing with n: about 2.2 GB at d up to 1,024 and 9.5 GB at d = 4,096. In these
+measurements `Identity` won every time, so nothing was refitted. When the refiner or PCA wins,
+it is fitted again on all the rows, and that refit does grow with n: the refiner trains on every
+row, and PCA makes a float64 copy of the input. Before 0.7.0 the selection always used all the
+rows; at a million rows it took 1.8 to 9.7 hours on the same CPUs.
 
-On a GPU (Quadro RTX 8000, 20 CPUs; E9b GPU, `benchmarks/results/e9b_gpu/REPORT.md`), at
-n = 1e6:
+On a GPU (Quadro RTX 8000, 20 CPUs), at n = 1e6:
 
 | | 128 | 1,024 | 4,096 |
 |---|---|---|---|
 | `selection_max_rows=50_000` (default) | 1.4 min / 4.0 GB | 2.1 min / 8.2 GB | 5.0 min / 26.6 GB |
-| `selection_max_rows=None` (all rows) | 2.8 h / 10.5 GB | 4.2 h / 46.1 GB | > 5.1 h (stopped) |
+| `selection_max_rows=None` (all rows) | 2.8 h / 10.5 GB | 4.2 h / 46.1 GB | over 5 h; not completed |
 
-On the 35 E4 sets (E10, `benchmarks/results/e10/REPORT.md`), a cap of 10,000 or 20,000 rows
-chose as well as the selection on all the rows on every set it applied to; a cap of 5,000 was
-significantly worse on 4 of 26 sets (by 2.3 to 6.2 points). No E4 set has more than 50,000
-training rows, so the default cap itself does not bind there.
+Selecting on a subsample costs little in quality. On 35 natural classification datasets,
+selecting on 10,000 or 20,000 rows picked a transform as good as selecting on all of them
+wherever the dataset was larger than the cap; with 5,000 rows the choice was significantly worse
+on 4 of 26 datasets (2.3 to 6.2 points of kNN accuracy), so do not set the cap much below
+10,000. Details: `benchmarks/results/e9b/REPORT.md`, `benchmarks/results/e9b_gpu/REPORT.md` and
+`benchmarks/results/e10/REPORT.md`.
 
 ---
 

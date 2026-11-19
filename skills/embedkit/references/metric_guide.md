@@ -5,7 +5,7 @@ which statistics the report judges, geometric meaning, and the downstream conseq
 
 The report applies no fixed pathology thresholds. Hubness, antihubs, distance concentration,
 neighbour consistency and uniformity are compared with a null model (see "Calibration" below). Since
-experiment E4 (WP 7.1) the only recommendations are two rules, from the z-scores of k-skewness and the
+experiment E4 the only recommendations are two rules, from the z-scores of k-skewness and the
 antihub ratio under `metric="euclidean"`; every other statistic is descriptive. E4 tested 9 rules on
 35 natural classification sets, and the other 7 did not predict the gain of their fix
 (`benchmarks/results/e4/REPORT.md`). The ranges in the tables below are rough guides for reading a
@@ -217,7 +217,7 @@ spectrum; or `"permuted"`: each column permuted). The comparison runs on a subsa
   the removed `severity`.
 - Recommendations, under `metric="euclidean"` only: `k_skewness` z > 3 (more hubness) and
   `antihub_ratio` z > 3, both pointing to a hubness-reducing search. These are the two rules E4
-  kept (WP 7.1); the concentration, neighbour-consistency and ID / D rules were removed because
+  kept; the concentration, neighbour-consistency and ID / D rules were removed because
   they did not predict which fix helps. With `calibrate=False` the report makes no
   recommendation.
 - A large |z| means "unlike a Gaussian with the same spectrum", not necessarily "defective".
@@ -225,7 +225,7 @@ spectrum; or `"permuted"`: each column permuted). The comparison runs on a subsa
   norm; this calibrates flat-spectrum rows only (a power-law spectrum on the sphere gives
   spurious z of +8 to +11), so on such rows the antihub ratio, `distance_cv` and uniformity are
   marked uncalibrated. Also uncalibrated: k-skewness and the antihub ratio under cosine, and
-  neighbour consistency under Euclidean distance above d = 256 (E3 misses, WP 8.4). An
+  neighbour consistency under Euclidean distance above d = 256. An
   uncalibrated statistic raises no recommendation and is not counted in `n_outside_null`.
 - The high-level `EmbedKit` computes no report under `strategy="select"` (`analysis_report` is
   `None`); `strategy="fixed"` runs it uncalibrated and reads only `suggested_target_dim`.

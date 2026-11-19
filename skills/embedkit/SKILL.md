@@ -144,7 +144,7 @@ For detailed interpretation of every metric and its healthy ranges, read
 
 ## Pathology → Improvement Quick Reference
 
-> Experiment E4 (WP 7.1) tested the report's rules on 35 natural classification sets
+> Experiment E4 tested the report's rules on 35 natural classification sets
 > (`benchmarks/results/e4/REPORT.md`). Only the first two rows below are backed by it, and only
 > for Euclidean kNN; the report recommends nothing else. Distance concentration, neighbour
 > consistency, low ID/D, the mean direction, the top components, anisotropy and dominant
