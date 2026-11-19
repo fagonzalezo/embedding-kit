@@ -108,7 +108,7 @@ print(f"Robin Hood idx: {result.robinhood_index:.3f}")
 print(f"Antihub ratio:  {result.antihub_ratio:.3f}")
 ```
 
-**The recommendation.** When `report.calibration["k_skewness"]` or `["antihub_ratio"]` has z above `z_threshold` under `metric="euclidean"`, the report recommends a hubness-reducing neighbour search (`embedkit.hubness_reduction`, section 2.7). In E4 the rule for k-skewness fired on only 3 of 35 sets (a significant gain on all 3; Spearman 0.36, 95% interval 0.13 to 0.65 across source data sets), and the one for antihubs on 8 (a significant gain on 5; 0.32, 0.05 to 0.58). Under cosine neither predicted a gain, so the report recommends nothing there. The 23 primary tests of E4 had no multiplicity correction; about one false pass is expected by chance.
+**The recommendation.** When `report.calibration["k_skewness"]` or `["antihub_ratio"]` has z above `z_threshold` under `metric="euclidean"`, the report recommends a hubness-reducing neighbour search (`embedkit.hubness_reduction`, section 2.7). In E4 the rule for k-skewness fired on only 3 of 35 sets (a significant gain on all 3; Spearman 0.36, 95% interval 0.13 to 0.65 across source data sets), and the one for antihubs on 8 (a significant gain on 5; 0.32, 0.05 to 0.58). Retested on 60 sets with 5 more encoders (E10, `docs/BENCHMARK_SELECTION.md`), the k-skewness rule fired on 5 (a significant gain on all 5; 0.48, 0.30 to 0.71) and the antihub rule on 22 (19; 0.53, 0.29 to 0.74). Under cosine neither predicted a gain, so the report recommends nothing there. The 23 primary tests of E4 had no multiplicity correction; about one false pass is expected by chance.
 
 ---
 
@@ -701,8 +701,13 @@ scaled to unit L2 norm (`CenterNormalize`); nothing is trained and no analysis r
 | Result | `Identity` when none passes, so the output is never worse than the input by this criterion. The winner is refitted on all rows. |
 | Large inputs | With more than `selection_max_rows` rows (default 50,000), the split, the candidates and the scores use a random subsample of that many rows, stratified by class; only the winner is fitted on all the rows. `None` selects on all the rows (the 0.6.0 behaviour). |
 
-Most gains in E4 were under one point, so the interval keeps noise from choosing a transform. The
-selection procedure itself has not been benchmarked on the E4 sets; it reuses their findings.
+Most gains in E4 were under one point, so the interval keeps noise from choosing a transform. In
+E10 (`docs/BENCHMARK_SELECTION.md`), on 60 natural classification sets and 4 regression sets, the
+selection was significantly worse than the input on none and better on 43 (+0.8 to +15.1 points
+of cosine kNN accuracy on the classification sets). Against the candidate that was best on the
+test set in hindsight it lost nothing on 50 sets and at most 1.2 points. It chooses by kNN: a
+linear probe on the output was worse than on the input on 5 sets (by 0.2 to 0.8 points), so check
+your own task if it is not a neighbour search.
 
 After `fit`: `selected_` names the winner (`"identity"`, `"center_l2"`, `"pca-128"`,
 `"refiner-128"`, ...) and `selection_report_` is a DataFrame with one row per candidate:
@@ -1063,11 +1068,10 @@ On a GPU (Quadro RTX 8000, 20 CPUs), at n = 1e6:
 | `selection_max_rows=50_000` (default) | 1.4 min / 4.0 GB | 2.1 min / 8.2 GB | 5.0 min / 26.6 GB |
 | `selection_max_rows=None` (all rows) | 2.8 h / 10.5 GB | 4.2 h / 46.1 GB | over 5 h; not completed |
 
-Selecting on a subsample costs little in quality. On 35 natural classification datasets,
-selecting on 10,000 or 20,000 rows picked a transform as good as selecting on all of them
-wherever the dataset was larger than the cap; with 5,000 rows the choice was significantly worse
-on 4 of 26 datasets (2.3 to 6.2 points of kNN accuracy), so do not set the cap much below
-10,000. Details: `benchmarks/results/e9b/REPORT.md`, `benchmarks/results/e9b_gpu/REPORT.md` and
+Selecting on a subsample costs little in quality. On 64 datasets, selecting on 10,000 or 20,000
+rows picked a transform as good as selecting on all of them wherever the dataset was larger than
+the cap (40 and 11 datasets); with 5,000 rows the choice was significantly worse on 6 of 47
+datasets (1.7 to 6.2 points of kNN accuracy), so do not set the cap much below 10,000. Details: `benchmarks/results/e9b/REPORT.md`, `benchmarks/results/e9b_gpu/REPORT.md` and
 `benchmarks/results/e10/REPORT.md`.
 
 ---

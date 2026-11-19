@@ -769,9 +769,9 @@ The items come from "Open findings" in the WP 4.5 notes and from "Limitations an
 | 7.4 | Documentation | done (2026-11-18; released as 0.6.0): README rewritten around the benchmark results; manual and skill brought to the 0.6.0 API (every code block executed); `docs/MIGRATION.md` extended to 0.6.0; E9 table added |
 | 8.1 | Branch, tags and distribution | done (2026-11-18): PR #1 merged into `main` (`c8ce3f6`, CI green); tags `v0.1.3` to `v0.6.0` pushed; no PyPI |
 | 8.2 | Selection on a subsample of rows | done (2026-11-19): `selection_max_rows=50_000`; criteria 1 and 2 met, criterion 3 missed at d = 128 by a fixed cost (see "WP 8.2 outcome") |
-| 8.3 | Benchmark the default selection (E10) | in progress (2026-11-19): 35 sets done in E10; regression and 25 extra sets designed (see "WP 8.3 design and criteria") |
+| 8.3 | Benchmark the default selection (E10) | done (2026-11-19): never significantly worse than raw on 64 sets, better on 43; R1 kept on 60 sets (5 of 5 firing sets up); `docs/BENCHMARK_SELECTION.md` (see "WP 8.3 outcome") |
 | 8.4 | Diagnostics still uncalibrated | done (2026-11-19): flags, z intervals, DANCo fix; one residual near miss left unflagged (see "WP 8.4 outcome") |
-| 8.5 | Deprecations and 0.7.0 | in progress (2026-11-19): `suggested_k` / `suggested_sigma` removed; `docs/MIGRATION.md` extended to 0.7.0 (R1 row to add if R1 is removed); the R1 decision and the release wait for WP 8.3 |
+| 8.5 | Deprecations and 0.7.0 | in progress (2026-11-19): `suggested_k` / `suggested_sigma` removed; `docs/MIGRATION.md` extended to 0.7.0; R1 kept by WP 8.3, so no removal; the release is left |
 
 ### Phase 1 notes (2026-11-10)
 
@@ -1676,6 +1676,49 @@ WP 8.3 preview (same E10 runs, no criteria applied yet):
 
 **Output.** `docs/BENCHMARK_SELECTION.md` and the README numbers.
 
+### WP 8.3 outcome (2026-11-19)
+
+Runs on Occidata at commit `4097cf2` (clean tree): feature extraction for the 25 extra sets
+(job 3085630), E4 gains (3085631) and reports (3085632) on them, E10 on them (3085633) and on the
+regression sets (3085634), all on `RTX8000Nodes`. The first 35 sets of E10 are the WP 8.2 runs
+(`99c82ec`). Every task completed except the three expected cosine reports below. Analysis:
+`benchmarks/results/e10/REPORT.md` and `benchmarks/results/e4x/REPORT.md`; user-facing summary:
+`docs/BENCHMARK_SELECTION.md`, with the numbers in the README, the manual and the skill.
+
+- **Pre-check passed.** The Euclidean report of `agnews_minilm` at `4097cf2` matched E4's: the
+  `z_k_skewness` difference is 0, the largest of 62 scalar differences 1.2e-14 (job 3085628).
+  The 35 original reports were kept.
+- **Acceptance 1, the default against raw: met.** `select` is significantly worse than
+  `identity` on 0 of 64 sets (35 E4, 25 E4X, 4 regression) and significantly better on 43
+  (21, 18, 4). Classification gains where better: +0.8 to +15.1 points (median +4.3); regression
+  kNN R^2: +0.17 (Yelp) to +1.27 (fluorescence, from -0.79 to 0.48).
+- **Acceptance 2, R1: kept.** WP 7.1's rule on the 60 sets, Euclidean kNN: Spearman 0.482
+  (0.303 to 0.705); it fires on 5 sets (agnews_minilm, cifar100_dinov2, massive_minilm, and the
+  new massive_distilroberta and banking77_glove), and the gain is significant on all 5 (+1.3 to
+  +5.1 points). On 35 sets it was 0.358 (0.129 to 0.646), 3 of 3. No change in WP 8.5.
+  - Caveats: banking77_glove fires at z = 3.20, near the threshold, and emotion_glove misses it
+    at 2.96; two firing sets share the MASSIVE source.
+  - Reported only: R2 (Euclidean antihubs) on 60 sets, 0.532 (0.290 to 0.738), 19 of 22 firing
+    sets up; R1 under cosine on 57 sets, 0.005 (-0.290 to 0.419), 0 of 2.
+  - The other rules stay removed. R4 with the probe passes both conditions on 60 sets (0.492,
+    6 of 8), but the probe was a secondary outcome in WP 7.1 and no rule is reinstated from it.
+- **Reported, no bar.**
+  - Choices: `refiner-128` on 44 sets, `identity` on 19, `pca-256` on 1 (stl10_vit).
+  - Regret against the best in hindsight: 0 on 50 of 64 sets, largest 1.18 points
+    (newsgroups_mpnet).
+  - Fit time (one RTX 8000, with the refit): 9 s to 6.6 min, median 1.0 min.
+  - Euclidean kNN: better on 41 of 60, worse on 0. Linear probe (C = 1): better on 21, **worse on
+    5** (0.2 to 0.8 points: flowers102_convnext, pets_convnext, pets_dinov2, pets_vit with the
+    refiner; stl10_vit with PCA). The selection's criterion is kNN; this is in the README, the
+    manual and `docs/BENCHMARK_SELECTION.md`.
+  - WP 8.2's caps on the extra sets too: 10,000 and 20,000 are never significantly worse (40 and
+    11 binding sets); 5,000 is worse on 6 of 47.
+- **Finding: averaged GloVe gives zero rows.** A text with no in-vocabulary word averages to the
+  zero vector: 19 rows in banking77_glove, 56 in massive_glove, 323 in newsgroups_glove. The
+  cosine report raises `ValueError` on them, as designed (no direction), so those three cosine
+  reports failed and the cosine analyses cover 57 sets. The Euclidean reports, the E4 gains and
+  E10 ran on them unchanged. Nothing changed in the library.
+
 ### WP 8.4 outcome (2026-11-19)
 
 Done in code and checked against E3, with no new runs. The E3 null cells
@@ -1749,7 +1792,7 @@ All design decisions in this plan are confirmed, including phase 8's (2026-11-18
 2. **Phase 7 is done** and was tagged `v0.6.0` locally on 2026-11-18 (WP 7.1 E4, WP 7.2
    selection, WP 7.3 validation and E9, WP 7.4 documentation). Every phase of this plan is now
    done or dropped. Phase 8 (confirmed 2026-11-18, to be released as 0.7.0) collects what is
-   left. WP 8.1 and 8.2 are done (2026-11-19); continue with WP 8.3.
+   left. WP 8.1 to 8.4 are done (2026-11-19); WP 8.5 has the release left.
 3. **Benchmark results:** new experiments commit only their reports and summaries, as E8 does;
    per-run JSON stays on the cluster. E8's per-run files exist only on Occidata
    (`$BASE/embedding-kit/benchmarks/results/e8/`); the local copies were deleted on 2026-11-14

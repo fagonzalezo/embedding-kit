@@ -1,0 +1,13 @@
+rule,intervention,outcome,damage,n_sets,fire_rate,members,median_gain,share_sig_up
+R1,hubness,knn_accuracy_euclidean,aniso,8,0.25,"raw+mp, raw+csls",0.001907876805669173,0.3125
+R1,hubness,knn_accuracy_euclidean,domain,8,0.25,"raw+mp, raw+csls",0.0,0.25
+R1,hubness,knn_accuracy_euclidean,mean,8,0.25,"raw+mp, raw+csls",0.0039011703511053764,0.375
+R1,hubness,knn_accuracy_euclidean,noise,8,0.0,"raw+mp, raw+csls",0.03646421368220221,0.6875
+R1,hubness,knn_accuracy_euclidean,nuis,8,0.375,"raw+mp, raw+csls",0.004769692014172794,0.375
+R1,hubness,knn_accuracy_euclidean,pad,8,0.25,"raw+mp, raw+csls",0.005364109232769809,0.3125
+R2,hubness,knn_accuracy_euclidean,aniso,8,0.25,"raw+mp, raw+csls",0.001907876805669173,0.3125
+R2,hubness,knn_accuracy_euclidean,domain,8,0.25,"raw+mp, raw+csls",0.0,0.25
+R2,hubness,knn_accuracy_euclidean,mean,8,0.25,"raw+mp, raw+csls",0.0039011703511053764,0.375
+R2,hubness,knn_accuracy_euclidean,noise,8,0.125,"raw+mp, raw+csls",0.03646421368220221,0.6875
+R2,hubness,knn_accuracy_euclidean,nuis,8,0.125,"raw+mp, raw+csls",0.004769692014172794,0.375
+R2,hubness,knn_accuracy_euclidean,pad,8,0.0,"raw+mp, raw+csls",0.005364109232769809,0.3125

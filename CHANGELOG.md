@@ -44,6 +44,10 @@
   on E8's four regression sets (`E10_REGRESSION_SETS`, `mode="regression"`, kNN R^2);
   `cluster/e4x_precheck.slurm.sh`.
 - `benchmarks/check_e3_flags.py`: the WP 8.4 acceptance check on the E3 null cells.
+- `docs/BENCHMARK_SELECTION.md` (WP 8.3): E10 on 64 sets. The default selection is
+  significantly worse than the input on none and better on 43; a linear probe on its output is
+  worse on 5. The hubness recommendation (R1) passes WP 7.1's rule again on 60 sets and stays.
+  E4's rule analysis on the 60 sets is in `benchmarks/results/e4x/`.
 
 ## 0.6.0 (unreleased)
 

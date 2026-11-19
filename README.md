@@ -11,7 +11,8 @@ below are negative, and the defaults were changed to match them.
 
 All numbers below come from held-out splits with paired bootstrap intervals; "significant" means the
 95% interval excludes 0. Sources are in `docs/` and `benchmarks/results/`. The data are mostly
-pretrained text and image embeddings (E4: 35 sets from 10 source data sets and 3 or 4 encoders each);
+pretrained text and image embeddings (E4: 35 sets from 10 source data sets and 3 or 4 encoders each;
+E10 adds 25 sets from 5 more encoders on the same sources);
 digits (raw pixels) and synthetic sets are also in E1 to E8.
 
 **Where the library does not help**
@@ -35,8 +36,9 @@ digits (raw pixels) and synthetic sets are also in E1 to E8.
   concentration, neighbour consistency, ID/D, and four hypotheses about the mean direction, top
   components, anisotropy and dominant coordinates). Two passed the pre-set criteria: hubness (k-skewness
   above a null model) and antihubs, both for Euclidean kNN, both pointing to a hubness-reducing search.
-  The hubness rule fires on only 3 of 35 sets, so that evidence is thin; the antihub rule fires on 8 and
-  the fix helped significantly on 5. There was no correction for the 23 primary tests, where about one
+  The hubness rule fired on only 3 of 35 sets. Retested on 60 sets (E10), it fired on 5, the fix
+  helped significantly on all 5, and it still passes (Spearman 0.48, interval 0.30 to 0.71); the
+  evidence remains small. The antihub rule fired on 8 of 35 and the fix helped significantly on 5. There was no correction for the 23 primary tests, where about one
   false pass is expected by chance. The report recommends nothing else.
 - **Hubness reduction helps little under cosine.** On the E1 sets the best change against raw cosine
   kNN was +0.005 (mutual proximity, CIFAR-100); it lost 0.009 on Pets and 0.028 on the synthetic set
@@ -62,10 +64,20 @@ digits (raw pixels) and synthetic sets are also in E1 to E8.
 - With continuous targets, Rank-N-Contrast on an MLP beat raw and PCA on ridge R^2 on all 4 sets
   (+0.023 to +0.574 against raw). With 200 or 1,000 training rows it lost to raw on 6 of 8 sets.
 
-Not yet measured: the selection procedure described below was not benchmarked on its own (it
-reuses E4's findings). Time and memory for n up to 1e6 and d up to 4,096 are in the manual
-(section 3.5, experiment E9): the analyzer takes minutes at any n; selection with labels trains
-the refiner on CPU and took 1.8 to 9.7 hours at n = 1e6.
+**The default selection with labels** (E10, [`docs/BENCHMARK_SELECTION.md`](docs/BENCHMARK_SELECTION.md))
+
+- On 64 sets (60 classification sets from 7 text and 5 image encoders, and E8's 4 regression sets),
+  `EmbedKit().fit(X, y)` was significantly worse than the unchanged input on none and significantly
+  better on 43: by +0.8 to +15.1 points of cosine kNN accuracy (median +4.3) on 39 classification
+  sets, and on all 4 regression sets. It chose the supervised refiner on 44 sets and kept the input
+  on 19.
+- Against the candidate that was best on the test set in hindsight, it lost nothing on 50 of 64
+  sets and at most 1.2 points.
+- It scores candidates by kNN: a linear probe on its output was better on 21 sets but worse on 5
+  (by 0.2 to 0.8 points).
+- It took 9 s to 6.6 min per set on one GPU. Time and memory for n up to 1e6 and d up to 4,096 are
+  in the manual (section 3.5): the analyzer takes minutes at any n, and selection stays at a few
+  minutes because it is run on at most 50,000 rows (`selection_max_rows`).
 
 ## What the defaults do
 
@@ -199,7 +211,7 @@ More patterns (low-level `Trainer`, custom augmentations, pipelines) are in
 | [`CHANGELOG.md`](CHANGELOG.md) | Changes with their reasons and measurements |
 | [`skills/embedkit/references/metric_guide.md`](skills/embedkit/references/metric_guide.md) | Per-metric reading, and which statistics the report judges |
 | [`skills/embedkit/references/workflow_guide.md`](skills/embedkit/references/workflow_guide.md) | HuggingFace, PyTorch loops, scikit-learn pipelines, retrieval, ONNX export |
-| `docs/BENCHMARK_*.md` | Benchmark outcomes: [E1, E2](docs/BENCHMARK_E1_E2.md), [E6, E7](docs/BENCHMARK_E6_E7.md), [E8](docs/BENCHMARK_SUPERVISED.md), [E3, E5](docs/BENCHMARK_DIAGNOSTICS.md); E4 in [`benchmarks/results/e4/REPORT.md`](benchmarks/results/e4/REPORT.md) |
+| `docs/BENCHMARK_*.md` | Benchmark outcomes: [E1, E2](docs/BENCHMARK_E1_E2.md), [E6, E7](docs/BENCHMARK_E6_E7.md), [E8](docs/BENCHMARK_SUPERVISED.md), [E3, E5](docs/BENCHMARK_DIAGNOSTICS.md), [E10](docs/BENCHMARK_SELECTION.md); E4 in [`benchmarks/results/e4/REPORT.md`](benchmarks/results/e4/REPORT.md) |
 
 ## Claude Code skill
 

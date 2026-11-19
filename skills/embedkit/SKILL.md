@@ -29,14 +29,19 @@ diagnosis. Say so to the user: do not present a diagnostic reading as a reason t
   beat the raw embedding significantly on more than 16 sets (centring + L2, Euclidean kNN: 16 up,
   1 down, median +0.3 points). PCA to the report's `suggested_target_dim` lost accuracy on 32 of 35;
   ZCA whitening on 34 of 35 (cosine kNN).
-- Of 9 diagnostic rules, only two predicted a fix, both for Euclidean kNN: hubness (it fired on
-  only 3 sets, so the evidence is thin) and antihubs (8 sets). The fix is a hubness-reducing
-  neighbour search. No multiplicity correction was applied.
+- Of 9 diagnostic rules, only two predicted a fix, both for Euclidean kNN: hubness and antihubs.
+  The fix is a hubness-reducing neighbour search. Retested on 60 sets (E10), the hubness rule fired
+  on 5 and the fix helped on all 5; the antihub rule fired on 22 and helped on 19. The evidence for
+  hubness is still small, and no multiplicity correction was applied.
 - With class labels (E8, `docs/BENCHMARK_SUPERVISED.md`) the supervised refiner had higher kNN
   accuracy than the raw embeddings on 4 of 6 sets and lower on none (+0.003 to +0.021 on real data,
   +0.185 on a synthetic set). With 5 labels per class LDA was ahead of it by 0.04 to 0.08.
   Regression: the MLP refiner beat raw and PCA on 4 of 4 sets, but with 1,000 rows or fewer no
   refiner reliably beat raw.
+- The default selection with labels (E10, `docs/BENCHMARK_SELECTION.md`), on 60 classification and
+  4 regression sets: never significantly worse than the input, significantly better on 43 (+0.8 to
+  +15.1 points of cosine kNN accuracy), at most 1.2 points below the best candidate in hindsight.
+  It chooses by kNN; a linear probe on its output was worse on 5 sets (0.2 to 0.8 points).
 
 ## Installation
 
