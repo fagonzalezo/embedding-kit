@@ -1,26 +1,33 @@
 # Benchmarks E6 and E7: which refiner changes help, and the hubness-reduction methods
 
-Phase 5 of `docs/IMPLEMENTATION_PLAN.md`, following experiments E6 and E7 of `docs/CRITICAL_REVIEW.md`
-(section 5), with the gate outcome of `docs/BENCHMARK_E1_E2.md` (C, plus WP 5.3). Run on 2026-11-12 and
+E1 found that the self-supervised refiner of 0.2.0 does not beat training-free baselines
+(`docs/benchmarks/BENCHMARK_E1_E2.md`). E6 tests the changes that might fix that, one factor at a
+time: the architecture, the choice of positives and negatives, and nested (Matryoshka) output. E7
+measures how many rows the refiner needs to reach PCA, and whether fitting on the unlabelled test rows
+helps. An addendum to E1 scores the hubness-reducing neighbour searches. Run on 2026-11-12 and
 2026-11-13 on the OCCIDATA cluster. Datasets, splits, seeds, metrics and the paired bootstrap are those
-of E1 (`docs/BENCHMARK_E1_E2.md`, sections Datasets and Protocol).
+of E1 (`docs/benchmarks/BENCHMARK_E1_E2.md`, sections Datasets and Protocol); the acceptance rules
+were fixed before the runs.
+
+What changed in the library as a result (0.4.0): the refiner's default architecture is `"linear"`,
+self-supervised `EmbedKit` returns PCA, and `nested_dims` and `embedkit.hubness_reduction` were added.
 
 ## Outcome
 
-- **WP 5.1 accepted: the default refiner is a linear map initialised at PCA** (`architecture="linear"`).
+- **Architecture, accepted: the default refiner is a linear map initialised at PCA** (`architecture="linear"`).
   Against the previous MLP default it wins on 5 of 6 datasets with an interval and loses on none.
   The residual variant does as well against the MLP but loses to `linear` on 3 datasets and wins on 1.
-- **WP 5.2 rejected: no positive or negative change wins against `linear` on half the datasets.**
+- **Positives and negatives, rejected: no change wins against `linear` on half the datasets.**
   Mutual-neighbour positives, the neighbour mask and the decoupled loss each have 1 win, 3 ties and 2
   losses. Dropout-only positives (on the residual refiner) lose on 5 of 6 datasets, by up to 0.105.
-- **WP 5.3 accepted (non-inferiority).** Prefixes of one nested model at d = 256 match `linear`
+- **Nested output, accepted (non-inferiority).** Prefixes of one nested model at d = 256 match `linear`
   models trained at 32, 64 and 128. Of 16 comparisons with an interval, one loses (CIFAR-100, d = 32,
   -0.003), one wins and the rest tie.
 - **Against training-free baselines the refiner is level, not better.** The selected `linear`
   configuration has 1 win, 4 ties and 1 loss against the best of PCA and PCA-whitening at the same d.
-  So gate outcome C stands. At d = 32, however, it beats plain PCA by 0.015 to 0.09 on four
+  So E1's outcome C (the refiner loses to the baselines) stands. At d = 32, however, it beats plain PCA by 0.015 to 0.09 on four
   datasets, and no label-free rule tells PCA from PCA-whitening.
-- **WP 5.5: hubness reduction does not raise kNN accuracy on these embeddings.** The best change
+- **Hubness reduction does not raise kNN accuracy on these embeddings.** The best change
   against raw is +0.005 (mutual proximity, CIFAR-100). Mutual proximity loses on Pets and on the
   synthetic set.
 - **E7: the refiner needs thousands of rows to reach PCA, and never pulls ahead of it on real data.**
@@ -30,26 +37,27 @@ of E1 (`docs/BENCHMARK_E1_E2.md`, sections Datasets and Protocol).
   training row the refiner has 1 win, 4 ties and 1 loss, as in E6.
 - **E7, transduction:** fitting on train + test rows (no labels) gains +0.006 (Banking77) and +0.020
   (synthetic) for the refiner and ties elsewhere; no transform loses from it.
-- **Decision (confirmed by the user, 2026-11-13): `EmbedKit(mode="self_supervised")` returns PCA**,
-  as the plan's rule for gate C prescribes when WP 5.2 fails: the top principal directions followed by
-  L2 normalisation, with nothing trained. Plain PCA rather than PCA-whitening, because choosing
+- **Decision: `EmbedKit(mode="self_supervised")` returns PCA**, as the rule fixed after E1 prescribes
+  when no change to positives and negatives wins: the top principal directions followed by L2
+  normalisation, with nothing trained. (Since 0.6.0 the default without labels is centring + L2
+  normalisation instead; see `docs/benchmarks/BENCHMARK_SELECTION.md`.) Plain PCA rather than PCA-whitening, because choosing
   between them needs labels: with all rows on the real datasets, plain PCA is at most 0.004 behind
   whitening (STS-B), while whitening is up to 0.020 behind PCA (Pets). PCA prefixes are nested, so
-  WP 5.3's use case is served without training. The trained refiner stays available as
+  nested output is available without training. The trained refiner stays available as
   `EmbedKit(method="refiner")`, with `nested_dims` for nested training.
 
 ## E6: one-factor ablation of the refiner
 
 Every arm is self-supervised `EmbedKit` with the defaults of the stage and one factor changed. Each
 family is reduced to its configuration best on validation, over d in {32, 64, 128} below the input
-dimension (stage 1 also had the auto d, which no family selected). The phase 5 rule accepts a change
+dimension (stage 1 also had the auto d, which no family selected). The rule accepts a change
 when it wins against the previous default (difference above 0, 95% interval excluding 0) on at least
 half of the datasets. STS-B has no interval (Spearman over pairs), so 6 datasets decide.
 
 Full tables: `benchmarks/results/e6/REPORT.md` (against `e6_linear`, with the per-d prefix table) and
 `REPORT_vs_residual.md` (the dropout arm against `e6_residual`).
 
-### Stage 1 (WP 5.1): architecture
+### Stage 1: architecture
 
 Job 3077519 at `16789d3`.
 
@@ -61,7 +69,7 @@ Job 3077519 at `16789d3`.
 
 `residual` against `linear`: 1 win, 2 ties, 3 losses.
 
-### Stage 2 (WP 5.2, 5.3): positives, negatives and nested output
+### Stage 2: positives, negatives and nested output
 
 Job 3077755 at `77bc902`. Arms changed one factor from `linear`: `mutual`
 (`KNNPairs(k=5, mode="mutual")`), `nbrmask` (`NTXentLoss(neighbor_mask=5)`), `decoupled`
@@ -89,7 +97,7 @@ the points and erases class structure (CIFAR-100 linear probe 0.20 at d = 32). S
 fine-tunes a pretrained encoder for about one epoch; 100 epochs on a projection head are a different
 regime.
 
-**WP 5.3, prefix against a model trained at that d** (no selection, every d):
+**Nested output: prefix against a model trained at that d** (no selection, every d):
 
 | Dataset | d = 32 | d = 64 | d = 128 |
 |---|---|---|---|
@@ -107,7 +115,7 @@ model costs about 1.5 times a single `linear` run at d = 128 on CIFAR-100 (4627 
 
 ### The refiner against PCA at low d
 
-The gate compares with the better of PCA and PCA-whitening chosen on validation, which needs labels.
+E1's gate compares with the better of PCA and PCA-whitening chosen on validation, which needs labels.
 Against plain PCA at the same d, the nested `linear` prefixes (test kNN accuracy; STS-B Spearman):
 
 | Dataset | d = 32 | d = 64 | d = 128 |
@@ -123,7 +131,7 @@ Against plain PCA at the same d, the nested `linear` prefixes (test kNN accuracy
 On the synthetic set PCA-whitening is better still (0.892 at d = 32 against 0.839). The refiner sits
 between PCA and PCA-whitening there, and at or above PCA on the real datasets.
 
-## E1 addendum: hubness reduction (WP 5.5)
+## E1 addendum: hubness reduction
 
 Job 3077756 (CPU nodes; 15 minutes on CIFAR-100, under a minute elsewhere). Secondary distances on the
 raw embedding, exact search: local scaling (`raw+ls`, k = 5), mutual proximity (`raw+mp`, Gaussian,
@@ -190,7 +198,7 @@ directions, which a few hundred rows already estimate.
 Fitting on the unlabelled test rows helps the refiner on two datasets and never hurts any transform.
 The gains are small next to the differences between transforms.
 
-The third E7 item of the review, distribution shift, needs paired domains that these datasets do not
+The third planned E7 item, distribution shift, needs paired domains that these datasets do not
 have, and was not run.
 
 ## Compute

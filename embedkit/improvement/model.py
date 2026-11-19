@@ -34,8 +34,9 @@ class EmbeddingRefiner(nn.Module):
         starts from PCA. A custom training loop must call it first; training without it (a
         forward pass in training mode) warns once, because ``W`` is then a random map.
 
-        E6 (``docs/BENCHMARK_E1_E2.md``): ``"linear"`` and ``"residual"`` beat ``"mlp"`` on 5 of 6
-        datasets and lost on none; ``"linear"`` was at least as good as ``"residual"`` on 5 of 6.
+        E6 (``docs/benchmarks/BENCHMARK_E6_E7.md``): ``"linear"`` and ``"residual"`` beat
+        ``"mlp"`` on 5 of 6 datasets and lost on none; ``"linear"`` was at least as good as
+        ``"residual"`` on 5 of 6.
     """
 
     def __init__(

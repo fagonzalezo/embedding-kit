@@ -9,7 +9,7 @@
 #SBATCH --time=02:00:00
 #SBATCH --partition=24CPUNodes
 #
-# WP 8.3 pre-check ("WP 8.3 design and criteria" in docs/IMPLEMENTATION_PLAN.md): before the 25
+# WP 8.3 pre-check ("WP 8.3 design and criteria" in docs/dev/IMPLEMENTATION_PLAN.md): before the 25
 # extra sets are analysed together with E4's 35, rerun E4's reports (e4.py, both metrics) for one
 # original set at the current commit, into $TMPDIR, and compare every numeric scalar with the E4
 # file (commit 15e9a08). The bar is |z_k_skewness difference| <= 1e-6 under the Euclidean metric.

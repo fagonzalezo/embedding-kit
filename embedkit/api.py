@@ -81,9 +81,10 @@ class EmbedKit:
     principal directions followed by L2 normalisation, with the same ``transform``, ``dim=``,
     ``save`` and ``load``. ``"auto"`` is ``"pca"`` for ``mode="self_supervised"`` and
     ``"refiner"`` otherwise; ``target_dim="auto"`` is the report's ``suggested_target_dim``. In
-    E1, E6 and E7 (``docs/BENCHMARK_E1_E2.md``, ``docs/BENCHMARK_E6_E7.md``) the self-supervised
-    refiner never beat the better of PCA and PCA-whitening, lost to them when fitted on fewer
-    than a few thousand rows, and cost about 100 times more. The training parameters
+    E1, E6 and E7 (``docs/benchmarks/BENCHMARK_E1_E2.md``,
+    ``docs/benchmarks/BENCHMARK_E6_E7.md``) the self-supervised refiner never beat the better of
+    PCA and PCA-whitening, lost to them when fitted on fewer than a few thousand rows, and cost
+    about 100 times more. The training parameters
     (``augmentation``, ``loss``, ``architecture``, ``nested_dims``, ``epochs`` and the
     optimiser settings) apply to the refiner only; setting ``augmentation``, ``loss``,
     ``nested_dims`` or a non-linear ``architecture`` when no refiner is fitted or compared
@@ -105,8 +106,8 @@ class EmbedKit:
     monitor; a fixed refiner warns with 1000 rows or fewer, where in E8 no refiner reliably beat
     the raw embeddings. ``"self_supervised"``: the ``"linear"`` architecture with ``KNNPairs(5)``
     views and NT-Xent plus 0.5 alignment-uniformity, monitored by ``k_skewness``. These are the
-    ``"auto"`` values of ``architecture`` and ``augmentation``; ``docs/BENCHMARK_SUPERVISED.md``
-    has the evidence (E8).
+    ``"auto"`` values of ``architecture`` and ``augmentation``;
+    ``docs/benchmarks/BENCHMARK_SUPERVISED.md`` has the evidence (E8).
     ``monitor="auto"`` and ``early_stopping_patience="auto"`` resolve per mode: with labels, 10%
     of the rows are held out, training stops after 10 evaluations without improvement of the
     monitor and the best weights are restored; without labels there is no early stopping (E2
@@ -366,7 +367,8 @@ class EmbedKit:
             warnings.warn(
                 f"Regression refiner fitted on {n} rows: with {_SMALL_REGRESSION_ROWS} "
                 "training rows or fewer, no refiner reliably beat the raw embeddings in E8 "
-                "(docs/BENCHMARK_SUPERVISED.md); compare with the raw embeddings or PCA.",
+                "(docs/benchmarks/BENCHMARK_SUPERVISED.md); compare with the raw embeddings "
+                "or PCA.",
                 UserWarning, stacklevel=4)
 
         # Step 1: analyze
@@ -491,9 +493,9 @@ class EmbedKit:
         return self
 
     def _resolve_architecture(self) -> str:
-        # E8 (docs/BENCHMARK_SUPERVISED.md): with class labels the residual adapter matched the
-        # MLP on full training sets and, unlike it, did not collapse with 1-5 labels per class;
-        # for regression the MLP won on every dataset.
+        # E8 (docs/benchmarks/BENCHMARK_SUPERVISED.md): with class labels the residual adapter
+        # matched the MLP on full training sets and, unlike it, did not collapse with 1-5 labels
+        # per class; for regression the MLP won on every dataset.
         if self.architecture != "auto":
             return self.architecture
         return {"supervised": "residual", "regression": "mlp"}.get(self.mode_, "linear")
@@ -507,8 +509,9 @@ class EmbedKit:
             self.mode_, "k_skewness")
 
     def _resolve_patience(self) -> int | None:
-        # Without labels early stopping is off: in E2 (docs/BENCHMARK_E1_E2.md) no label-free
-        # monitor tracked test accuracy within a run. With labels the monitor is a held-out score.
+        # Without labels early stopping is off: in E2 (docs/benchmarks/BENCHMARK_E1_E2.md) no
+        # label-free monitor tracked test accuracy within a run. With labels the monitor is a
+        # held-out score.
         if self.early_stopping_patience != "auto":
             return self.early_stopping_patience
         return None if self.mode_ == "self_supervised" else 10

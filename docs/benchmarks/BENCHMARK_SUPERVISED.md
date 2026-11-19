@@ -1,17 +1,26 @@
 # Benchmark E8: supervised and regression modes
 
-Phase 6 of `docs/IMPLEMENTATION_PLAN.md` (WP 6.3), experiment E8 of `docs/CRITICAL_REVIEW.md`
-(section 5). Run on 2026-11-13 and 2026-11-14 on the OCCIDATA cluster, 5 seeds per trained arm. The
-generated tables are in `benchmarks/results/e8/REPORT.md`; this document gives the outcome and the
-decisions taken from it.
+E8 chooses the defaults of `EmbedKit` with labels: `mode="supervised"` (classes) and
+`mode="regression"` (continuous targets). It starts from the defaults fixed just before it, called
+the *starting default* below: SupCon alone (or Rank-N-Contrast for regression) on the linear
+refiner, with `KNNPairs(5)` views and early stopping on a held-out score. Each arm changes one factor,
+and the arms are compared with LDA, PCA and the raw embeddings, with few labels, with label noise and
+with few training rows. Run on 2026-11-13 and 2026-11-14 on the OCCIDATA cluster, 5 seeds per trained
+arm. The generated tables are in `benchmarks/results/e8/REPORT.md`; this document gives the outcome
+and the decisions taken from it.
+
+What changed in the library as a result (0.5.0): supervised `EmbedKit` trains the residual adapter,
+and regression `EmbedKit` trains the MLP on Gaussian-noise views. Since 0.6.0, `EmbedKit` with labels
+also compares the refiner with the input, centring and PCA on held-out rows and keeps the input
+unless one of them is significantly better (`docs/benchmarks/BENCHMARK_SELECTION.md`).
 
 ## Outcome
 
 - **Supervised default: SupCon alone on the residual adapter** (`architecture="residual"`: the
   PCA-initialised linear map plus a zero-initialised MLP), with `KNNPairs(5)` views, held-out kNN
-  accuracy as the early-stopping monitor and patience 10. Decided with the user on 2026-11-14.
-  - On the 6 full classification sets it beats the linear default of WP 6.1 on 2 and ties on 4
-    (kNN accuracy). The phase rule (wins on at least half the datasets) is not met. The plain MLP
+  accuracy as the early-stopping monitor and patience 10.
+  - On the 6 full classification sets it beats the linear starting default on 2 and ties on 4
+    (kNN accuracy). The acceptance rule (wins on at least half the datasets) is not met. The plain MLP
     meets it (3 wins, 3 ties) and ties the residual adapter on 5 of 6 sets.
   - The rule was set aside because of the label-efficiency sets, run as a follow-up for this
     decision. With 1 to 100 labels per class (12 sets) the MLP loses to the linear default on 6
@@ -24,9 +33,8 @@ decisions taken from it.
     data: +0.003 to +0.021 against raw, +0.002 to +0.013 against LDA. The large one is the
     synthetic anisotropic set (+0.185 against raw).
 - **Regression default: Rank-N-Contrast on the plain MLP with relative Gaussian-noise views**
-  (`architecture="mlp"`, `GaussianNoise(0.05)`), held-out ridge R^2 as the monitor. Decided with
-  the user on 2026-11-14.
-  - The MLP beats the linear RnC of WP 6.1 on ridge R^2 on all 4 sets, by +0.010 (Yelp) to
+  (`architecture="mlp"`, `GaussianNoise(0.05)`), held-out ridge R^2 as the monitor.
+  - The MLP beats the linear starting default (RnC) on ridge R^2 on all 4 sets, by +0.010 (Yelp) to
     +0.266 (fluorescence). Noise views on top beat the MLP alone on 3 of 4 and tie on Yelp.
   - Against the raw embeddings and PCA at the same dimension the new default wins on all 4 sets,
     on both ridge R^2 (+0.023 to +0.574 against raw) and 10-NN R^2.
@@ -62,7 +70,7 @@ decisions taken from it.
 | `yelp_mpnet` | review stars | 20,000 / 5,000 | all-mpnet-base-v2 |
 | `fluorescence_esm2` | TAPE GFP log-fluorescence | TAPE splits, about 21k / 27k | ESM-2 35M, mean over residues |
 
-The classification sets are those of E1 (`docs/BENCHMARK_E1_E2.md`) minus STS-B. Fluorescence test
+The classification sets are those of E1 (`docs/benchmarks/BENCHMARK_E1_E2.md`) minus STS-B. Fluorescence test
 sequences carry more mutations than the training ones, so it is an extrapolation task; ridge on
 raw ESM-2 features scores below zero there.
 
@@ -78,7 +86,7 @@ Derived sets:
 
 As in E1 and E6: 5 seeds per trained arm, the test split scored once per seed, paired bootstrap
 over test points against a reference. A win or loss needs the 95% interval to exclude 0. The
-output dimension is min(128, D // 2). Each arm changes one factor from the WP 6.1 default and
+output dimension is min(128, D // 2). Each arm changes one factor from the starting default and
 keeps the others as they were (linear architecture, `KNNPairs(5)` views; `benchmarks/experiments.py`
 pins these, so the arms do not move with the library defaults).
 
@@ -106,7 +114,7 @@ Baselines: raw embeddings and LDA (shrinkage) for classification, raw and PCA fo
 
 kNN accuracy (mean over seeds):
 
-| Set | raw | LDA | linear (WP 6.1) | MLP | residual (new default) |
+| Set | raw | LDA | linear (starting default) | MLP | residual (new default) |
 |---|---|---|---|---|---|
 | banking77_mpnet | 0.931 | 0.936 | 0.936 | 0.938 | 0.938 |
 | cifar100_dinov2 | 0.879 | 0.895 | 0.896 | 0.900 | 0.900 |
@@ -156,7 +164,7 @@ and STL-10 (0.005) and level on Banking77. At 100 the refiners and LDA are level
 
 ### Label noise
 
-Run with the linear default (WP 6.1), not the residual adapter. Up to 20% noise, SupCon does not
+Run with the linear starting default, not the residual adapter. Up to 20% noise, SupCon does not
 lose to the raw embeddings on any set (its worst difference is -0.006, a tie). At 40% it loses on
 Pets (-0.056, where LDA ties at -0.008) and STL-10 (-0.005). LDA loses to raw on digits at every
 noise level, and with clean labels too. Full tables: `REPORT.md`, per dataset.
@@ -165,7 +173,7 @@ noise level, and with clean labels too. Full tables: `REPORT.md`, per dataset.
 
 Ridge R^2 (mean over seeds):
 
-| Set | raw | PCA | linear RnC (WP 6.1) | MLP | residual | MLP + noise (new default) |
+| Set | raw | PCA | linear RnC (starting default) | MLP | residual | MLP + noise (new default) |
 |---|---|---|---|---|---|---|
 | fluorescence_esm2 | -0.033 | -0.122 | 0.136 | 0.402 | 0.420 | 0.541 |
 | synthetic_regression | 0.702 | 0.584 | 0.579 | 0.843 | 0.761 | 0.903 |
@@ -179,9 +187,9 @@ makes RnC pay. The residual adapter, which starts at PCA, falls well short of th
 synthetic sets (0.761 and 0.705 against 0.843 and 0.859), where PCA itself scores below the raw
 embeddings.
 
-The 0.1.2 RnC (`rnc_old`, the tie bug of `docs/BUG-rnc-ties.md`) differs from the fixed loss by
--0.007 to +0.002 in ridge R^2, so the fix matters less in these benchmarks than the architecture
-does. The rerun of the kbn-histo-survival arm named in that document is left to that project.
+The 0.1.2 RnC (`rnc_old`, with the tie bug fixed in 0.1.3; D21 in `CHANGELOG.md`) differs from the
+fixed loss by -0.007 to +0.002 in ridge R^2, so the fix matters less in these benchmarks than the
+architecture does.
 
 ### Few training rows
 
@@ -203,14 +211,14 @@ beats raw, on the two synthetic sets only.
 
 ## Decisions
 
-| Mode | Before (WP 6.1) | Now | Rule |
+| Mode | Starting default | Now | Rule |
 |---|---|---|---|
 | `supervised` | linear, `KNNPairs(5)` | residual, `KNNPairs(5)` | not met (2 of 6); chosen for few-label robustness |
 | `regression` | linear, `KNNPairs(5)` | MLP, `GaussianNoise(0.05)` | met (4 of 4, both changes) |
 | `self_supervised` | PCA (`method="auto"`); linear refiner | unchanged | E6 |
 
 `architecture="auto"` and `augmentation="auto"` resolve per mode, and both can be set explicitly.
-SupCon alone, early stopping on a held-out score and patience 10 stay as in WP 6.1.
+SupCon alone, early stopping on a held-out score and patience 10 stay as in the starting default.
 
 ## Compute
 

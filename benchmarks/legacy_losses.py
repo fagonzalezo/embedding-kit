@@ -1,7 +1,7 @@
 """Losses as they were in an earlier release, kept for benchmark comparisons only (E8).
 
 ``RankNContrastLoss012`` is ``embedkit.improvement.losses.RankNContrastLoss`` as released in
-0.1.2 (commit 05a2d39, before the tie fix of phase 1, ``docs/BUG-rnc-ties.md``): candidates are
+0.1.2 (commit 05a2d39, before the tie fix of 0.1.3, D21 in ``CHANGELOG.md``): candidates are
 ranked with ``argsort``, so samples at the same label distance from the anchor get an arbitrary
 order and different denominators. Copied verbatim apart from this docstring and
 ``uses_labels``. Do not use it outside the benchmark.

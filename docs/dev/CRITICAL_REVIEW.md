@@ -1,7 +1,7 @@
 # EmbedKit: critical review, improvement roadmap and experiment plan
 
 **Reviewed:** version 0.1.2, commit `4d2a513`, on 2026-11-10.
-**Scope:** all of `embedkit/` (about 2,500 lines), the tests, and `docs/UNSUPERVISED_REFINEMENT_REPORT.md`.
+**Scope:** all of `embedkit/` (about 2,500 lines), the tests, and `docs/dev/UNSUPERVISED_REFINEMENT_REPORT.md`.
 
 How to read the evidence labels in this document:
 
@@ -580,4 +580,4 @@ Diagnostics and evaluation
 - Pilot experiment (section 3.7): scripts, logs and full per-run tables are in `benchmarks/review_2026_11/pilot/`.
   Open `results_tables.md` there first. The kNN cache was disabled for these runs (`_MAX_CACHE = 0`).
 - Run them from the repository root with `conda run -n pytorch python <script>`.
-- The phased plan that follows from this review is in `docs/IMPLEMENTATION_PLAN.md`.
+- The phased plan that follows from this review is in `docs/dev/IMPLEMENTATION_PLAN.md`.
