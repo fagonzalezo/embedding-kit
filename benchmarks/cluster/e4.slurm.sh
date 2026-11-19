@@ -20,12 +20,20 @@
 # 8 CPUs, 32G and 8 h as for E5; the CIFAR sets (50k x 2,048) are the heaviest. Both parts skip
 # finished files, so a TIMEOUT costs only unfinished work: resubmit the task IDs, for example
 # `sbatch --array=3,17 e4.slurm.sh`.
+# WP 8.3, the 25 extra sets (E4X_SETS in env.sh), both parts:
+#   SETS=E4X_SETS sbatch --array=0-24%16 e4.slurm.sh
+#   SETS=E4X_SETS PART=detect sbatch --array=0-24%16 --time=12:00:00 e4.slurm.sh
 # Results: $REPO/benchmarks/results/e4/ (they stay on the cluster). Submit from this directory.
 set -euo pipefail
 source "$SLURM_SUBMIT_DIR/env.sh"
 check_clean
 PART=${PART:-gains}
-SET=${E4_SETS[$SLURM_ARRAY_TASK_ID]}
+case " E4_SETS E4X_SETS " in *" ${SETS:-E4_SETS} "*) ;; *) echo "SETS=$SETS is not one of: E4_SETS E4X_SETS"; exit 1 ;; esac
+declare -n ALL=${SETS:-E4_SETS}
+if [ "$SLURM_ARRAY_TASK_ID" -ge "${#ALL[@]}" ]; then
+  echo "array task $SLURM_ARRAY_TASK_ID is out of range: ${SETS:-E4_SETS} has ${#ALL[@]} sets"; exit 1
+fi
+SET=${ALL[$SLURM_ARRAY_TASK_ID]}
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 if [ "$PART" = detect ]; then
   srun singularity exec "$CONTAINER" "$PY" "$REPO/benchmarks/e4.py" --datasets "$SET" \

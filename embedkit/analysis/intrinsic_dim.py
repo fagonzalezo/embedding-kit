@@ -220,6 +220,35 @@ def _drop_exact_duplicates(X: np.ndarray) -> tuple[np.ndarray, int]:
     return X[np.sort(first)], n - len(first)
 
 
+_DANCO_CACHE: dict = {}
+
+
+def _danco_with_clipped_angles(base):
+    """skdim's DANCo with the cosine of each neighbour angle clipped to [-1, 1].
+
+    skdim 0.3.4 clips it at 1 only. When two neighbour vectors point in exactly opposite
+    directions, as on a low-dimensional cube mapped linearly into many dimensions, rounding
+    gives a cosine just below -1, ``arccos`` returns NaN, and so does the estimate: DANCo was NaN
+    on 15 of 20 E3 ``cube2`` cells (D = 256) and on one Swiss-roll cell. With both sides
+    clipped it reads about 2.1 to 2.2 there (true ID 2), and it is unchanged wherever skdim's
+    estimate was finite (the pairs are taken in the order of skdim's ``indnComb``).
+    """
+    if not hasattr(base, "_loc_angles"):  # another skdim version: leave it alone
+        return base
+    if base not in _DANCO_CACHE:
+
+        class DANCo(base):
+            def _loc_angles(self, pt, nbs):
+                vec = nbs - pt
+                length = np.sqrt(np.sum(vec**2, axis=1))
+                i, j = np.triu_indices(len(nbs), 1)
+                cos = np.sum(vec[i] * vec[j], axis=1) / (length[i] * length[j])
+                return np.arccos(np.clip(cos, -1.0, 1.0))
+
+        _DANCO_CACHE[base] = DANCo
+    return _DANCO_CACHE[base]
+
+
 def _build_estimator(method: str, random_state):
     # skdim.id._FisherS calls warnings.filterwarnings("ignore") at import time, which
     # silences every warning in the user's process. catch_warnings() restores the
@@ -231,7 +260,7 @@ def _build_estimator(method: str, random_state):
         "TwoNN": skid.TwoNN,
         "MLE": skid.MLE,
         "lPCA": skid.lPCA,
-        "DANCo": skid.DANCo,
+        "DANCo": _danco_with_clipped_angles(skid.DANCo),
         "CorrInt": skid.CorrInt,
         "MOM": skid.MOM,
         "FisherS": skid.FisherS,

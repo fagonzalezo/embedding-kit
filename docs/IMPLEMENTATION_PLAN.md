@@ -767,11 +767,11 @@ The items come from "Open findings" in the WP 4.5 notes and from "Limitations an
 | 7.2 | Selection-based auto-configuration | done (2026-11-17): `strategy="select"` default; decisions and deviations in "WP 7.2 notes" |
 | 7.3 | Robustness and scaling | done (2026-11-18): input validation (`validate_embeddings` at every public entry point); E9 time and memory table in `docs/manual.md` §3.5 (`benchmarks/results/e9/REPORT.md`; all 48 cells finished) |
 | 7.4 | Documentation | done (2026-11-18; released as 0.6.0): README rewritten around the benchmark results; manual and skill brought to the 0.6.0 API (every code block executed); `docs/MIGRATION.md` extended to 0.6.0; E9 table added |
-| 8.1 | Branch, tags and distribution | to do (confirmed 2026-11-18): PR to `main`, push tags, no PyPI |
-| 8.2 | Selection on a subsample of rows | to do (confirmed 2026-11-18): `selection_max_rows=50_000` |
-| 8.3 | Benchmark the default selection (E10) | to do (confirmed 2026-11-18): with extra high-hubness sets for R1 |
-| 8.4 | Diagnostics still uncalibrated | to do (confirmed 2026-11-18): flag normalised rows only |
-| 8.5 | Deprecations and 0.7.0 | to do (confirmed 2026-11-18) |
+| 8.1 | Branch, tags and distribution | done (2026-11-18): PR #1 merged into `main` (`c8ce3f6`, CI green); tags `v0.1.3` to `v0.6.0` pushed; no PyPI |
+| 8.2 | Selection on a subsample of rows | done (2026-11-19): `selection_max_rows=50_000`; criteria 1 and 2 met, criterion 3 missed at d = 128 by a fixed cost (see "WP 8.2 outcome") |
+| 8.3 | Benchmark the default selection (E10) | done (2026-11-19): never significantly worse than raw on 64 sets, better on 43; R1 kept on 60 sets (5 of 5 firing sets up); `docs/BENCHMARK_SELECTION.md` (see "WP 8.3 outcome") |
+| 8.4 | Diagnostics still uncalibrated | done (2026-11-19): flags, z intervals, DANCo fix; one residual near miss left unflagged (see "WP 8.4 outcome") |
+| 8.5 | Deprecations and 0.7.0 | done (2026-11-19; released as 0.7.0, tag `v0.7.0`): `suggested_k` / `suggested_sigma` removed; `docs/MIGRATION.md` extended to 0.7.0; R1 kept by WP 8.3, so nothing else removed |
 
 ### Phase 1 notes (2026-11-10)
 
@@ -1514,6 +1514,267 @@ above 0), not by plain argmax.
 - Per-cell JSON is ignored by git (`benchmarks/results/e9/*.json`); `REPORT.md` and
   `summary_e9.csv` are committed.
 
+### WP 8.2 design and criteria, fixed before the runs (2026-11-18)
+
+**Change** (`embedkit/api.py`, branch `phase8/subsample-selection`):
+- `EmbedKit(selection_max_rows=50_000)`. With more rows, `strategy="select"` draws a subsample
+  of that size, stratified by class when every class has 2 rows. It splits the subsample as
+  before (`val_fraction`), fits and scores the candidates on it, and refits only the winner on
+  all the rows.
+- With `n <= selection_max_rows`, the split and every number are those of 0.6.0. A test checks
+  this.
+- The memory fix: `Identity` and `CenterNormalize` are now refitted on all the rows without the
+  float64 copy that the baselines make. The PCA refit (`initialize_from_data`, a float64 SVD of
+  all the rows) is unchanged: it costs memory only when PCA wins at large n, which none of the
+  E9 cells will test.
+
+**Runs:**
+- **E10** (`run.py --experiment e10`, `cluster/e10.slurm.sh`): the 35 E4 sets, test stage, one
+  seed, on GPU. It runs these arms:
+  - `select` (the default);
+  - `select-all` (`None`), only where the 50,000 cap binds;
+  - `select-cap5000`, `-cap10000` and `-cap20000`, where each binds;
+  - the candidates fitted on their own (`identity`, `center_l2`, `pca_l2-k`, `refiner`), for
+    WP 8.3.
+- **E9b** (`e9.py --experiment e9b`, the E9 machine and settings): `embedkit` and
+  `embedkit_labels` at n in {50,000, 1e5, 1e6} × d in {128, 1,024, 4,096} on CPU.
+- **E9b GPU** (`--experiment e9b_gpu`): `embedkit_labels` and `embedkit_labels_all` at n = 1e6 on
+  `RTX8000Nodes`.
+
+**Criteria.** The WP text asked for agreement "on every set". With about 100 (set, cap)
+comparisons, each tested at 2.5% one-sided, that would fail by chance about 2.5 times even if
+the subsample chose exactly as well. The criteria are therefore restated here, before any run:
+
+1. **Choice quality (E10).** Compare `select-cap<c>` with the selection on all the rows.
+   - The selection on all the rows is `select` where n is at most 50,000, and `select-all`
+     otherwise.
+   - The measure is test cosine 10-NN accuracy, the selection's own criterion. The test is a
+     paired bootstrap over test points: 2,000 resamples, 95% interval.
+   - A (set, cap) pair fails when the interval lies entirely below 0.
+   - A cap passes when at most 1 of the sets it binds on fails, and that failure loses less
+     than 1 point.
+   - The default cap passes when none of the sets it binds on (more than 50,000 training rows)
+     fails.
+   - Also reported: how often the capped selection picks the same candidate, and Euclidean
+     kNN and the linear probe as secondary outcomes.
+2. **Time (E9b, CPU).** For each d, the `embedkit_labels` fit at n = 1e6 takes at most
+   1.5 × (the `embedkit_labels` fit at n = 50,000 + the `embedkit` fit at n = 1e6).
+   - The `embedkit` fit at n = 1e6 is the cost that every fit pays on all the rows: input
+     validation and one pass over the data.
+   - This holds when `Identity` or `CenterNormalize` wins. A winning refiner or PCA is fitted
+     on all the rows, and that refit is excluded.
+3. **Memory (E9b, CPU).** At n = 1e6, for `embedkit` and `embedkit_labels`, the peak RSS minus
+   the RSS before `fit` is at most 2 times the size of X. Together with X itself, that is at
+   most 3 times the input.
+4. **GPU (E9b GPU).** Descriptive, no bar. The times go into manual §3.5.
+
+### WP 8.2 outcome (2026-11-19)
+
+Runs at commit `99c82ec`: E10 (job 3084794 and the smoke task 3084793; 35 sets), E9b CPU
+(3084795, 3084796; `48CPUNodes`, 16 CPUs), E9b GPU (3084808, 3084809; `RTX8000Nodes`). Reports:
+`benchmarks/results/e10/REPORT.md`, `benchmarks/results/e9b/REPORT.md`,
+`benchmarks/results/e9b_gpu/REPORT.md` (`benchmarks/report_e10.py`, `report_e9.py --experiment`).
+
+1. **Choice quality.**
+   - Cap 5,000 binds on 26 sets and is significantly worse on 4: cifar100_dinov2 −2.3, and
+     emotion_bge −3.5, emotion_e5 −6.2, emotion_minilm −3.6. Those fail because the 1,000
+     validation rows of the subsample cannot show the refiner's gain, so identity is kept.
+     Fail.
+   - Cap 10,000 binds on 22 sets and is significantly worse on none. It picks the same
+     candidate on 21. Pass.
+   - Cap 20,000 binds on 6 sets and is worse on none, with the same candidate on all 6. Pass.
+   - The default cap (50,000) binds on no E4 set: none has more than 50,000 training rows. The
+     criterion is therefore met with nothing to test. The evidence for 50,000 is that 10,000
+     and 20,000 pass. At n = 1e6 on synthetic data, the GPU runs give the same choice
+     (identity) with the cap and without it at d = 128 and 1,024.
+   - Secondary outcomes: cap 10,000 is worse on 1 set in Euclidean kNN and on 1 in the probe;
+     cap 5,000 on 5 and 4.
+2. **Time.** Met at every d. `embedkit_labels` at 1e6 against 1.5 × (`embedkit_labels` at
+   5e4 + `embedkit` at 1e6): 114 s ≤ 171 s (d = 128), 161 s ≤ 243 s (1,024),
+   404 s ≤ 607 s (4,096). In 0.6.0 the same fits took 1.8 h, 3.5 h and 9.7 h.
+3. **Memory.** Met for `embedkit` at every d. At 1e6 × 4,096 its peak fell from 49.8 GB to
+   17.8 GB with the copy-free refit.
+   - For `embedkit_labels`, peak − RSS before `fit` is 2.16 GB at d = 128, against
+     2 × X = 1.02 GB. **Missed.** At d = 1,024 it is 2.79 ≤ 8.19, and at d = 4,096 it is
+     9.51 ≤ 32.8.
+   - The 2.16 GB is the fixed cost of scoring the candidates on the 50,000-row subsample. It
+     is the same at n = 5e4, 1e5 and 1e6 (2.15, 2.16, 2.16 GB; 2.8 and 9.5 GB at d = 1,024
+     and 4,096). It does not grow with n.
+   - The criterion assumed a cost proportional to X, which does not hold when X is small.
+     The miss is recorded as such. Nothing was changed to meet it.
+4. **GPU** (n = 1e6). With the default cap: 1.4, 2.1 and 5.0 min. With all rows: 2.8 h, 4.2 h,
+   and d = 4,096 stopped by the user after 5.1 h, unfinished, to free the GPU for WP 8.3
+   (2026-11-19).
+   - In manual §3.5, as is the CPU table.
+
+WP 8.3 preview (same E10 runs, no criteria applied yet):
+- The default picks the refiner on 22 sets and identity on 13.
+- It is significantly better than identity on 21 sets, by +0.8 to +15.0 points, and never
+  worse.
+- Regret against the best candidate in hindsight is 0 on 26 sets and at most 1.2 points
+  (newsgroups_mpnet). Where it is not 0, identity was kept and `center_l2`, PCA or the refiner
+  was slightly better.
+
+### WP 8.3 design and criteria, fixed before the runs (2026-11-19)
+
+**What the WP 8.2 runs already give.**
+- E10 ran the WP 8.3 classification half on the 35 E4 sets: `select` against `identity`, test
+  cosine 10-NN. The acceptance rule (fixed in the WP 8.3 text on 2026-11-18, before E10) gives:
+  significantly worse on 0 of 35, significantly better on 21. The results are in "WP 8.2
+  outcome".
+- E10 is reused as is. The new runs extend it to the regression sets and to the extra sets
+  below.
+
+**Regression.**
+- E10 on E8's four regression sets: `synthetic_regression`, `synthetic_regression_ties`,
+  `yelp_mpnet` and `fluorescence_esm2`.
+- Arms:
+  - `select`, with `mode="regression"`;
+  - the candidates on their own: `identity`, `center_l2`, `pca_l2-k` and the regression
+    refiner (`strategy="fixed"`, `target_dim=min(128, d // 2)`).
+- Primary outcome: test kNN R² (cosine, k = 10), the selection's own criterion, with the same
+  paired bootstrap over test points (the per-point terms average to R²).
+
+**Extra sets for R1.**
+- New encoders on the 10 E4 sources, chosen before any of their statistics was computed. They
+  were picked for diversity of architecture and training, not for expected hubness:
+  - Text (sentence-transformers, `Normalize` removed, `max_seq_length` 256, as in E4):
+    - `gte` (`thenlper/gte-base`, mean pooling, 768);
+    - `distilroberta` (`all-distilroberta-v1`, 768);
+    - `glove` (`average_word_embeddings_glove.6B.300d`: mean of static word vectors, 300).
+  - Images (torchvision, each weights' own preprocessing: resize 256 (ViT) or 236 (ConvNeXt),
+    centre crop 224, fp32):
+    - `vit` (`vit_b_16` IMAGENET1K_V1, class token before the head, 768);
+    - `convnext` (`convnext_tiny` IMAGENET1K_V1, pooled features before the last linear
+      layer, 768).
+- That gives 25 sets, `E4X_SETS`. Every one of them enters the analysis whatever its hubness:
+  there is no screening.
+- Each extra set gets E4's diagnostics (both metrics), E4's training-free gain grid and E10.
+- **Pre-check.** The analyzer changed since E4 (commit `15e9a08`) only in input validation and
+  in the recommendation text. Before the new sets are mixed with the old ones, the Euclidean
+  report of one original set (`agnews_minilm`) is rerun at the new commit. Its `z_k_skewness`
+  must match E4's to 1e-6. If it does not, the 35 original sets are rerun too.
+
+**Acceptance.**
+1. **Default against raw.** For every set (35 + 25 classification, 4 regression), `select` is
+   significantly worse than `identity` on none of them. A set fails when the interval lies
+   entirely below 0. If one fails, the WP 8.3 text says what to examine: first `val_fraction`
+   and the significance rule, then the candidate list.
+2. **R1.** WP 7.1's keep rule, unchanged, on the 60 sets: Euclidean kNN, Spearman with a
+   95% interval from 2,000 bootstrap resamples of the 10 source data sets, and a significant
+   gain on at least half of the firing sets.
+   - If R1 passes, it stays.
+   - If it fails, it is removed in WP 8.5, as decided.
+   - R2 and R1-cosine are reported on the 60 sets with no decision attached.
+   - The analysis is written to `benchmarks/results/e4x/`; `results/e4/REPORT.md` is left as
+     it is.
+3. Reported, with no bar:
+   - how often each candidate is chosen;
+   - regret against the best candidate in hindsight;
+   - fit time;
+   - Euclidean kNN and the probe.
+
+**Output.** `docs/BENCHMARK_SELECTION.md` and the README numbers.
+
+### WP 8.3 outcome (2026-11-19)
+
+Runs on Occidata at commit `4097cf2` (clean tree): feature extraction for the 25 extra sets
+(job 3085630), E4 gains (3085631) and reports (3085632) on them, E10 on them (3085633) and on the
+regression sets (3085634), all on `RTX8000Nodes`. The first 35 sets of E10 are the WP 8.2 runs
+(`99c82ec`). Every task completed except the three expected cosine reports below. Analysis:
+`benchmarks/results/e10/REPORT.md` and `benchmarks/results/e4x/REPORT.md`; user-facing summary:
+`docs/BENCHMARK_SELECTION.md`, with the numbers in the README, the manual and the skill.
+
+- **Pre-check passed.** The Euclidean report of `agnews_minilm` at `4097cf2` matched E4's: the
+  `z_k_skewness` difference is 0, the largest of 62 scalar differences 1.2e-14 (job 3085628).
+  The 35 original reports were kept.
+- **Acceptance 1, the default against raw: met.** `select` is significantly worse than
+  `identity` on 0 of 64 sets (35 E4, 25 E4X, 4 regression) and significantly better on 43
+  (21, 18, 4). Classification gains where better: +0.8 to +15.1 points (median +4.3); regression
+  kNN R^2: +0.17 (Yelp) to +1.27 (fluorescence, from -0.79 to 0.48).
+- **Acceptance 2, R1: kept.** WP 7.1's rule on the 60 sets, Euclidean kNN: Spearman 0.482
+  (0.303 to 0.705); it fires on 5 sets (agnews_minilm, cifar100_dinov2, massive_minilm, and the
+  new massive_distilroberta and banking77_glove), and the gain is significant on all 5 (+1.3 to
+  +5.1 points). On 35 sets it was 0.358 (0.129 to 0.646), 3 of 3. No change in WP 8.5.
+  - Caveats: banking77_glove fires at z = 3.20, near the threshold, and emotion_glove misses it
+    at 2.96; two firing sets share the MASSIVE source.
+  - Reported only: R2 (Euclidean antihubs) on 60 sets, 0.532 (0.290 to 0.738), 19 of 22 firing
+    sets up; R1 under cosine on 57 sets, 0.005 (-0.290 to 0.419), 0 of 2.
+  - The other rules stay removed. R4 with the probe passes both conditions on 60 sets (0.492,
+    6 of 8), but the probe was a secondary outcome in WP 7.1 and no rule is reinstated from it.
+- **Reported, no bar.**
+  - Choices: `refiner-128` on 44 sets, `identity` on 19, `pca-256` on 1 (stl10_vit).
+  - Regret against the best in hindsight: 0 on 50 of 64 sets, largest 1.18 points
+    (newsgroups_mpnet).
+  - Fit time (one RTX 8000, with the refit): 9 s to 6.6 min, median 1.0 min.
+  - Euclidean kNN: better on 41 of 60, worse on 0. Linear probe (C = 1): better on 21, **worse on
+    5** (0.2 to 0.8 points: flowers102_convnext, pets_convnext, pets_dinov2, pets_vit with the
+    refiner; stl10_vit with PCA). The selection's criterion is kNN; this is in the README, the
+    manual and `docs/BENCHMARK_SELECTION.md`.
+  - WP 8.2's caps on the extra sets too: 10,000 and 20,000 are never significantly worse (40 and
+    11 binding sets); 5,000 is worse on 6 of 47.
+- **Finding: averaged GloVe gives zero rows.** A text with no in-vocabulary word averages to the
+  zero vector: 19 rows in banking77_glove, 56 in massive_glove, 323 in newsgroups_glove. The
+  cosine report raises `ValueError` on them, as designed (no direction), so those three cosine
+  reports failed and the cosine analyses cover 57 sets. The Euclidean reports, the E4 gains and
+  E10 ran on them unchanged. Nothing changed in the library.
+
+### WP 8.4 outcome (2026-11-19)
+
+Done in code and checked against E3, with no new runs. The E3 null cells
+(`benchmarks/results/e3/summary_gauss.csv`) were the evidence, and
+`benchmarks/check_e3_flags.py` applies the report's own flag rule to them
+(`benchmarks/results/e3/FLAGS_WP84.md`).
+
+- **Flags** (`uncalibrated_statistics` in `embedkit/analysis/report.py`;
+  `CalibratedStatistic.uncalibrated`, with the reason).
+  - Each flag follows a statistic that missed the bar of 95% of null cells inside ±3.
+  - On rows with a common norm, under either metric, the antihub ratio, `distance_cv` and
+    uniformity are flagged. On the `power1_l2` cells they were inside in 51%, 0% and 0%.
+  - Flat normalised rows (`flat_l2`) were calibrated, but the report cannot tell them apart
+    reliably. All normalised rows are therefore flagged, which follows the user's decision to
+    flag only.
+  - Under cosine, k-skewness is flagged (76% with `i^-0.5`, 40% at d = 1,024), and so is the
+    antihub ratio (89% over all cells, 0% for spiked spectra at d = 1,024).
+  - Under Euclidean distance with d > 256, neighbour consistency is flagged (89% at d = 1,024,
+    40% spiked). At d ≤ 256 it was 99%. E3 tested only 32, 256 and 1,024, so the cut-off is the
+    largest d that passed.
+  - A flagged statistic keeps its z, raises no recommendation, and is left out of
+    `n_outside_null`.
+  - The only recommendation this removes is R2 (antihubs, Euclidean) on rows normalised
+    upstream. R1, Euclidean k-skewness, is never flagged, so WP 8.3's R1 retest is not
+    affected.
+- **Acceptance.**
+  - Without the flags, 11 (family, metric, statistic) groups miss the bar. With them, 1 does:
+    `distance_cv` under cosine in the `mean` family, 42 of 45 cells (93%). Its misses have |z|
+    of 3.06, 3.23 and 3.26.
+  - **Left unflagged, a judgement call reported here.** That group is not one of WP 8.4's
+    cases. Three or more misses in 45 cells happen about 40% of the time when each cell misses
+    with probability 5%. `distance_cv` drives no recommendation since WP 7.1. Flagging it
+    under cosine would be the strict reading of the bar.
+- **Near-threshold flips.** `CalibratedStatistic.z_interval` gives the 2.5% and 97.5% quantiles
+  of z over 2,000 resamples of the null draws, with the antihub floor applied in each resample.
+  - A recommendation whose interval reaches below `z_threshold` says that the reading is near
+    the threshold.
+  - Firing still uses z > 3, the rule E4 validated.
+  - No more draws are taken: the default stays at 20, the user's decision of 2026-11-14.
+  - There is no bar for this item. The interval describes the uncertainty and does not change
+    any decision.
+- **DANCo NaN.** The cause is a bug in scikit-dimension 0.3.4: `_loc_angles` clips the cosine of
+  neighbour angles at +1 but not at −1. On a 2-d cube mapped linearly into 256 dimensions,
+  opposite neighbour vectors give a cosine just below −1, and `arccos` returns NaN.
+  - EmbedKit now uses a DANCo subclass that clips both sides.
+  - The 15 NaN cells of `cube2` read about 2.1 to 2.2 (true ID 2), and so does the one
+    Swiss-roll NaN.
+  - The estimate is bit-identical wherever scikit-dimension's was finite (tested).
+- Tests: `tests/test_uncalibrated.py`. `tests/test_metric_kernel.py` now also excludes the z
+  intervals, which depend on the null as z does. The full suite passes.
+- API changes for MIGRATION (WP 8.5):
+  - `n_outside_null` counts calibrated statistics only;
+  - no antihub recommendation on normalised rows;
+  - new fields `uncalibrated` and `z_interval`;
+  - three new dataframe rows per statistic.
+
 ## Open points for the next session
 
 All design decisions in this plan are confirmed, including phase 8's (2026-11-18).
@@ -1531,7 +1792,7 @@ All design decisions in this plan are confirmed, including phase 8's (2026-11-18
 2. **Phase 7 is done** and was tagged `v0.6.0` locally on 2026-11-18 (WP 7.1 E4, WP 7.2
    selection, WP 7.3 validation and E9, WP 7.4 documentation). Every phase of this plan is now
    done or dropped. Phase 8 (confirmed 2026-11-18, to be released as 0.7.0) collects what is
-   left. Start with WP 8.1.
+   left. Phase 8 is done and was tagged `v0.7.0` on 2026-11-19 (no PyPI).
 3. **Benchmark results:** new experiments commit only their reports and summaries, as E8 does;
    per-run JSON stays on the cluster. E8's per-run files exist only on Occidata
    (`$BASE/embedding-kit/benchmarks/results/e8/`); the local copies were deleted on 2026-11-14

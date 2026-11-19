@@ -29,14 +29,19 @@ diagnosis. Say so to the user: do not present a diagnostic reading as a reason t
   beat the raw embedding significantly on more than 16 sets (centring + L2, Euclidean kNN: 16 up,
   1 down, median +0.3 points). PCA to the report's `suggested_target_dim` lost accuracy on 32 of 35;
   ZCA whitening on 34 of 35 (cosine kNN).
-- Of 9 diagnostic rules, only two predicted a fix, both for Euclidean kNN: hubness (it fired on
-  only 3 sets, so the evidence is thin) and antihubs (8 sets). The fix is a hubness-reducing
-  neighbour search. No multiplicity correction was applied.
+- Of 9 diagnostic rules, only two predicted a fix, both for Euclidean kNN: hubness and antihubs.
+  The fix is a hubness-reducing neighbour search. Retested on 60 sets (E10), the hubness rule fired
+  on 5 and the fix helped on all 5; the antihub rule fired on 22 and helped on 19. The evidence for
+  hubness is still small, and no multiplicity correction was applied.
 - With class labels (E8, `docs/BENCHMARK_SUPERVISED.md`) the supervised refiner had higher kNN
   accuracy than the raw embeddings on 4 of 6 sets and lower on none (+0.003 to +0.021 on real data,
   +0.185 on a synthetic set). With 5 labels per class LDA was ahead of it by 0.04 to 0.08.
   Regression: the MLP refiner beat raw and PCA on 4 of 4 sets, but with 1,000 rows or fewer no
   refiner reliably beat raw.
+- The default selection with labels (E10, `docs/BENCHMARK_SELECTION.md`), on 60 classification and
+  4 regression sets: never significantly worse than the input, significantly better on 43 (+0.8 to
+  +15.1 points of cosine kNN accuracy), at most 1.2 points below the best candidate in hindsight.
+  It chooses by kNN; a linear probe on its output was worse on 5 sets (0.2 to 0.8 points).
 
 ## Installation
 
@@ -111,13 +116,13 @@ report = analyzer.fit(X, y=None)    # y enables centered_kernel_alignment
 | `report.hubness` | `HubnessResult` | k-occurrence distribution, skewness, hub/antihub ratios |
 | `report.geometry` | `GeometryBundle` | Distance concentration, isotropy, neighbor consistency, uniformity |
 | `report.kernel` | `KernelDiagnosticsResult` | Centred RBF kernel: effective rank, spectral gap, `top_k_eigen_ratio` (`condition_number` is a deprecated alias), kernel alignment |
-| `report.calibration` | `dict[str, CalibratedStatistic]` | k-skewness, antihub ratio, distance CV, neighbour consistency, uniformity against a null model: `observed`, `null_mean`, `null_std`, `z_score`; `None` if `calibrate=False` |
+| `report.calibration` | `dict[str, CalibratedStatistic]` | k-skewness, antihub ratio, distance CV, neighbour consistency, uniformity against a null model: `observed`, `null_mean`, `null_std`, `z_score`, `z_interval`, `uncalibrated`; `None` if `calibrate=False` |
 | `report.calibration_k` | `int` | The `k` used by the calibration |
-| `report.n_outside_null` | `int` | Calibrated statistics with \|z\| > `z_threshold` (3); replaces `severity` |
+| `report.n_outside_null` | `int` | Calibrated statistics (not flagged `uncalibrated`) with \|z\| > `z_threshold` (3); replaces `severity` |
 | `report.properties` | `list[str]` | Descriptive statements (spectrum, mean direction, uniformity vs null); anisotropy is a property, not a recommendation |
 | `report.recommendations` | `list[str]` | Actions, Euclidean metric only: more hubness or more antihubs than the null (the two rules E4 kept). Otherwise "No recommendation: ..." |
-| `report.k` | `int` | The kNN size the report used (replaces `suggested_k`, a deprecated alias removed in 0.7.0) |
-| `report.kernel.sigma` | `float` | The RBF bandwidth of the kernel diagnostics (replaces `suggested_sigma`, deprecated likewise) |
+| `report.k` | `int` | The kNN size the report used (replaces `suggested_k`, removed in 0.7.0) |
+| `report.kernel.sigma` | `float` | The RBF bandwidth of the kernel diagnostics (replaces `suggested_sigma`, removed in 0.7.0) |
 | `report.suggested_target_dim` | `int` | ≈ 1.5 × TwoNN ID. Descriptive: PCA to it lost accuracy on 32 of 35 E4 sets. Only `EmbedKit(strategy="fixed", target_dim="auto")` reads it |
 
 ---
@@ -144,7 +149,7 @@ For detailed interpretation of every metric and its healthy ranges, read
 
 ## Pathology → Improvement Quick Reference
 
-> Experiment E4 (WP 7.1) tested the report's rules on 35 natural classification sets
+> Experiment E4 tested the report's rules on 35 natural classification sets
 > (`benchmarks/results/e4/REPORT.md`). Only the first two rows below are backed by it, and only
 > for Euclidean kNN; the report recommends nothing else. Distance concentration, neighbour
 > consistency, low ID/D, the mean direction, the top components, anisotropy and dominant
@@ -202,6 +207,9 @@ ek = EmbedKit(
                                 # fixed: auto = report.suggested_target_dim, but pass an int
     val_fraction=0.2,           # select: rows held out to score the candidates
     selection_metric="cosine",  # select: "cosine" | "euclidean" kNN
+    selection_max_rows=50_000,  # select: candidates fitted and scored on at most this many rows
+                                # (stratified subsample); the winner is refitted on all rows;
+                                # None = all rows (0.6.0)
     epochs=100,
     batch_size=256,
     lr=3e-4,
@@ -389,7 +397,9 @@ EmbedKit slots into common ML stacks. For detailed patterns with code, read
 **Don't L2-normalize before analysis.** Run `EmbedKitAnalyzer` on the raw embeddings. If you
 search by cosine, pass `metric="cosine"`: the analyzer normalises the rows itself and every
 statistic then describes the normalised rows. Rows already normalised upstream are calibrated
-against a null normalised to the same norm, which is reliable only for flat spectra.
+against a null normalised to the same norm, which is reliable only for flat spectra: the report
+marks the antihub ratio, `distance_cv` and uniformity of such rows as uncalibrated
+(`calibration[name].uncalibrated`) and draws no recommendation from them.
 
 **`NTXentLoss` requires normalized embeddings.** `EmbeddingRefiner` defaults to
 `normalize_output=True` for this reason. If you swap in a different loss (e.g., `TripletLoss`

@@ -1,5 +1,68 @@
 # Changelog
 
+## 0.7.0 (unreleased)
+
+Phase 8 of `docs/IMPLEMENTATION_PLAN.md`: the branch merged and the tags pushed (WP 8.1),
+selection on a subsample of rows (WP 8.2), the benchmark of the default selection on 64 sets with
+the hubness rule retested on 60 (WP 8.3, `docs/BENCHMARK_SELECTION.md`), the statistics the null
+model does not calibrate flagged (WP 8.4), and the 0.6.0 deprecations removed (WP 8.5).
+`docs/MIGRATION.md` now runs from 0.1.2 to 0.7.0.
+
+### Breaking changes since 0.6.0 (summary; details below)
+- `EmbedKitReport.suggested_k` and `suggested_sigma` are removed (WP 8.5).
+- `report.n_outside_null` counts calibrated statistics only, and no antihub recommendation is
+  made on rows normalised upstream (WP 8.4).
+- With more than 50,000 rows, `EmbedKit` with labels selects on a stratified subsample
+  (`selection_max_rows`), so its choice can differ from 0.6.0; `selection_max_rows=None`
+  restores the 0.6.0 selection (WP 8.2).
+
+### Changed (WP 8.2: selection on a subsample of rows)
+- `EmbedKit(selection_max_rows=50_000)`, new: with more rows than that, `strategy="select"` fits
+  and scores the candidates on a random subsample of that many rows (stratified by class) and
+  fits only the winner on all the rows. In E9, selection on all the rows took 1.8 to 9.7 hours at
+  a million rows on 16 CPUs. Inputs of more than 50,000 rows can therefore get a different
+  choice than in 0.6.0; `selection_max_rows=None` restores the 0.6.0 selection.
+  `selection_report_.attrs` gains `n_rows` and `n_selection_rows`. Measured (E9b): 1.9 to
+  6.7 minutes at a million rows on the same CPUs, the same at 5e4 and 1e5 rows. On the E4 sets
+  (E10), caps of 10,000 and 20,000 chose as well as all the rows; 5,000 did not.
+- When `Identity` or `CenterNormalize` is the result, the refit on all the rows no longer makes
+  a float64 copy of the input (two times its float32 size); the fitted mean is the same. At
+  1e6 × 4,096 the peak memory of `EmbedKit().fit(X)` fell from 49.8 GB to 17.8 GB.
+
+### Removed (WP 8.5)
+- `EmbedKitReport.suggested_k` and `suggested_sigma`, deprecated in 0.6.0: use `report.k` and
+  `report.kernel.sigma`.
+
+### Changed (WP 8.4: diagnostics that are still uncalibrated)
+- `CalibratedStatistic` gains `uncalibrated` (`None`, or why the null is not calibrated for this
+  statistic here; `.calibrated` is the boolean) and `z_interval` (95% over 2,000 resamples of
+  the null draws). Flagged, from the E3 misses: on rows with a common norm, the antihub ratio,
+  `distance_cv` and uniformity; under cosine, k-skewness and the antihub ratio; under Euclidean
+  distance above d = 256, neighbour consistency (`uncalibrated_statistics`). A flagged
+  statistic raises no recommendation, so **on rows normalised upstream the antihub
+  recommendation is no longer made**, and **`n_outside_null` counts calibrated statistics
+  only**. `to_dataframe()` adds `<name>_z_lo`, `<name>_z_hi` and `<name>_calibrated`.
+- A recommendation whose z interval reaches below `z_threshold` says that the reading is near
+  the threshold (the recommendation itself is still made, as E4 validated it).
+- DANCo no longer returns NaN on low-dimensional data mapped linearly into many dimensions
+  (scikit-dimension 0.3.4 clipped the cosine of neighbour angles at 1 only).
+- `calibrate()` and `calibrated_statistic()` take `std_floor`.
+
+### Added
+- Benchmarks: experiment E10 (`run.py --experiment e10`, `cluster/e10.slurm.sh`), the default
+  selection and its candidates on the E4 sets; `e9.py --experiment` and the
+  `embedkit_labels_all` target for the E9 rerun after WP 8.2.
+- `benchmarks/report_e10.py`: the WP 8.2 verdicts and the WP 8.3 acceptance from E10.
+- Benchmarks (WP 8.3): 25 extra sets (`bench_datasets.E4X_SETS`), five more encoders on the E4
+  sources (`gte`, `distilroberta`, `glove`, `vit`, `convnext`), for the R1 retest and E10; E10
+  on E8's four regression sets (`E10_REGRESSION_SETS`, `mode="regression"`, kNN R^2);
+  `cluster/e4x_precheck.slurm.sh`.
+- `benchmarks/check_e3_flags.py`: the WP 8.4 acceptance check on the E3 null cells.
+- `docs/BENCHMARK_SELECTION.md` (WP 8.3): E10 on 64 sets. The default selection is
+  significantly worse than the input on none and better on 43; a linear probe on its output is
+  worse on 5. The hubness recommendation (R1) passes WP 7.1's rule again on 60 sets and stays.
+  E4's rule analysis on the 60 sets is in `benchmarks/results/e4x/`.
+
 ## 0.6.0 (unreleased)
 
 Phase 7 of `docs/IMPLEMENTATION_PLAN.md`: experiment E4 (which diagnostics predict which fix, on

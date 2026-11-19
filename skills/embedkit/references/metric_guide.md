@@ -5,7 +5,7 @@ which statistics the report judges, geometric meaning, and the downstream conseq
 
 The report applies no fixed pathology thresholds. Hubness, antihubs, distance concentration,
 neighbour consistency and uniformity are compared with a null model (see "Calibration" below). Since
-experiment E4 (WP 7.1) the only recommendations are two rules, from the z-scores of k-skewness and the
+experiment E4 the only recommendations are two rules, from the z-scores of k-skewness and the
 antihub ratio under `metric="euclidean"`; every other statistic is descriptive. E4 tested 9 rules on
 35 natural classification sets, and the other 7 did not predict the gain of their fix
 (`benchmarks/results/e4/REPORT.md`). The ranges in the tables below are rough guides for reading a
@@ -172,7 +172,7 @@ hurts retrieval diversity and model calibration. `AlignUniformLoss` optimizes th
 
 Applies an RBF kernel `K(x_i, x_j) = exp(−||x_i − x_j||² / (2σ²))` on a subsample and analyzes
 the spectrum of the centred kernel `Kc = HKH`. Sigma is the median pairwise distance
-(`report.kernel.sigma`; `suggested_sigma` is a deprecated alias removed in 0.7.0).
+(`report.kernel.sigma`; `suggested_sigma` was removed in 0.7.0).
 
 | Attribute | Meaning |
 |---|---|
@@ -207,20 +207,26 @@ under a null model (`null_model="gaussian"`: a Gaussian with the data's mean and
 spectrum; or `"permuted"`: each column permuted). The comparison runs on a subsample of
 `n_calibration` rows (2,000) against `n_null_draws` (20) null data sets.
 
-- `report.calibration[name]` holds `observed`, `null_mean`, `null_std`, `z_score`.
+- `report.calibration[name]` holds `observed`, `null_mean`, `null_std`, `z_score`,
+  `z_interval` (95% over resamples of the null draws; a recommendation whose interval reaches
+  below 3 says it is near the threshold) and `uncalibrated` (`None` or the reason;
+  `.calibrated` is the boolean).
 - `report.calibration_k` is the `k` used: `k` if given, else `max(5, round(sqrt(rows)/2))` on the
   calibration rows, so z-scores do not change with the size of `X`.
-- `report.n_outside_null` counts statistics with `|z| > z_threshold` (3). It replaces the removed
-  `severity`.
+- `report.n_outside_null` counts calibrated statistics with `|z| > z_threshold` (3). It replaces
+  the removed `severity`.
 - Recommendations, under `metric="euclidean"` only: `k_skewness` z > 3 (more hubness) and
   `antihub_ratio` z > 3, both pointing to a hubness-reducing search. These are the two rules E4
-  kept (WP 7.1); the concentration, neighbour-consistency and ID / D rules were removed because
+  kept; the concentration, neighbour-consistency and ID / D rules were removed because
   they did not predict which fix helps. With `calibrate=False` the report makes no
   recommendation.
 - A large |z| means "unlike a Gaussian with the same spectrum", not necessarily "defective".
 - Rows with a common norm (normalised upstream) are compared with null draws normalised to that
   norm; this calibrates flat-spectrum rows only (a power-law spectrum on the sphere gives
-  spurious z of +8 to +11).
+  spurious z of +8 to +11), so on such rows the antihub ratio, `distance_cv` and uniformity are
+  marked uncalibrated. Also uncalibrated: k-skewness and the antihub ratio under cosine, and
+  neighbour consistency under Euclidean distance above d = 256. An
+  uncalibrated statistic raises no recommendation and is not counted in `n_outside_null`.
 - The high-level `EmbedKit` computes no report under `strategy="select"` (`analysis_report` is
   `None`); `strategy="fixed"` runs it uncalibrated and reads only `suggested_target_dim`.
 

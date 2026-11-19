@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import warnings
 from dataclasses import dataclass, field, replace
 
 import numpy as np
@@ -38,6 +37,53 @@ _UNIT_NORM_RTOL = 1e-3
 # The metrics every analyzer of the report can honour (D28): Euclidean, and cosine through
 # L2-normalised rows.
 METRICS = ("euclidean", "cosine")
+
+# WP 8.4: settings in which a calibrated statistic failed the E3 bar (z of data drawn from the
+# null family inside +-3 in at least 95% of cells, WP 4.1 and 4.5). Above this dimension
+# neighbour consistency under Euclidean distance is flagged (E3 tested d = 32, 256 and 1,024).
+_UNCALIBRATED_ABOVE_D = 256
+_NORMALISED_ROWS = (
+    "rows normalised upstream (a common row norm): with an anisotropic spectrum the null, "
+    "fitted to rows already on the sphere, is more isotropic than the data (E3 i^-1 spectrum: "
+    "inside +-3 in {share} of null cells)")
+
+
+def uncalibrated_statistics(metric: str, d: int, normalised: bool) -> dict[str, str]:
+    """The calibrated statistics whose null is not calibrated in this setting, with the reason.
+
+    From E3 (``benchmarks/results/e3/summary_gauss.csv``): data drawn from the null family,
+    whose z-scores should fall inside +-3; the bar is 95% of cells.
+
+    - Rows with a common norm (``normalised``): the antihub ratio (51% of cells inside),
+      ``distance_cv`` (0%) and uniformity (0%) under either metric, for rows normalised with
+      an ``i^-1`` spectrum. With a flat spectrum such rows were calibrated, but the report
+      cannot tell the two apart reliably, so it flags all normalised rows (the user's
+      decision, 2026-11-18: flag only, no new null).
+    - ``metric="cosine"``: k-skewness (76% inside with an ``i^-0.5`` spectrum, 40% at
+      d = 1,024) and the antihub ratio (89% over all cells, 0% for spiked spectra at
+      d = 1,024).
+    - ``metric="euclidean"`` and ``d > 256``: neighbour consistency (89% at d = 1,024, 40% for
+      spiked spectra; 99% at d up to 256).
+
+    None of these feeds a recommendation except the antihub ratio under Euclidean distance on
+    normalised rows: that recommendation is not made.
+    """
+    _check_metric(metric)
+    out = {}
+    if metric == "cosine":
+        out["k_skewness"] = ("not calibrated under cosine: E3 null data were inside +-3 in 76% "
+                             "of cells with an i^-0.5 spectrum (40% at d = 1,024)")
+        out["antihub_ratio"] = ("not calibrated under cosine: E3 null data were inside +-3 in "
+                                "89% of cells (0% for spiked spectra at d = 1,024)")
+    elif d > _UNCALIBRATED_ABOVE_D:
+        out["neighbor_consistency"] = (
+            f"not calibrated under Euclidean distance above d = {_UNCALIBRATED_ABOVE_D}: E3 null "
+            "data were inside +-3 in 89% of cells at d = 1,024 (40% for spiked spectra)")
+    if normalised:
+        for name, share in (("antihub_ratio", "51%"), ("distance_cv", "0%"),
+                            ("uniformity", "0%")):
+            out[name] = _NORMALISED_ROWS.format(share=share)
+    return out
 
 
 def _check_metric(metric: str) -> None:
@@ -88,20 +134,6 @@ class EmbedKitReport(BaseResult):
     properties: list[str] = field(default_factory=list)
     metric: str = "euclidean"
     calibration_k: int | None = None
-
-    @property
-    def suggested_k(self) -> int:
-        """Deprecated alias of :attr:`k`, the neighbourhood size the report used (WP 7.2)."""
-        warnings.warn("EmbedKitReport.suggested_k is deprecated and will be removed in 0.7.0; "
-                      "use report.k (the k the report used)", DeprecationWarning, stacklevel=2)
-        return self.k
-
-    @property
-    def suggested_sigma(self) -> float:
-        """Deprecated alias of ``kernel.sigma``, the RBF bandwidth of the kernel diagnostics."""
-        warnings.warn("EmbedKitReport.suggested_sigma is deprecated and will be removed in 0.7.0; "
-                      "use report.kernel.sigma", DeprecationWarning, stacklevel=2)
-        return self.kernel.sigma
 
     def to_dataframe(self) -> pd.DataFrame:
         dc = self.geometry.distance_concentration
@@ -160,6 +192,9 @@ class EmbedKitReport(BaseResult):
                 ("Calibration", f"{name}_null_mean", c.null_mean),
                 ("Calibration", f"{name}_null_std", c.null_std),
                 ("Calibration", f"{name}_z", c.z_score),
+                ("Calibration", f"{name}_z_lo", c.z_interval[0]),
+                ("Calibration", f"{name}_z_hi", c.z_interval[1]),
+                ("Calibration", f"{name}_calibrated", c.calibrated),
             ]
         return pd.DataFrame(rows, columns=["category", "metric", "value"])
 
@@ -219,10 +254,16 @@ class EmbedKitReport(BaseResult):
             print(f"\n[Calibration]  {c0.null_model} null, {c0.n_draws} draws of "
                   f"{c0.n_samples} rows, k = {self.calibration_k}")
             for name, c in self.calibration.items():
+                lo, hi = c.z_interval
+                flag = "" if c.calibrated else "  (not calibrated)"
                 print(f"  {name:<20}: {c.observed:.4f}  null {c.null_mean:.4f} "
-                      f"± {c.null_std:.4f}  z = {c.z_score:+.1f}")
-            print(f"  outside ±{self.z_threshold:g}: {self.n_outside_null} of "
-                  f"{len(self.calibration)}")
+                      f"± {c.null_std:.4f}  z = {c.z_score:+.1f} [{lo:+.1f}, {hi:+.1f}]{flag}")
+            n_cal = sum(c.calibrated for c in self.calibration.values())
+            print(f"  outside ±{self.z_threshold:g}: {self.n_outside_null} of {n_cal} "
+                  "calibrated")
+            for name, c in self.calibration.items():
+                if not c.calibrated:
+                    print(f"  {name} not calibrated: {c.uncalibrated}")
         print("\n[Properties]")
         for prop in self.properties:
             print(f"  • {prop}")
@@ -255,14 +296,21 @@ class EmbedKitAnalyzer(BaseAnalyzer):
         ordinary Gaussian cells and shrank their z-scores.) The recommendations come from the
         z-scores of the two rules experiment E4 kept (more hubness and more antihubs than the
         null, under ``metric="euclidean"`` only; WP 7.1), and ``report.n_outside_null``
-        counts the statistics with ``|z| > z_threshold``. With ``calibrate=False`` the report
+        counts the calibrated statistics with ``|z| > z_threshold``. Each statistic carries a
+        95% interval for its z over resamples of the null draws (``z_interval``), and a
+        recommendation whose interval reaches below the threshold says so. A statistic whose
+        null failed the E3 bar in the setting at hand (normalised rows; under cosine,
+        k-skewness and the antihub ratio; under Euclidean distance above d = 256, neighbour
+        consistency) is marked ``uncalibrated`` with the reason, raises nothing and is not
+        counted (:func:`uncalibrated_statistics`). With ``calibrate=False`` the report
         makes no recommendation. Rows that arrive with a common norm (relative spread under
         1e-3, for instance embeddings normalised upstream) are compared with null draws
         normalised to that norm, under either metric; a Gaussian null with varying norms made
         such rows look concentrated (``distance_cv`` z down to -35 in E3). This calibrates
         normalised rows with a flat spectrum only: with a power-law spectrum the null, fitted
         to rows already on the sphere, is more isotropic than the data (``distance_cv`` and
-        uniformity z of +8 to +11, antihub z up to 4.5, at n = 2,000, d = 256 and 1,024).
+        uniformity z of +8 to +11, antihub z up to 4.5, at n = 2,000, d = 256 and 1,024), so
+        on normalised rows those three statistics are marked uncalibrated.
     metric:
         ``"euclidean"`` or ``"cosine"`` (anything else raises ``ValueError``), honoured by every
         analyzer. With ``"cosine"`` the rows are L2-normalised once and every statistic, the
@@ -372,7 +420,8 @@ class EmbedKitAnalyzer(BaseAnalyzer):
         )
         n_outside = (
             None if calibration is None
-            else int(sum(abs(c.z_score) > self.z_threshold for c in calibration.values()))
+            else int(sum(abs(c.z_score) > self.z_threshold
+                         for c in calibration.values() if c.calibrated))
         )
         properties = _properties(geo_bundle, calibration)
         recommendations = _recommendations(
@@ -412,8 +461,10 @@ class EmbedKitAnalyzer(BaseAnalyzer):
             model=self.null_model,
             n_draws=self.n_null_draws,
             random_state=self.random_state,
+            std_floor={"antihub_ratio": 1.0 / rows},
         )
-        cal["antihub_ratio"] = _floor_proportion_std(cal["antihub_ratio"], rows)
+        flags = uncalibrated_statistics(self.metric, X.shape[1], norm is not None)
+        cal = {name: replace(c, uncalibrated=flags.get(name)) for name, c in cal.items()}
         return cal, k
 
 
@@ -424,14 +475,6 @@ def common_norm(X: np.ndarray, rtol: float = _UNIT_NORM_RTOL) -> float | None:
     if med > 0 and float(np.max(np.abs(norms - med))) <= rtol * med:
         return med
     return None
-
-
-def _floor_proportion_std(c: CalibratedStatistic, rows: int) -> CalibratedStatistic:
-    """Floor the null sd of a proportion of ``rows`` at one count, ``1 / rows``."""
-    floor = 1.0 / rows
-    if c.null_std >= floor:
-        return c
-    return replace(c, null_std=floor, z_score=float((c.observed - c.null_mean) / floor))
 
 
 def calibration_statistics(
@@ -515,13 +558,15 @@ def _properties(geo_bundle, calibration) -> list[str]:
         f"and random pairs have mean cosine {iso.mean_cosine:.2f}.",
     ]
     c = (calibration or {}).get("uniformity")
-    if c is not None:
+    if c is not None and c.calibrated:
         side = "more clustered than" if c.z_score > 0 else "more spread than"
         props.append(
             f"Directions on the sphere are {side} the {c.null_model} null (uniformity "
             f"{c.observed:.3g} against {c.null_mean:.3g} ± {c.null_std:.2g}, "
             f"z = {c.z_score:+.1f})."
         )
+    elif c is not None:
+        props.append(f"Uniformity is not compared with the null: {c.uncalibrated}.")
     return props
 
 
@@ -547,22 +592,30 @@ def _calibrated_recommendations(
         return (f"{c.observed:.3g} against {c.null_mean:.3g} ± {c.null_std:.2g} under the "
                 f"{c.null_model} null, z = {c.z_score:+.1f}")
 
+    def near(c) -> str:
+        lo, hi = getattr(c, "z_interval", (float("nan"),) * 2)
+        if not (lo <= z_threshold):  # also False for NaN
+            return ""
+        return (f" The reading is near the threshold: over resamples of the {c.n_draws} null "
+                f"draws z lies between {lo:+.1f} and {hi:+.1f}; more draws (n_null_draws) "
+                "would settle it.")
+
     if metric != "euclidean":
         return []
     search = ("A hubness-reducing neighbour search (embedkit.hubness_reduction, for instance "
               "MutualProximity or CSLS) is likely to improve Euclidean kNN.")
     recs = []
     c = calibration.get("k_skewness")
-    if c is not None and c.z_score > z_threshold:
+    if c is not None and c.calibrated and c.z_score > z_threshold:
         recs.append(
             f"More hubness than the null (k-skewness {describe(c)}): a few points dominate "
-            f"the neighbour lists. {search}"
+            f"the neighbour lists. {search}{near(c)}"
         )
     c = calibration.get("antihub_ratio")
-    if c is not None and c.z_score > z_threshold:
+    if c is not None and c.calibrated and c.z_score > z_threshold:
         recs.append(
             f"More antihubs than the null (antihub_ratio {describe(c)}): more points are "
             "never retrieved as a neighbour than in a Gaussian with the same covariance "
-            f"spectrum. {search}"
+            f"spectrum. {search}{near(c)}"
         )
     return recs
