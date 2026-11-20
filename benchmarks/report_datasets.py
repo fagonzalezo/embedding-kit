@@ -240,11 +240,12 @@ def encoders_table(df: pd.DataFrame) -> list[str]:
 
 def results_table(part: pd.DataFrame, regression: bool) -> list[str]:
     if regression:
-        out = ["| Set | d | Raw kNN R² | Picked | After | Δ [95% CI] | Best in hindsight "
-               "| Fit time |", "|---|---|---|---|---|---|---|---|"]
+        out = ["| Set | d | Raw kNN R² | Picked | After (kNN R²) | Δ R² [95% CI] "
+               "| Best in hindsight (kNN R²) | Fit time |", "|---|---|---|---|---|---|---|---|"]
     else:
-        out = ["| Set | d | Raw kNN | Picked | After | Δ [95% CI] | Euclidean kNN | "
-               "Linear probe | Best in hindsight | Fit time |",
+        out = ["| Set | d | Raw kNN accuracy (%) | Picked | After (%) | Δ points [95% CI] | "
+               "Euclidean kNN accuracy (%) | Linear probe accuracy (%) | "
+               "Best in hindsight (kNN accuracy, %) | Fit time |",
                "|---|---|---|---|---|---|---|---|---|---|"]
     for _, r in order(part).iterrows():
         cells = [f"`{r.dataset}`", f"{int(r.d)}", pts(r.raw, regression),
@@ -350,23 +351,43 @@ def render(df: pd.DataFrame) -> str:
         "   - **centre + L2**: subtract the training mean, then scale each row to unit length;",
         "   - **PCA → 64, 128, 256**: the top principal directions, then L2 normalisation "
         "(only the sizes below d);",
-        "   - **refiner**: the supervised refiner at d = min(128, d / 2). For classes, the "
-        "residual adapter (a linear map initialised at PCA plus a small MLP) trained with the "
-        "supervised contrastive loss SupCon on k-nearest-neighbour pairs. For a continuous "
-        "target, an MLP trained with Rank-N-Contrast on Gaussian-noise views. Early stopping "
-        "on a held-out score.",
-        "3. It scores each candidate on the held-out 20% by cosine 10-NN accuracy (10-NN R² "
-        "for a continuous target).",
+        "   - **refiner**: a small network trained on the labels (described below).",
+        "3. It scores each candidate on the held-out 20% by cosine 10-NN classification "
+        "accuracy (10-NN R² for a continuous target).",
         "4. It keeps **raw** unless a candidate beats it with a paired bootstrap interval (95%, "
         "2,000 resamples) entirely above 0, and then takes the best such candidate.",
         "5. It refits the winner on all the training rows.", "",
+        "**The refiner.** There are two refiners, one for classification and one for "
+        "regression, each a fixed configuration: the library's defaults, the same on every "
+        "set, with nothing tuned per set. Only the weights are learned on each set. The "
+        "output dimension is min(128, d / 2), which is 128 on all the sets here (the "
+        f"smallest d is {int(df.d.min())}).", "",
+        "| | Classification (`mode=\"supervised\"`) | Regression (`mode=\"regression\"`) |",
+        "|---|---|---|",
+        "| Architecture | residual adapter: z = normalise(W x̃ + g(x̃)), with x̃ the input "
+        "standardised, W initialised at the top principal directions and g an MLP (hidden "
+        "256, 2 layers, dropout 0.1) whose output starts at 0, so training starts at PCA + "
+        "L2 | MLP (hidden 256, 2 layers, dropout 0.1), L2-normalised output |",
+        "| Loss | supervised contrastive (SupCon), temperature 0.07 | Rank-N-Contrast, "
+        "temperature 0.07 |",
+        "| Views per row | the row and one of its 5 nearest neighbours in the input "
+        "(`KNNPairs(5)`) | two copies with Gaussian noise, 0.05 of each feature's standard "
+        "deviation (`GaussianNoise(0.05)`) |",
+        "| Early stopping | on 10-NN accuracy of 10% of the fitting rows held out | on the "
+        "R² of a ridge probe on 10% held out |",
+        "| Training | Adam, learning rate 3e-4, weight decay 1e-4, cosine schedule, batch 256, "
+        "at most 100 epochs; evaluated every 5 epochs, stopped after 10 evaluations without "
+        "improvement, best weights restored | the same |", "",
         "**What is measured**, on the test split:",
-        "- **kNN** (primary): cosine 10-NN accuracy of each test row against the training rows. "
-        "For regression, 10-NN R² (the mean of the 10 neighbours' targets as the prediction).",
-        "- **Euclidean kNN**: the same with Euclidean distance.",
-        "- **Linear probe**: logistic regression (C = 1) trained on the transformed training "
-        "rows. Not computed for regression.",
-        "- **Δ [95% CI]**: after minus raw, in points (R² for regression), with a paired "
+        "- **kNN accuracy** (primary, classification): the percentage of test rows whose 10 "
+        "nearest training rows by cosine distance vote for the correct class.",
+        "- **kNN R²** (primary, regression): R² of predicting each test row's target as the "
+        "mean target of its 10 nearest training rows by cosine distance. It can be negative "
+        "(worse than predicting the mean).",
+        "- **Euclidean kNN accuracy**: the same vote with Euclidean distance.",
+        "- **Linear probe accuracy**: the test accuracy of a logistic regression (C = 1) "
+        "trained on the transformed training rows. Not computed for regression.",
+        "- **Δ [95% CI]**: after minus raw, in accuracy points (R² for regression), with a paired "
         "bootstrap interval over test rows (2,000 resamples). **Bold**: the interval excludes "
         "0 (significantly better). In the Euclidean and probe columns, ▲ and ▼ mark a "
         "significant rise or fall; a single number means the raw embedding was kept.", "",
@@ -397,7 +418,8 @@ def render(df: pd.DataFrame) -> str:
         out.append(f"Better on {len(sub)} of {len(part)} sets, worse on "
                    f"{int((part.hi < 0).sum())}."
                    + ("" if regression else
-                      f" Median gain {100 * part['diff'].median():.1f} points; largest "
+                      f" Median gain {100 * part['diff'].median():.1f} points of kNN accuracy; "
+                      "largest "
                       f"{100 * part['diff'].max():.1f} "
                       f"(`{part.loc[part['diff'].idxmax(), 'dataset']}`)."))
         out += ["", *results_table(part, regression), ""]
