@@ -4,28 +4,33 @@ Patterns for integrating EmbedKit into real-world ML pipelines.
 
 ---
 
-## HuggingFace Transformers
-
-The most common pattern: extract embeddings from a pretrained model, analyze them
-with EmbedKit, transform them, then use them for downstream tasks.
-
 ## Recommended workflow
 
-1. **Analyze** with `EmbedKitAnalyzer` (pass `metric="cosine"` if you search by cosine). Read
-   `report.recommendations` and `report.properties`. Only two rules make a recommendation (more
-   hubness or antihubs than the null, Euclidean metric only, pointing to a hubness-reducing
-   search); everything else is description. E4 found that none of the other readings predicted
-   which fix helps.
-2. **Start from the default.** `EmbedKit().fit_transform(X)` without labels returns the input
+EmbedKit chooses a transform by validation, not by diagnosis (`docs/manual.md`, "How EmbedKit
+decides"):
+
+1. **Start from the default.** `EmbedKit().fit_transform(X)` without labels returns the input
    centred and L2-normalised. With labels, `EmbedKit().fit(X, y)` selects among `Identity`,
    centring, PCA and (supervised or regression) the refiner on held-out rows and keeps `Identity`
    unless a candidate is significantly better. Inspect `selected_` and `selection_report_`.
-3. **Check on your own task.** Fit on the training split, then score the test split against the raw
+2. **Check on your own task.** Fit on the training split, then score the test split against the raw
    embeddings with `evaluate_transform` and `compare` (paired bootstrap interval). Adopt a transform
-   only if the interval excludes 0.
-4. **Only if the report recommends it** (Euclidean search), try `embedkit.hubness_reduction`
-   (`MutualProximity`, `CSLS`) on the gallery, and compare with plain search the same way.
+   only if the interval excludes 0. The selection scores by kNN; if the embedding feeds a linear
+   classifier, score `"linear_probe_c1"` too.
+3. **Tune only with held-out data.** If the refiner came close but was not selected, tune it as in
+   `docs/manual.md` section 1.2 (three splits, one factor at a time, several seeds).
+4. **For Euclidean search, check hubness.** Run `EmbedKitAnalyzer(metric="euclidean")`; if
+   `report.recommendations` names a hubness-reducing search, try `embedkit.hubness_reduction`
+   (`MutualProximity`, `CSLS`) on the gallery and compare with plain search the same way. Every
+   other reading of the report is description: E4 found that none predicted which fix helps.
 5. **Persist** with `ek.save(...)`; fit on the corpus only and apply `transform` to queries.
+
+---
+
+## HuggingFace Transformers
+
+The most common pattern: extract embeddings from a pretrained model, transform them with
+EmbedKit, then use them for downstream tasks.
 
 ```python
 import numpy as np
@@ -43,6 +48,10 @@ def mean_pool(model_output, attention_mask):
     mask = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
     return (token_embeddings * mask).sum(1) / mask.sum(1).clamp(min=1e-9)
 
+def chunks(items, size):
+    for i in range(0, len(items), size):
+        yield items[i : i + size]
+
 texts = ["sentence one", "sentence two", ...]   # your corpus
 embeddings = []
 with torch.no_grad():
@@ -52,13 +61,13 @@ with torch.no_grad():
         embeddings.append(mean_pool(out, enc["attention_mask"]).numpy())
 X = np.concatenate(embeddings)   # (n, 384)
 
-# ── Step 2: Diagnose ───────────────────────────────────────
-report = EmbedKitAnalyzer(k=10).fit(X)
-report.print_summary()
-
-# ── Step 3: Transform ──────────────────────────────────────
+# ── Step 2: Transform ──────────────────────────────────────
 ek = EmbedKit()                   # no labels: centred and L2-normalised
 X_refined = ek.fit_transform(X)   # (n, 384)
+
+# ── Step 3 (optional): Describe the space ─────────────────
+report = EmbedKitAnalyzer(k=10, metric="cosine").fit(X)   # the metric you search with
+report.print_summary()            # description; no transform is chosen from it
 
 # ── Step 4: Use for downstream tasks ──────────────────────
 # Classification, retrieval, clustering, etc.
@@ -105,6 +114,7 @@ projector = EmbeddingRefiner(
     target_dim=64,
     hidden_dim=256,
     n_layers=2,
+    architecture="mlp",          # the linear and residual variants start from PCA of fixed inputs
     normalize_output=True,
 )
 
@@ -118,9 +128,8 @@ optimizer = torch.optim.AdamW(
 
 for epoch in range(epochs):
     for batch in dataloader:
-        x = encoder(batch)                        # (B, D) embeddings
-        x_t = torch.from_numpy(x.cpu().numpy()) if not isinstance(x, torch.Tensor) else x
-        xi, xj = aug(x_t)
+        x = encoder(batch)                        # (B, D) embeddings, a torch.Tensor
+        xi, xj = aug(x)
         zi, zj = projector(xi), projector(xj)
         loss = loss_fn(zi, zj)
         loss.backward()
@@ -207,6 +216,9 @@ accuracy = pipe.score(X_test, y_test)
 Inside a `Pipeline`, `fit` receives `y`, so `mode="auto"` selects with labels (and falls back to
 `Identity` when nothing is significantly better); without `y` it returns the input centred and
 L2-normalised. Fitting inside cross-validation keeps the selection hold-out inside each training fold.
+The selection scores candidates by kNN, not by the downstream classifier: in E10 a linear probe on
+its output was worse than on the input on 5 of 64 sets (0.2 to 0.8 points). Compare the pipeline
+with one without `EmbedKitTransformer` on the same folds.
 
 ---
 
@@ -227,32 +239,26 @@ from embedkit import EmbedKit, EmbedKitAnalyzer
 doc_embeddings = np.load("corpus_embeddings.npy")   # (n_docs, D)
 query_embeddings = np.load("query_embeddings.npy")  # (n_queries, D)
 
-# ── 2. Diagnose ────────────────────────────────────────────
-report = EmbedKitAnalyzer(k=10).fit(doc_embeddings)
-report.print_summary()
-# Look at: k_skewness, hub_contamination, antihub_ratio
-
-# ── 3. Transform (fit on the corpus, apply to both) ────────
+# ── 2. Transform (fit on the corpus, apply to both) ────────
 ek = EmbedKit()                                       # centred and L2-normalised
 ek.fit(doc_embeddings)                                # fit on corpus
-doc_refined   = ek.transform(doc_embeddings)          # (n_docs, D)
+doc_refined   = ek.transform(doc_embeddings)          # (n_docs, D), unit-norm rows
 query_refined = ek.transform(query_embeddings)        # (n_queries, D)
 
-# Euclidean search and the report recommends it: a hubness-reducing search instead of plain kNN
-from embedkit.hubness_reduction import MutualProximity
-mp = MutualProximity(metric="euclidean").fit(doc_embeddings)
-dist, idx = mp.kneighbors(query_embeddings, n_neighbors=10)   # neighbours among the corpus rows
-
-# ── 4. Re-index and query ──────────────────────────────────
+# ── 3. Index and query (cosine = inner product on unit-norm rows) ──
 import faiss
 
 index = faiss.IndexFlatIP(doc_refined.shape[1])
-# Normalize for cosine similarity
-norms = np.linalg.norm(doc_refined, axis=1, keepdims=True)
-index.add((doc_refined / norms).astype("float32"))
+index.add(doc_refined.astype("float32"))
+D, I = index.search(query_refined.astype("float32"), k=10)   # top-10 docs per query
 
-q_norm = query_refined / np.linalg.norm(query_refined, axis=1, keepdims=True)
-D, I = index.search(q_norm.astype("float32"), k=10)   # top-10 docs per query
+# ── 4. Euclidean search only: check hubness on the corpus ──
+report = EmbedKitAnalyzer(k=10, metric="euclidean").fit(doc_embeddings)
+print(report.recommendations)     # names a hubness-reducing search when k-skewness or the
+                                  # antihub ratio is above the null; otherwise "No recommendation"
+from embedkit.hubness_reduction import MutualProximity
+mp = MutualProximity(metric="euclidean").fit(doc_embeddings)
+dist, idx = mp.kneighbors(query_embeddings, n_neighbors=10)   # neighbours among the corpus rows
 
 # ── 5. Persist for production ──────────────────────────────
 ek.save("rag_refiner/")
@@ -261,6 +267,9 @@ ek.save("rag_refiner/")
 **Key insight:** Always fit EmbedKit on the document corpus only, not on queries.
 Apply `transform()` to both at query time. The default does not change a cosine ranking beyond
 removing the corpus mean, so it is cheap to try and easy to compare with the raw embeddings.
+Compare either search with plain search on queries with known relevant documents
+(`embedkit.evaluation.metrics.recall_at_k`) before switching. `faiss` is optional
+(`pip install embedkit[faiss]`); any exact inner-product search works the same way.
 
 ### With a vector database (e.g., ChromaDB, Weaviate, Pinecone)
 

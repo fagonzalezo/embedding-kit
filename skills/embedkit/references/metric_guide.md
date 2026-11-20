@@ -1,15 +1,27 @@
 # EmbedKit Metric Guide
 
-Detailed interpretation of every metric in `EmbedKitReport`, including rough reading ranges,
-which statistics the report judges, geometric meaning, and the downstream consequences.
+What every statistic in `EmbedKitReport` measures, how to read it, whether the null model
+calibrates it, and what the benchmarks say about it. `docs/manual.md` Part 3 is the full reference.
 
-The report applies no fixed pathology thresholds. Hubness, antihubs, distance concentration,
-neighbour consistency and uniformity are compared with a null model (see "Calibration" below). Since
-experiment E4 the only recommendations are two rules, from the z-scores of k-skewness and the
-antihub ratio under `metric="euclidean"`; every other statistic is descriptive. E4 tested 9 rules on
-35 natural classification sets, and the other 7 did not predict the gain of their fix
-(`benchmarks/results/e4/REPORT.md`). The ranges in the tables below are rough guides for reading a
-number; the report does not use them, and a reading outside them is not evidence that a transform helps.
+The analysis describes an embedding space; it does not choose a transform (`EmbedKit` chooses by
+validation on held-out rows). The report applies no fixed thresholds. Hubness, antihubs, distance
+concentration, neighbour consistency and uniformity are compared with a null model (see
+"Calibration" below). The only recommendations are two rules, from the z-scores of k-skewness and
+the antihub ratio under `metric="euclidean"`; every other statistic is descriptive. E4 tested 9
+rules on 35 natural classification sets, and the other 7 did not predict the gain of their fix
+(`benchmarks/results/e4/REPORT.md`). Ranges below say what a value means; they are not cut-offs,
+and a reading outside them is not evidence that a transform helps.
+
+| Statistic | Calibrated | Rule | Evidence |
+|---|---|---|---|
+| k-skewness | yes, except under cosine | above the null, Euclidean: hubness-reducing search | Fired on 3 of 35 sets (E4) and 5 of 60 (E10); the fix helped significantly on all |
+| Antihub ratio | yes, except under cosine and on rows normalised upstream | the same | Fired on 8 of 35 (gain on 5) and 22 of 60 (gain on 19) |
+| `distance_cv` | yes, except on rows normalised upstream | none | Gain of PCA or hubness reduction fell as the signal rose (Spearman -0.50) |
+| Neighbour consistency | yes, except Euclidean above d = 256 | none | Did not predict the gain of PCA |
+| Uniformity | yes, except on rows normalised upstream | none (`report.properties`) | A property, not a defect |
+| Intrinsic dimension, ID / D | no | none (removed) | The ID / D rule fired on all 35 sets; PCA to `suggested_target_dim` lost on 32 |
+| Isotropy statistics | no | none (`report.properties`) | None predicted its fix; ZCA lost on 34 of 35 (cosine kNN) |
+| Kernel statistics | no | none | Not tested as a rule |
 
 ---
 
@@ -38,7 +50,7 @@ The k-NN estimators (TwoNN, MLE, MOM) read low at high ID (15 to 17 on a 20-sphe
 
 | ID/D ratio | Report | `suggested_target_dim` |
 |---|---|---|
-| any | No recommendation (the ID / D rule was removed after E4: it fired on all 35 natural sets, and PCA to `suggested_target_dim` lost accuracy on 32) | `clip(1.5 × ID, max(4, ID), D)` |
+| any | No recommendation (the ID / D rule was removed after E4: it fired on all 35 natural sets, and PCA to `suggested_target_dim` lost accuracy on 32) | `clip(round(1.5 × ID), max(4, ID), D)` |
 
 No benchmark supports the factor 1.5. `EmbedKit` reads it only with `method="pca"` or
 `"refiner"` and `target_dim="auto"`; the default `method="auto"` does not compute the report. If you reduce
@@ -48,29 +60,33 @@ dimension, pass an explicit `target_dim` and test it against the input on held-o
 
 ## Hubness (`report.hubness`)
 
-Hubness measures how unevenly points appear as k-nearest neighbors of other points.
-In high-dimensional spaces, a few "hub" points dominate the kNN graph regardless of
-semantic similarity, breaking retrieval and kNN-based classifiers.
+Hubness measures how unevenly points appear as k-nearest neighbors of other points. It grows
+with the intrinsic dimension of the data: a few "hub" points appear in many neighbour lists and
+"antihubs" in none, which can crowd retrieval results and kNN votes.
 
-| Attribute | Judged by the report | Rough reading | Meaning |
+| Attribute | Judged by the report | Range | Meaning |
 |---|---|---|---|
-| `k_skewness` | yes: z > 3 gives a recommendation, Euclidean metric only | near 0 | Skewness of the k-occurrence distribution |
-| `antihub_ratio` | yes: z > 3, Euclidean metric only | depends on n, d, k, norms | Fraction of points never retrieved as neighbors (isotropic Gaussian at d = 1,024: 0.21 to 0.39 Euclidean, none cosine) |
-| `robinhood_index` | no | `> 0.3` concerning | Gini-like inequality; 0 = uniform, 1 = monopoly |
-| `hub_ratio` | no | `> 0.1` concerning | Fraction of points with `N_k > hub_threshold × mean N_k` (default 2) |
-| `hub_contamination` | no | `> 0.3` concerning | Fraction of the hubs' own neighbors that are also hubs |
+| `k_skewness` | yes: z > 3 gives a recommendation, Euclidean metric only | (−∞, ∞) | Skewness of the k-occurrence distribution; near 0 when points are retrieved about equally often |
+| `antihub_ratio` | yes: z > 3, Euclidean metric only | [0, 1] | Fraction of points never retrieved as neighbors; depends on n, d, k and norms (isotropic Gaussian at d = 1,024: 0.21 to 0.39 Euclidean, none cosine) |
+| `robinhood_index` | no | [0, 1] | Gini-like inequality of the k-occurrences; 0 = uniform, near 1 = a few points take most neighbour lists |
+| `hub_ratio` | no | [0, 1] | Fraction of points with `N_k > hub_threshold × mean N_k` (default 2) |
+| `hub_contamination` | no | [0, 1] | Fraction of the hubs' own neighbors that are also hubs |
 | `k_occurrence`, `hubs`, `antihubs` | no | | Raw per-point counts and index arrays |
+
+Compare raw values with the null (`report.calibration`) or between embeddings of the same data at
+the same k, not with fixed cut-offs.
 
 Under `metric="cosine"` both z-scores are reported in `report.calibration` but raise no
 recommendation: the antihub ratio of Gaussian data is not calibrated there, and in E4 the
 k-skewness z did not predict the gain of a hubness reduction on cosine kNN (Spearman 0.05).
 
-### What hubness does to downstream tasks
+### What hubness can do to downstream tasks
 
-- **Retrieval / RAG**: Hub documents are returned for almost every query, drowning out
-  relevant results.
-- **kNN classification**: Decision boundaries are dominated by hub labels.
-- **Clustering**: Hubs act as artificial attractors, distorting cluster assignments.
+- **Retrieval / RAG**: hub documents are returned for many queries, and antihubs for none.
+- **kNN classification**: hub labels weigh on many votes.
+- **Clustering**: hubs can pull unrelated points together.
+
+On the benchmark embeddings the measured effect of removing it was small (below).
 
 ### Fix
 
@@ -93,15 +109,14 @@ k-skewness z did not predict the gain of a hubness reduction on cosine kNN (Spea
 
 | Attribute | Rough reading | Meaning |
 |---|---|---|
-| `distance_cv` | larger is better; about `1/sqrt(2d)` for iid Gaussian | `std(D) / mean(D)` of pairwise distances. Calibrated (z-score in `report.calibration`); no recommendation since E4 |
-| `relative_contrast` | `> 1.0` healthy, `< 0.1` narrow spike | `(d_max − d_min) / d_mean` |
-| `relative_contrast_per_query` | larger is better | Median over query points of `(d_max − d_min) / d_min`, zero distances excluded |
+| `distance_cv` | `[0, ∞)`; small = concentrated; about `1/sqrt(2d)` for iid Gaussian | `std(D) / mean(D)` of pairwise distances. Calibrated (z-score in `report.calibration`); no recommendation since E4 |
+| `relative_contrast` | `[0, ∞)`; near 0 = narrow spike (random high-dimensional data can fall below 0.1) | `(d_max − d_min) / d_mean` |
+| `relative_contrast_per_query` | `[0, ∞)` | Median over query points of `(d_max − d_min) / d_min`, zero distances excluded |
 | `concentration_ratio` | not used | `d_min / d_max`; one duplicated pair sets it to 0 |
 | `distance_histogram`, `bin_edges` | | Histogram of sampled pairwise distances |
 
-**Effect:** When all points are nearly equidistant, nearest-neighbor search becomes
-meaningless — all distances are indistinguishable. This is the curse of dimensionality in its
-most acute form.
+**Meaning:** in the limit, the nearest and the farthest point of a query are almost equally far
+away (Beyer et al., 1999). Whether a given reading hurts a task was not shown.
 
 **Fix:** none validated. In E4 PCA and hubness reduction did not help more where `distance_cv` was
 further below the null (Spearman -0.50 for both on Euclidean kNN), and PCA to the report's
@@ -140,15 +155,14 @@ removes the mean (centring) and normalises; it was the most consistent small gai
 
 | Attribute | Rough reading | Meaning |
 |---|---|---|
-| `mean_consistency` | near 1 robust, `< 0.5` fragile | Avg fraction of kNN preserved under small Gaussian perturbation (`0.01 ×` the RMS per-coordinate sd). Calibrated (z-score in `report.calibration`); no recommendation since E4 |
-| `std_consistency` | low | Variability in consistency across perturbation trials |
+| `mean_consistency` | `[0, 1]`; near 1 = neighbourhoods hardly move | Avg fraction of kNN preserved under small Gaussian perturbation (`0.01 ×` the RMS per-coordinate sd). Calibrated (z-score in `report.calibration`); no recommendation since E4 |
+| `std_consistency` | | Variability in consistency across perturbation trials |
 | `per_perturbation` | | Per-trial consistency scores |
 
-**Effect:** Low consistency means small changes in input values cause large changes
-in the kNN graph. The local structure is fragile — models trained on it are not robust.
-
-**Fix (not benchmarked):** `GaussianNoise(adaptive=True)` or `EmbeddingMixup` augmentations. In
-E4 the reading did not predict the gain of PCA (Spearman -0.35 and -0.02 for the two metrics).
+**Meaning:** low consistency means that small changes in the input change the kNN graph. In E4
+the reading did not predict the gain of PCA (Spearman -0.35 and -0.02 for the two metrics,
+intervals including 0), and whether an unstable graph hurts a given task was not shown. No fix is
+validated.
 
 ---
 
@@ -156,15 +170,14 @@ E4 the reading did not predict the gain of PCA (Spearman -0.35 and -0.02 for the
 
 | Attribute | Rough reading | Meaning |
 |---|---|---|
-| `uniformity` | `< −2.0` spread, `> −1.0` clustered | `log E[exp(−t·||z_i − z_j||²)]` on L2-normalised rows — Wang & Isola uniformity |
+| `uniformity` | between about `−2t` (−4 at the default t = 2; spread out) and 0 (collapsed) | `log E[exp(−t·||z_i − z_j||²)]` over pairs of L2-normalised rows — Wang & Isola uniformity |
 
-Lower (more negative) is more uniform. A score near 0 means embeddings are collapsed to nearly
-the same point; a score around −3 to −5 indicates well-distributed embeddings. The report
-compares it with the null and states the direction in `report.properties` ("more clustered than"
-or "more spread than" the null); it makes no recommendation.
-
-**Effect:** Poorly uniform embeddings form dense clusters in embedding space, which
-hurts retrieval diversity and model calibration. `AlignUniformLoss` optimizes this term directly.
+More negative is more spread out. Jensen's inequality bounds it below by about `−2t`, which rows
+spread uniformly in high dimension approach (random Gaussian rows: −3.9 at d = 64, −3.99 at
+d = 768); near 0 the rows point in nearly the same direction. The report compares it with the null
+and states the direction in `report.properties` ("more clustered than" or "more spread than" the
+null); clustered directions are a property, not a defect, and no recommendation is made.
+`AlignUniformLoss` optimises this term directly.
 
 ---
 
@@ -190,12 +203,13 @@ the spectrum of the centred kernel `Kc = HKH`. Sigma is the median pairwise dist
 |---|---|
 | Large `effective_rank` | Variance spread over many kernel directions; depends on σ (small σ makes every point its own direction), so compare data sets of the same size with `sigma="median"` |
 | Small `effective_rank` | Variance concentrated in a few directions of the kernel feature space |
-| Large `spectral_gap` (say > 5) | One direction dominates, for example two well-separated clusters |
+| Large `spectral_gap` | One direction dominates, for example two well-separated clusters |
 | Large `top_k_eigen_ratio` | Steep eigenvalue decay |
 | `centered_kernel_alignment` near 0 | Labels independent of the RBF geometry |
 | `centered_kernel_alignment` near 1 | The RBF geometry reflects the labels |
 
-No thresholds are applied to any kernel statistic.
+No thresholds are applied to any kernel statistic, and none is calibrated by the null or tested
+as a rule: they are description only.
 
 ---
 
@@ -203,8 +217,9 @@ No thresholds are applied to any kernel statistic.
 
 `EmbedKitAnalyzer(calibrate=True)` (the default) compares five statistics (`k_skewness`,
 `antihub_ratio`, `distance_cv`, `neighbor_consistency`, `uniformity`) with their distribution
-under a null model (`null_model="gaussian"`: a Gaussian with the data's mean and covariance
-spectrum; or `"permuted"`: each column permuted). The comparison runs on a subsample of
+under a null model (`null_model="gaussian"`: a Gaussian with the data's mean, shrunk so that its
+squared norm is unbiased, and a covariance whose trace and `tr(Σ²)` match unbiased estimates from
+the data; or `"permuted"`: each column permuted independently). The comparison runs on a subsample of
 `n_calibration` rows (2,000) against `n_null_draws` (20) null data sets.
 
 - `report.calibration[name]` holds `observed`, `null_mean`, `null_std`, `z_score`,
