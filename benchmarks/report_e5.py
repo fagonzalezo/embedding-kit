@@ -6,7 +6,7 @@ Detection (``<results>/_detect/*.json``, from ``benchmarks/e5.py``): every damag
 compared with its clean base, per metric. A calibrated statistic detects the damage when its z
 moves by more than ``max(3, 3 x sd)``, and a property when it moves by more than ``3 x sd``, with
 ``sd`` the spread over the clean report on 5 random 80% row subsets (the noise floor). The
-expected signatures are the table in ``docs/IMPLEMENTATION_PLAN.md`` (WP 4.5), fixed before the
+expected signatures are the table in ``docs/dev/IMPLEMENTATION_PLAN.md`` (WP 4.5), fixed before the
 runs.
 
 Repair (``<results>/<dataset>/<method>.json``, from ``run.py --experiment e5``): test accuracy

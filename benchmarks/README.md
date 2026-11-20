@@ -1,6 +1,6 @@
 # Benchmarks
 
-The benchmark harness of `docs/IMPLEMENTATION_PLAN.md` (WP 2.5). It is not part of the installed
+The benchmark harness of `docs/dev/IMPLEMENTATION_PLAN.md` (WP 2.5). It is not part of the installed
 package. It scores every method with `embedkit.evaluation.evaluate_transform`: fit on the training
 split, score held-out data.
 
@@ -16,9 +16,10 @@ split, score held-out data.
 | `report_e6.py` | E6 tables: each refiner arm, selected on validation, against the previous default and against PCA at the same d; applies the phase 5 acceptance rule. |
 | `report_e7.py` | E7 tables: learning curves of the default refiner against PCA and PCA-whitening over the number of rows fitted, and inductive against transductive fitting. |
 | `e4.py`, `e4_data.py`, `report_e4.py` | Experiment E4 (WP 7.1): the report on each natural set (`e4.py`; the interventions run through `run.py --experiment e4`), the tables of diagnostics and gains (`e4_data.py`), and the analysis fixed in the plan before the runs (`report_e4.py`). |
+| `report_datasets.py` | `docs/benchmarks/RESULTS_BY_DATASET.md`: E10 per data set, for users (`--collect` first reads the per-run files into `results/e10/summary_datasets.csv`). |
 | `extract_features.py` | Downloads a large set and caches its embeddings. **Cluster only.** |
 | `cluster/` | Slurm jobs for the OCCIDATA cluster (see "On the cluster" below). |
-| `review_2026_11/` | Scripts behind `docs/CRITICAL_REVIEW.md` (pilot, defect reproductions). |
+| `review_2026_11/` | Scripts behind `docs/dev/CRITICAL_REVIEW.md` (pilot, defect reproductions). |
 
 ## Running
 

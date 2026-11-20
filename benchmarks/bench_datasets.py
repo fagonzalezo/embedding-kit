@@ -93,7 +93,7 @@ def make_synthetic_anisotropic(
     n=6000, n_classes=10, latent=16, D=512, sep=1.0, hidden=128, mean_scale=20.0,
     nuis_scale=2.0, n_nuis=3, seed=0,
 ):
-    """The review pilot's synthetic set (``docs/CRITICAL_REVIEW.md`` section 3.7).
+    """The review pilot's synthetic set (``docs/dev/CRITICAL_REVIEW.md`` section 3.7).
 
     10 Gaussian classes on a 16-d latent, through a fixed random 2-layer tanh MLP to 512-d,
     plus a large shared mean vector and ``n_nuis`` high-variance class-independent nuisance
@@ -134,7 +134,8 @@ def make_synthetic_regression(n=6000, latent=8, D=256, hidden=128, nuis_scale=2.
     (continuous target, test R^2): 10-NN regression on the latent ``u`` 0.77, ridge on the embedding
     0.70, 10-NN on the embedding 0.43. With ``levels``, the target is quantised to that many equally
     populated levels (quantiles of the training targets, values ``0 .. levels - 1``), on both
-    splits: heavy ties, the case of ``docs/BUG-rnc-ties.md``. Half the rows are train, half test.
+    splits: heavy ties, the case of the RnC tie fix (D21, ``CHANGELOG.md`` 0.1.3). Half the rows
+    are train, half test.
     """
     from sklearn.model_selection import train_test_split
 

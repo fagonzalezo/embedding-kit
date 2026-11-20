@@ -1,6 +1,6 @@
 # E10: the default selection (WP 8.2, WP 8.3)
 
-64 sets. Test stage, one seed. Primary outcome: test cosine 10-NN accuracy (kNN R^2 on regression sets); intervals: paired bootstrap over test points (2,000 resamples, 95%). Criteria: `docs/IMPLEMENTATION_PLAN.md`, "WP 8.2 design and criteria".
+64 sets. Test stage, one seed. Primary outcome: test cosine 10-NN accuracy (kNN R^2 on regression sets); intervals: paired bootstrap over test points (2,000 resamples, 95%). Criteria: `docs/dev/IMPLEMENTATION_PLAN.md`, "WP 8.2 design and criteria".
 
 ## WP 8.2 verdicts (primary outcome)
 

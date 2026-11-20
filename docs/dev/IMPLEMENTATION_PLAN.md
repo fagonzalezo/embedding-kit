@@ -1,7 +1,7 @@
 # EmbedKit implementation plan
 
 **Written:** 2026-11-10, against version 0.1.2 (commit `4d2a513`).
-**Source:** `docs/CRITICAL_REVIEW.md`. Defect numbers (D1 to D30), section numbers and experiment names (E1 to E9)
+**Source:** `docs/dev/CRITICAL_REVIEW.md`. Defect numbers (D1 to D30), section numbers and experiment names (E1 to E9)
 in this plan refer to that document. Read its sections 1 and 2 before starting.
 
 This plan is written to be picked up in a later session without the conversation that produced it.
@@ -389,8 +389,8 @@ statistic can select and stop a run.
 
 ### WP 3.3 Write up
 
-- `docs/BENCHMARK_E1_E2.md`: tables, the selection rule, compute used, and a plain statement of the outcome.
-- Add a note at the top of `docs/UNSUPERVISED_REFINEMENT_REPORT.md` that its conclusions rest on one seed and on
+- `docs/benchmarks/BENCHMARK_E1_E2.md`: tables, the selection rule, compute used, and a plain statement of the outcome.
+- Add a note at the top of `docs/dev/UNSUPERVISED_REFINEMENT_REPORT.md` that its conclusions rest on one seed and on
   selection by test accuracy, with a link to the new document.
 
 ### Decision gate
@@ -468,7 +468,7 @@ also the first part of experiment E3.
   Add them as `benchmarks/run.py --experiment e3`.
 - E5: controlled damage of a good embedding (review section 5). Use the baselines from phase 2 as the repair
   methods.
-- Write `docs/BENCHMARK_DIAGNOSTICS.md` with a table per statistic: bias, variance, dependence on n.
+- Write `docs/benchmarks/BENCHMARK_DIAGNOSTICS.md` with a table per statistic: bias, variance, dependence on n.
 
 ### Phase 4 exit criteria
 
@@ -531,7 +531,7 @@ stays available but is not made the default, or it is dropped. Add one thing at 
 
 - E6: the one-factor ablation in review section 5, restricted to the features accepted above.
 - E7: learning curves over training-set size, and inductive against transductive fitting.
-- Append the results to `docs/BENCHMARK_E1_E2.md`. Release as 0.4.0.
+- Append the results to `docs/benchmarks/BENCHMARK_E1_E2.md`. Release as 0.4.0.
 
 ---
 
@@ -563,7 +563,7 @@ needs phase 2 and WP 1.2, and does not depend on the gate.
   and without ties. Add ConR or SupReMix only if RnC fails to beat ridge.
 - Rerun the downstream experiment arm named in `docs/BUG-rnc-ties.md` with the fixed loss. That document states this as
   an untested hypothesis.
-- Write `docs/BENCHMARK_SUPERVISED.md`.
+- Write `docs/benchmarks/BENCHMARK_SUPERVISED.md`.
 
 ---
 
@@ -617,7 +617,7 @@ of the default itself, the diagnostics that are still uncalibrated, and the depr
 
 **Status: confirmed by the user (2026-11-18).** All five work packages go ahead. The answers to each "Decision
 needed" are recorded under it as "Decided". Each item comes from a note earlier in this plan or in
-`docs/BENCHMARK_DIAGNOSTICS.md`, cited in the work package.
+`docs/benchmarks/BENCHMARK_DIAGNOSTICS.md`, cited in the work package.
 
 Suggested order: WP 8.1 first, because it sets where the other branches start. WP 8.2 and WP 8.3 share the E4 sets
 and can run as one cluster campaign (E10). WP 8.4 can run at any time. WP 8.5 comes last, just before the
@@ -680,7 +680,7 @@ release.
 - **Acceptance (the promise WP 7.2 makes; fix it before the runs).** The default is significantly worse than raw
   on no set. Significantly worse means that the paired bootstrap 95% interval is entirely below 0.
   - If a set fails, look first at `val_fraction` and the significance rule, and only then at the candidate list.
-- **Output:** `docs/BENCHMARK_SELECTION.md` and the README numbers.
+- **Output:** `docs/benchmarks/BENCHMARK_SELECTION.md` and the README numbers.
 - **Extra sets for R1 (decided by the user, 2026-11-18):** in the same campaign, extract more sets or encoders
   with high hubness. The R1 rule was kept on only 3 firing sets, two of them from one encoder (WP 7.1 caveats).
   - Apply WP 7.1's keep rule unchanged to the enlarged set.
@@ -689,7 +689,7 @@ release.
 ### WP 8.4 Diagnostics that are still uncalibrated
 
 The items come from "Open findings" in the WP 4.5 notes and from "Limitations and open findings" in
-`docs/BENCHMARK_DIAGNOSTICS.md`.
+`docs/benchmarks/BENCHMARK_DIAGNOSTICS.md`.
 
 - **Rows normalised upstream with an anisotropic spectrum.** Many sentence encoders produce such rows.
   - `distance_cv` and uniformity have z of +8 to +11.
@@ -748,28 +748,28 @@ The items come from "Open findings" in the WP 4.5 notes and from "Limitations an
 | 2.5 | Benchmark harness | done (2026-11-10; cluster features extracted 2026-11-11) |
 | 3.1 | Run E1 | done (2026-11-11; cluster array 3077382) |
 | 3.2 | Run E2 | done (2026-11-11; cluster array 3077451) |
-| 3.3 | Write up and gate | done (2026-11-11; `docs/BENCHMARK_E1_E2.md`; gate outcome C plus WP 5.3) |
+| 3.3 | Write up and gate | done (2026-11-11; `docs/benchmarks/BENCHMARK_E1_E2.md`; gate outcome C plus WP 5.3) |
 | 4.1 | Null models | done (2026-11-14): moment-matched Gaussian null; acceptance met in all 32 cells; `severity` replaced by `n_outside_null`. Mean shrinkage added in WP 4.5; acceptance rerun 2026-11-16 on the fixed code, 40 cells with the antihub ratio, every one at 0.975 or above |
 | 4.2 | Intrinsic dimension | done (2026-11-14): per-estimator bootstrap intervals, TwoNN scale curve, ESS; acceptance revised with the user (bias at ID 10 and 20 goes to E3); target dim from TwoNN |
 | 4.3 | Isotropy and spectrum | done (2026-11-14): IsoScore, PC and coordinate shares, spectrum alpha, mean direction; `report.properties` replaces the anisotropy recommendations |
 | 4.4 | Metric consistency, kernel spectrum | done (2026-11-15): metric limited to euclidean/cosine and honoured by every analyzer (cosine = normalised rows); centred kernel, trace-ratio effective rank, `top_k_eigen_ratio` |
-| 4.5 | Run E3 and E5 | done (2026-11-16; `docs/BENCHMARK_DIAGNOSTICS.md`): calibration fixed after the first run; rerun (arrays 3080075-7) meets the phase 4 exit criterion on all six datasets; normalised anisotropic rows documented as uncalibrated |
+| 4.5 | Run E3 and E5 | done (2026-11-16; `docs/benchmarks/BENCHMARK_DIAGNOSTICS.md`): calibration fixed after the first run; rerun (arrays 3080075-7) meets the phase 4 exit criterion on all six datasets; normalised anisotropic rows documented as uncalibrated |
 | 5.1 | Residual adapter | done (2026-11-12): accepted in E6; `EmbedKit` default is now `architecture="linear"` |
 | 5.2 | Positives and negatives | rejected (2026-11-13): no arm wins against `linear` on half the datasets in E6; options stay in the library |
 | 5.3 | Matryoshka output | done (2026-11-13): non-inferior in E6; opt-in `EmbedKit(nested_dims=...)` |
 | 5.4 | Structure preservation, VICReg | dropped (gate C) |
 | 5.5 | Hubness reduction | done (2026-11-13): implemented; no kNN gain on the E1 sets, no default change |
-| 5.6 | Run E6 and E7 | done (2026-11-13; `docs/BENCHMARK_E6_E7.md`); self-supervised default is PCA |
+| 5.6 | Run E6 and E7 | done (2026-11-13; `docs/benchmarks/BENCHMARK_E6_E7.md`); self-supervised default is PCA |
 | 6.1 | Supervised defaults | done (2026-11-14): supervised = SupCon on the residual adapter, regression = RnC on the MLP with noise views (E8) |
 | 6.2 | Class collapse | implemented (2026-11-13): `train_nc1`/`val_nc1`, `SupConLoss(spread_weight)` |
-| 6.3 | Run E8 | done (2026-11-14; `docs/BENCHMARK_SUPERVISED.md`) |
+| 6.3 | Run E8 | done (2026-11-14; `docs/benchmarks/BENCHMARK_SUPERVISED.md`) |
 | 7.1 | Run E4 | done (2026-11-17): 35 natural sets; 2 of 9 rules kept (hubness and antihubs, Euclidean kNN), the rest removed from the report (outcome below) |
 | 7.2 | Selection-based auto-configuration | done (2026-11-17): `strategy="select"` default; decisions and deviations in "WP 7.2 notes" |
 | 7.3 | Robustness and scaling | done (2026-11-18): input validation (`validate_embeddings` at every public entry point); E9 time and memory table in `docs/manual.md` §3.5 (`benchmarks/results/e9/REPORT.md`; all 48 cells finished) |
 | 7.4 | Documentation | done (2026-11-18; released as 0.6.0): README rewritten around the benchmark results; manual and skill brought to the 0.6.0 API (every code block executed); `docs/MIGRATION.md` extended to 0.6.0; E9 table added |
 | 8.1 | Branch, tags and distribution | done (2026-11-18): PR #1 merged into `main` (`c8ce3f6`, CI green); tags `v0.1.3` to `v0.6.0` pushed; no PyPI |
 | 8.2 | Selection on a subsample of rows | done (2026-11-19): `selection_max_rows=50_000`; criteria 1 and 2 met, criterion 3 missed at d = 128 by a fixed cost (see "WP 8.2 outcome") |
-| 8.3 | Benchmark the default selection (E10) | done (2026-11-19): never significantly worse than raw on 64 sets, better on 43; R1 kept on 60 sets (5 of 5 firing sets up); `docs/BENCHMARK_SELECTION.md` (see "WP 8.3 outcome") |
+| 8.3 | Benchmark the default selection (E10) | done (2026-11-19): never significantly worse than raw on 64 sets, better on 43; R1 kept on 60 sets (5 of 5 firing sets up); `docs/benchmarks/BENCHMARK_SELECTION.md` (see "WP 8.3 outcome") |
 | 8.4 | Diagnostics still uncalibrated | done (2026-11-19): flags, z intervals, DANCo fix; one residual near miss left unflagged (see "WP 8.4 outcome") |
 | 8.5 | Deprecations and 0.7.0 | done (2026-11-19; released as 0.7.0, tag `v0.7.0`): `suggested_k` / `suggested_sigma` removed; `docs/MIGRATION.md` extended to 0.7.0; R1 kept by WP 8.3, so nothing else removed |
 
@@ -943,7 +943,7 @@ The items come from "Open findings" in the WP 4.5 notes and from "Limitations an
 
 ### Phase 5 notes (2026-11-13)
 
-- **E6 stage 2 result** (`docs/BENCHMARK_E6_E7.md`, job 3077755 at `77bc902`, 18 GPU-hours).
+- **E6 stage 2 result** (`docs/benchmarks/BENCHMARK_E6_E7.md`, job 3077755 at `77bc902`, 18 GPU-hours).
   **WP 5.2 is rejected**: `mutual`, `nbrmask` and `decoupled` each have 1 win, 3 ties, 2 losses
   against `e6_linear`; `dropout` has 1 / 0 / 5 against `e6_residual`. The two-day attempt ends here;
   the options stay in the library, off by default. **WP 5.3 is accepted**: nested prefixes lose
@@ -1003,7 +1003,7 @@ The items come from "Open findings" in the WP 4.5 notes and from "Limitations an
 ### Phase 6 outcome (2026-11-14)
 
 - E8 ran in three jobs (3079012, 3079280, 3079354; about 27 GPU-hours). Tables in
-  `benchmarks/results/e8/REPORT.md`, summary and decisions in `docs/BENCHMARK_SUPERVISED.md`.
+  `benchmarks/results/e8/REPORT.md`, summary and decisions in `docs/benchmarks/BENCHMARK_SUPERVISED.md`.
 - **Supervised default: residual adapter** (decided with the user). The rule (wins on half the
   datasets) accepted the plain MLP (3 of 6) and not the residual adapter (2 of 6, no losses). A
   follow-up on 1-100 labels per class showed the MLP collapsing with few labels (6 losses of 12,
@@ -1294,7 +1294,7 @@ The code is on the local branch `wip/sphere-null` (not pushed).
 
 **Rerun plan (done 2026-11-16, see "Rerun" below).** The calibration tables of the first reports described the old code. Rerun
 `e3.py --part gauss`, `--part subsample` and the E5 detection half on Occidata, regenerate the
-reports, then write `docs/BENCHMARK_DIAGNOSTICS.md`. The ID part and E5 repair are unaffected
+reports, then write `docs/benchmarks/BENCHMARK_DIAGNOSTICS.md`. The ID part and E5 repair are unaffected
 (`report_e3.py` computes the scale deviation of the as-run `id` records from their stored
 curves). Both scripts skip existing cells, so the rerun needs `--overwrite`. In the E5
 signature table, "plateau lost" for `noise` is now `scale_dev` up. None of the four E5 base
@@ -1674,7 +1674,7 @@ WP 8.3 preview (same E10 runs, no criteria applied yet):
    - fit time;
    - Euclidean kNN and the probe.
 
-**Output.** `docs/BENCHMARK_SELECTION.md` and the README numbers.
+**Output.** `docs/benchmarks/BENCHMARK_SELECTION.md` and the README numbers.
 
 ### WP 8.3 outcome (2026-11-19)
 
@@ -1683,7 +1683,7 @@ Runs on Occidata at commit `4097cf2` (clean tree): feature extraction for the 25
 regression sets (3085634), all on `RTX8000Nodes`. The first 35 sets of E10 are the WP 8.2 runs
 (`99c82ec`). Every task completed except the three expected cosine reports below. Analysis:
 `benchmarks/results/e10/REPORT.md` and `benchmarks/results/e4x/REPORT.md`; user-facing summary:
-`docs/BENCHMARK_SELECTION.md`, with the numbers in the README, the manual and the skill.
+`docs/benchmarks/BENCHMARK_SELECTION.md`, with the numbers in the README, the manual and the skill.
 
 - **Pre-check passed.** The Euclidean report of `agnews_minilm` at `4097cf2` matched E4's: the
   `z_k_skewness` difference is 0, the largest of 62 scalar differences 1.2e-14 (job 3085628).
@@ -1710,7 +1710,7 @@ regression sets (3085634), all on `RTX8000Nodes`. The first 35 sets of E10 are t
   - Euclidean kNN: better on 41 of 60, worse on 0. Linear probe (C = 1): better on 21, **worse on
     5** (0.2 to 0.8 points: flowers102_convnext, pets_convnext, pets_dinov2, pets_vit with the
     refiner; stl10_vit with PCA). The selection's criterion is kNN; this is in the README, the
-    manual and `docs/BENCHMARK_SELECTION.md`.
+    manual and `docs/benchmarks/BENCHMARK_SELECTION.md`.
   - WP 8.2's caps on the extra sets too: 10,000 and 20,000 are never significantly worse (40 and
     11 binding sets); 5,000 is worse on 6 of 47.
 - **Finding: averaged GloVe gives zero rows.** A text with no in-vocabulary word averages to the
@@ -1782,7 +1782,7 @@ All design decisions in this plan are confirmed, including phase 8's (2026-11-18
 1. **Phases 4, 5 and 6 are done.** 0.4.0 (phase 5) was tagged locally on 2026-11-13; 0.5.0
    (phases 4 and 6, the user's decision, 2026-11-14) was tagged locally on 2026-11-17. Before the
    tag, both phase 4 exit criteria were checked: the subsample criterion holds after the WP 4.5
-   calibration fixes (`docs/BENCHMARK_DIAGNOSTICS.md`), and the WP 1.5 isotropic-Gaussian and
+   calibration fixes (`docs/benchmarks/BENCHMARK_DIAGNOSTICS.md`), and the WP 1.5 isotropic-Gaussian and
    independent-label tests (`tests/test_analysis_fixes.py`) pass, as does the full suite.
    The README, `docs/manual.md`, the skill (`skills/embedkit/`) and `examples/04` were brought
    in line with the 0.5.0 API; WP 7.4 still owns the full documentation pass and the migration

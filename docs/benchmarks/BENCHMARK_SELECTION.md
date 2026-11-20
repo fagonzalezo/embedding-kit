@@ -5,9 +5,11 @@ make an embedding worse, how often does it help, and what does it cost? The same
 the report's hubness recommendation on 25 more sets.
 
 Run on 2026-11-18 and 2026-11-19 on the OCCIDATA cluster (one RTX 8000 GPU per run, one seed). The
-acceptance criteria were fixed in `docs/IMPLEMENTATION_PLAN.md` before the runs. Generated tables:
-[`benchmarks/results/e10/REPORT.md`](../benchmarks/results/e10/REPORT.md) (selection) and
-[`benchmarks/results/e4x/REPORT.md`](../benchmarks/results/e4x/REPORT.md) (diagnostic rules).
+acceptance criteria were fixed before the runs (development records: `docs/dev/IMPLEMENTATION_PLAN.md`). Generated tables:
+[`benchmarks/results/e10/REPORT.md`](../../benchmarks/results/e10/REPORT.md) (selection) and
+[`benchmarks/results/e4x/REPORT.md`](../../benchmarks/results/e4x/REPORT.md) (diagnostic rules).
+Every data set, with its scores before and after and a discussion by modality and encoder:
+[`RESULTS_BY_DATASET.md`](RESULTS_BY_DATASET.md).
 
 ## Data
 

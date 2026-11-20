@@ -3,7 +3,7 @@
 > **Superseded (2026-11-11).** This report's conclusions rest on one seed, one dataset, and
 > configurations chosen by their **test** accuracy. Benchmarks E1 and E2 repeat the comparison with
 > selection on validation data, five seeds, seven datasets, and training-free baselines
-> ([`BENCHMARK_E1_E2.md`](BENCHMARK_E1_E2.md)). They find the following:
+> ([`BENCHMARK_E1_E2.md`](../benchmarks/BENCHMARK_E1_E2.md)). They find the following:
 > - No self-supervised configuration selected on validation beats PCA or PCA-whitening at the same dimension.
 > - On Pets, the refiner ties with PCA-64 (0.900 vs 0.901).
 > - No label-free statistic, k-skewness included, is a reliable stopping rule.

@@ -1,4 +1,4 @@
-"""Method grids for the benchmark experiments (``docs/CRITICAL_REVIEW.md`` section 5).
+"""Method grids for the benchmark experiments (``docs/dev/CRITICAL_REVIEW.md`` section 5).
 
 A method is a :class:`Method`: a name, a factory ``make(seed, dataset, device) -> transform``
 (an unfitted object with ``fit`` and ``transform``), and flags. Names encode the configuration,

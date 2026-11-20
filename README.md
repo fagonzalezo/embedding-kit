@@ -19,10 +19,10 @@ digits (raw pixels) and synthetic sets are also in E1 to E8.
 
 - **The self-supervised refiner did not beat PCA.** In E1 it won on none of 6 data sets against the
   best training-free baseline at the same dimension (3 ties, 3 losses; STS-B scored 0.036 lower,
-  without an interval) ([`docs/BENCHMARK_E1_E2.md`](docs/BENCHMARK_E1_E2.md)). In E6 and E7, against
+  without an interval) ([`docs/benchmarks/BENCHMARK_E1_E2.md`](docs/benchmarks/BENCHMARK_E1_E2.md)). In E6 and E7, against
   the better of PCA and PCA-whitening, it had 1 win, 4 ties and 1 loss with every training row, and
   lost on 4 of 7 data sets when fitted on 200 to 1,000 rows (Banking77 -0.052 kNN accuracy,
-  synthetic -0.251) ([`docs/BENCHMARK_E6_E7.md`](docs/BENCHMARK_E6_E7.md)). It costs about 100 times more than PCA
+  synthetic -0.251) ([`docs/benchmarks/BENCHMARK_E6_E7.md`](docs/benchmarks/BENCHMARK_E6_E7.md)). It costs about 100 times more than PCA
   ([`CHANGELOG.md`](CHANGELOG.md), 0.4.0). No label-free statistic tracked test accuracy during a
   run (E2).
 - **No training-free fix beat the raw embedding on most data sets.** In E4, on 35 natural
@@ -42,9 +42,9 @@ digits (raw pixels) and synthetic sets are also in E1 to E8.
   false pass is expected by chance. The report recommends nothing else.
 - **Hubness reduction helps little under cosine.** On the E1 sets the best change against raw cosine
   kNN was +0.005 (mutual proximity, CIFAR-100); it lost 0.009 on Pets and 0.028 on the synthetic set
-  (E1 addendum in `docs/BENCHMARK_E6_E7.md`). In E4 the best reduction was significantly better on 10
+  (E1 addendum in `docs/benchmarks/BENCHMARK_E6_E7.md`). In E4 the best reduction was significantly better on 10
   of 35 sets under cosine kNN and 14 of 35 under Euclidean kNN (median +0.4 points), worse on 6 and 3.
-- **The diagnostics have limits** ([`docs/BENCHMARK_DIAGNOSTICS.md`](docs/BENCHMARK_DIAGNOSTICS.md),
+- **The diagnostics have limits** ([`docs/benchmarks/BENCHMARK_DIAGNOSTICS.md`](docs/benchmarks/BENCHMARK_DIAGNOSTICS.md),
   E3 and E5). The k-NN intrinsic-dimension estimators read 14 to 29% low at ID 20, and their
   intervals cover sampling error only. Where the null model is not calibrated (rows normalised
   upstream, some statistics under cosine, neighbour consistency above d = 256) the report marks
@@ -52,7 +52,7 @@ digits (raw pixels) and synthetic sets are also in E1 to E8.
 
 **Where gains were measured: the supervised refiner**
 
-- With class labels (E8, [`docs/BENCHMARK_SUPERVISED.md`](docs/BENCHMARK_SUPERVISED.md)), SupCon on a
+- With class labels (E8, [`docs/benchmarks/BENCHMARK_SUPERVISED.md`](docs/benchmarks/BENCHMARK_SUPERVISED.md)), SupCon on a
   residual adapter had higher kNN accuracy than the raw embeddings on 4 of 6 sets and lower on none:
   CIFAR-100/DINOv2 0.879 to 0.900, Pets/ResNet-50 0.901 to 0.921, Banking77/MPNet 0.931 to 0.938,
   STL-10/CLIP 0.983 to 0.986, digits tied (0.981 against 0.978). The gain on real data is +0.003 to
@@ -64,7 +64,9 @@ digits (raw pixels) and synthetic sets are also in E1 to E8.
 - With continuous targets, Rank-N-Contrast on an MLP beat raw and PCA on ridge R^2 on all 4 sets
   (+0.023 to +0.574 against raw). With 200 or 1,000 training rows it lost to raw on 6 of 8 sets.
 
-**The default selection with labels** (E10, [`docs/BENCHMARK_SELECTION.md`](docs/BENCHMARK_SELECTION.md))
+**The default selection with labels** (E10, [`docs/benchmarks/BENCHMARK_SELECTION.md`](docs/benchmarks/BENCHMARK_SELECTION.md);
+every data set, with its numbers before and after, in
+[`docs/benchmarks/RESULTS_BY_DATASET.md`](docs/benchmarks/RESULTS_BY_DATASET.md))
 
 - On 64 sets (60 classification sets from 7 text and 5 image encoders, and E8's 4 regression sets),
   `EmbedKit().fit(X, y)` was significantly worse than the unchanged input on none and significantly
@@ -211,7 +213,9 @@ More patterns (low-level `Trainer`, custom augmentations, pipelines) are in
 | [`CHANGELOG.md`](CHANGELOG.md) | Changes with their reasons and measurements |
 | [`skills/embedkit/references/metric_guide.md`](skills/embedkit/references/metric_guide.md) | Per-metric reading, and which statistics the report judges |
 | [`skills/embedkit/references/workflow_guide.md`](skills/embedkit/references/workflow_guide.md) | HuggingFace, PyTorch loops, scikit-learn pipelines, retrieval, ONNX export |
-| `docs/BENCHMARK_*.md` | Benchmark outcomes: [E1, E2](docs/BENCHMARK_E1_E2.md), [E6, E7](docs/BENCHMARK_E6_E7.md), [E8](docs/BENCHMARK_SUPERVISED.md), [E3, E5](docs/BENCHMARK_DIAGNOSTICS.md), [E10](docs/BENCHMARK_SELECTION.md); E4 in [`benchmarks/results/e4/REPORT.md`](benchmarks/results/e4/REPORT.md) |
+| [`docs/benchmarks/RESULTS_BY_DATASET.md`](docs/benchmarks/RESULTS_BY_DATASET.md) | Every benchmark data set, what the default picked and its scores before and after |
+| `docs/benchmarks/` | Benchmark outcomes: [E1, E2](docs/benchmarks/BENCHMARK_E1_E2.md), [E6, E7](docs/benchmarks/BENCHMARK_E6_E7.md), [E8](docs/benchmarks/BENCHMARK_SUPERVISED.md), [E3, E5](docs/benchmarks/BENCHMARK_DIAGNOSTICS.md), [E10](docs/benchmarks/BENCHMARK_SELECTION.md); E4 in [`benchmarks/results/e4/REPORT.md`](benchmarks/results/e4/REPORT.md) |
+| [`docs/dev/`](docs/dev/README.md) | Development records of the 0.1.2 to 0.7.0 work (review, plan); not maintained |
 
 ## Claude Code skill
 

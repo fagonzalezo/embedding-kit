@@ -3,7 +3,7 @@
     python benchmarks/report_e10.py [--results benchmarks/results] [--out benchmarks/results/e10]
 
 Reads ``<results>/e10/<set>/<method>.json`` (``run.py --experiment e10``, test stage) and applies
-the criteria fixed in ``docs/IMPLEMENTATION_PLAN.md`` ("WP 8.2 design and criteria, fixed
+the criteria fixed in ``docs/dev/IMPLEMENTATION_PLAN.md`` ("WP 8.2 design and criteria, fixed
 before the runs"):
 
 * WP 8.2, choice quality. ``select-cap<c>`` against the selection on all the rows (``select-all``
@@ -216,7 +216,7 @@ def render(df: pd.DataFrame, oracle: pd.DataFrame, data: dict) -> str:
            f"{len(data)} sets. Test stage, one seed. Primary outcome: test cosine 10-NN accuracy "
            "(kNN R^2 on regression sets); "
            "intervals: paired bootstrap over test points (2,000 resamples, 95%). Criteria: "
-           "`docs/IMPLEMENTATION_PLAN.md`, \"WP 8.2 design and criteria\".", "",
+           "`docs/dev/IMPLEMENTATION_PLAN.md`, \"WP 8.2 design and criteria\".", "",
            "## WP 8.2 verdicts (primary outcome)", "", *verdicts(df), ""]
     for c in CAPS:
         out += [f"### Cap {c:,} against selection on all rows", "",

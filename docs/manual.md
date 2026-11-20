@@ -6,7 +6,7 @@ EmbedKit is a Python library for analyzing and improving ML embedding spaces. It
 - **Improvement** — a transform chosen by validation: the input centred and L2-normalised without labels; with labels, the best of the input, centring, PCA and a supervised contrastive refiner, kept only if it is significantly better than the input on held-out rows. A contrastive refiner, training-free baselines and hubness-reducing neighbour search are also available directly.
 
 The benchmarks behind these defaults, and where the library does not help, are summarised in the
-README (`docs/BENCHMARK_*.md` and `benchmarks/results/e4/REPORT.md` have the tables).
+README (`docs/benchmarks/` and `benchmarks/results/e4/REPORT.md` have the tables).
 
 ```python
 import numpy as np
@@ -108,7 +108,7 @@ print(f"Robin Hood idx: {result.robinhood_index:.3f}")
 print(f"Antihub ratio:  {result.antihub_ratio:.3f}")
 ```
 
-**The recommendation.** When `report.calibration["k_skewness"]` or `["antihub_ratio"]` has z above `z_threshold` under `metric="euclidean"`, the report recommends a hubness-reducing neighbour search (`embedkit.hubness_reduction`, section 2.7). In E4 the rule for k-skewness fired on only 3 of 35 sets (a significant gain on all 3; Spearman 0.36, 95% interval 0.13 to 0.65 across source data sets), and the one for antihubs on 8 (a significant gain on 5; 0.32, 0.05 to 0.58). Retested on 60 sets with 5 more encoders (E10, `docs/BENCHMARK_SELECTION.md`), the k-skewness rule fired on 5 (a significant gain on all 5; 0.48, 0.30 to 0.71) and the antihub rule on 22 (19; 0.53, 0.29 to 0.74). Under cosine neither predicted a gain, so the report recommends nothing there. The 23 primary tests of E4 had no multiplicity correction; about one false pass is expected by chance.
+**The recommendation.** When `report.calibration["k_skewness"]` or `["antihub_ratio"]` has z above `z_threshold` under `metric="euclidean"`, the report recommends a hubness-reducing neighbour search (`embedkit.hubness_reduction`, section 2.7). In E4 the rule for k-skewness fired on only 3 of 35 sets (a significant gain on all 3; Spearman 0.36, 95% interval 0.13 to 0.65 across source data sets), and the one for antihubs on 8 (a significant gain on 5; 0.32, 0.05 to 0.58). Retested on 60 sets with 5 more encoders (E10, `docs/benchmarks/BENCHMARK_SELECTION.md`), the k-skewness rule fired on 5 (a significant gain on all 5; 0.48, 0.30 to 0.71) and the antihub rule on 22 (19; 0.53, 0.29 to 0.74). Under cosine neither predicted a gain, so the report recommends nothing there. The 23 primary tests of E4 had no multiplicity correction; about one false pass is expected by chance.
 
 ---
 
@@ -254,7 +254,7 @@ print(f"lambda_1/lambda_k: {result.top_k_eigen_ratio:.3g}")
 
 `EmbedKitAnalyzer` runs all seven analyzers in a single call and assembles the results into an `EmbedKitReport`. The report also holds a null-model calibration, a list of **properties** (descriptive statements about the spectrum, the dominant coordinates, the mean direction and, when calibrated, uniformity against the null; no thresholds) and a list of **recommendations** (actions). Only rules that experiment E4 found to predict the gain of their fix on 35 natural classification sets make a recommendation: more hubness or more antihubs than the null, under `metric="euclidean"`, each pointing to a hubness-reducing neighbour search (`embedkit.hubness_reduction`). E4 tested 9 rules; 7 failed. Distance concentration, neighbour consistency and ID/D are still computed and calibrated but raise no action; nor does anything under cosine (`benchmarks/results/e4/REPORT.md`). When no rule fires the report says "No recommendation: no statistic with a validated rule is beyond its null range.", which does not mean no fix can help, only that the report cannot tell which one would. Everything else in the report is descriptive.
 
-**Null-model calibration** (`calibrate=True`, the default). k-skewness, the antihub ratio, `distance_cv`, neighbour consistency and uniformity depend on n, d, k and the covariance spectrum, so a fixed threshold means something different on every dataset. The analyzer recomputes these five statistics on `n_null_draws` (default 20) data sets drawn from a null model of the same size as a subsample of `n_calibration` rows (default 2,000), with the same metric. The k of the calibration (`report.calibration_k`) is `k` when given, and otherwise the default rule applied to the calibration rows (22 for 2,000 rows), so that the z-scores do not change with the size of the data. Rows that arrive with a common norm (normalised upstream) are compared with null draws normalised to the same norm. `report.calibration[name]` holds the observed value, the null mean and standard deviation, the z-score, `z_interval` (a 95% interval for z that reflects the limited number of null draws: with 20 draws, a z between 3 and 4 can land on either side of 3 when the analysis is rerun, and a recommendation whose interval reaches below the threshold says so; raise `n_null_draws` to settle such a reading) and `uncalibrated` (`None`, or the reason the null is not calibrated for that statistic here; `.calibrated` is the boolean). `report.n_outside_null` counts the calibrated statistics with `|z| > z_threshold` (default 3); it replaces the old `severity`. The default `null_model="gaussian"` is a Gaussian with the data's mean (shrunk so that its squared norm is unbiased) and a covariance whose trace and `tr(Σ²)` match unbiased estimates from the data (`embedkit.analysis.null`); `"permuted"` permutes each column independently. The recommendations come from the z-scores (k-skewness and antihub ratio, Euclidean only), and with `calibrate=False` none is made. The null model is not reliable everywhere: on data drawn from the null itself, some statistics fall outside ±3 too often in some settings (`docs/BENCHMARK_DIAGNOSTICS.md`). The report marks those statistics as uncalibrated, with the reason in `uncalibrated`:
+**Null-model calibration** (`calibrate=True`, the default). k-skewness, the antihub ratio, `distance_cv`, neighbour consistency and uniformity depend on n, d, k and the covariance spectrum, so a fixed threshold means something different on every dataset. The analyzer recomputes these five statistics on `n_null_draws` (default 20) data sets drawn from a null model of the same size as a subsample of `n_calibration` rows (default 2,000), with the same metric. The k of the calibration (`report.calibration_k`) is `k` when given, and otherwise the default rule applied to the calibration rows (22 for 2,000 rows), so that the z-scores do not change with the size of the data. Rows that arrive with a common norm (normalised upstream) are compared with null draws normalised to the same norm. `report.calibration[name]` holds the observed value, the null mean and standard deviation, the z-score, `z_interval` (a 95% interval for z that reflects the limited number of null draws: with 20 draws, a z between 3 and 4 can land on either side of 3 when the analysis is rerun, and a recommendation whose interval reaches below the threshold says so; raise `n_null_draws` to settle such a reading) and `uncalibrated` (`None`, or the reason the null is not calibrated for that statistic here; `.calibrated` is the boolean). `report.n_outside_null` counts the calibrated statistics with `|z| > z_threshold` (default 3); it replaces the old `severity`. The default `null_model="gaussian"` is a Gaussian with the data's mean (shrunk so that its squared norm is unbiased) and a covariance whose trace and `tr(Σ²)` match unbiased estimates from the data (`embedkit.analysis.null`); `"permuted"` permutes each column independently. The recommendations come from the z-scores (k-skewness and antihub ratio, Euclidean only), and with `calibrate=False` none is made. The null model is not reliable everywhere: on data drawn from the null itself, some statistics fall outside ±3 too often in some settings (`docs/benchmarks/BENCHMARK_DIAGNOSTICS.md`). The report marks those statistics as uncalibrated, with the reason in `uncalibrated`:
 
 - rows normalised upstream (all rows with the same norm): the antihub ratio, `distance_cv` and uniformity, because with an uneven spectrum the null on the sphere is more isotropic than the data;
 - `metric="cosine"`: k-skewness and the antihub ratio;
@@ -305,7 +305,7 @@ df = report.to_dataframe()
 
 **Architecture:** `n_layers` repetitions of `Linear → BatchNorm → ReLU → Dropout`, followed by a final `Linear(hidden_dim, target_dim)`. When `normalize_output=True` (default), the output is L2-normalized to the unit sphere, which is required by cosine-similarity-based losses.
 
-**Residual and linear variants** (`architecture="residual"` or `"linear"`): `z = W x̃ + g(x̃)` (or `z = W x̃`), where `x̃` is the input standardised with fixed per-feature statistics and `g` is the MLP above with its output layer initialised to zero. `Trainer.fit` calls `model.initialize_from_data(X_train)`, which sets the statistics and initialises `W` from the top `target_dim` principal directions, so that before training the output equals `PCAReduce(target_dim)` followed by L2 normalisation. Training starts from PCA instead of a random map. The self-supervised refiner uses `"linear"` since benchmark E6 (`docs/BENCHMARK_E6_E7.md`): both variants beat `"mlp"` on 5 of the 6 datasets with an interval and lost on none, and `"linear"` was at least as good as `"residual"` on 5 of 6; the supervised refiner uses `"residual"` and the regression one `"mlp"` (E8, section 2.5). `EmbeddingRefiner` itself defaults to `"linear"`; bundles saved without an `architecture` entry load as `"mlp"`.
+**Residual and linear variants** (`architecture="residual"` or `"linear"`): `z = W x̃ + g(x̃)` (or `z = W x̃`), where `x̃` is the input standardised with fixed per-feature statistics and `g` is the MLP above with its output layer initialised to zero. `Trainer.fit` calls `model.initialize_from_data(X_train)`, which sets the statistics and initialises `W` from the top `target_dim` principal directions, so that before training the output equals `PCAReduce(target_dim)` followed by L2 normalisation. Training starts from PCA instead of a random map. The self-supervised refiner uses `"linear"` since benchmark E6 (`docs/benchmarks/BENCHMARK_E6_E7.md`): both variants beat `"mlp"` on 5 of the 6 datasets with an interval and lost on none, and `"linear"` was at least as good as `"residual"` on 5 of 6; the supervised refiner uses `"residual"` and the regression one `"mlp"` (E8, section 2.5). `EmbeddingRefiner` itself defaults to `"linear"`; bundles saved without an `architecture` entry load as `"mlp"`.
 
 **Class:** `EmbeddingRefiner(input_dim, target_dim, hidden_dim=256, n_layers=2, dropout=0.1, normalize_output=True, architecture="linear")`
 
@@ -602,7 +602,7 @@ ek.fit(X)
 Z32 = ek.transform(X, dim=32)   # first 32 coordinates, renormalised
 ```
 
-`EmbedKit(method="refiner", nested_dims=...)` (or `strategy="fixed"`) does the wrapping for the default loss: `"auto"` nests the powers of two from 32 below `target_dim`, a sequence gives the dims. In E6 (`docs/BENCHMARK_E6_E7.md`) the prefixes of one model at 256 matched `linear` models trained separately at 32, 64 and 128, at about 1.5 times the training cost of one of them. Without a refiner, PCA prefixes are nested by construction (`EmbedKit(strategy="fixed", target_dim=128).fit(X).transform(X, dim=32)`).
+`EmbedKit(method="refiner", nested_dims=...)` (or `strategy="fixed"`) does the wrapping for the default loss: `"auto"` nests the powers of two from 32 below `target_dim`, a sequence gives the dims. In E6 (`docs/benchmarks/BENCHMARK_E6_E7.md`) the prefixes of one model at 256 matched `linear` models trained separately at 32, 64 and 128, at about 1.5 times the training cost of one of them. Without a refiner, PCA prefixes are nested by construction (`EmbedKit(strategy="fixed", target_dim=128).fit(X).transform(X, dim=32)`).
 
 ```python
 from embedkit import EmbedKit
@@ -682,7 +682,7 @@ scaled to unit L2 norm (`CenterNormalize`); nothing is trained and no analysis r
 (`analysis_report` is `None`). The reasons:
 
 - No label-free score can say whether a transform helps. `knn_overlap`, which ranked refiner runs
-  against each other in E2, gives the unchanged input the top score (`docs/BENCHMARK_E1_E2.md`).
+  against each other in E2, gives the unchanged input the top score (`docs/benchmarks/BENCHMARK_E1_E2.md`).
 - In E4, on 35 natural classification sets, no training-free fix beat the raw embedding
   significantly on more than 16 sets. Centring plus L2 normalisation was the most consistent small
   gain: Euclidean kNN 16 sets up and 1 down, median +0.3 points; cosine kNN 5 up and 4 down
@@ -702,7 +702,7 @@ scaled to unit L2 norm (`CenterNormalize`); nothing is trained and no analysis r
 | Large inputs | With more than `selection_max_rows` rows (default 50,000), the split, the candidates and the scores use a random subsample of that many rows, stratified by class; only the winner is fitted on all the rows. `None` selects on all the rows (the 0.6.0 behaviour). |
 
 Most gains in E4 were under one point, so the interval keeps noise from choosing a transform. In
-E10 (`docs/BENCHMARK_SELECTION.md`), on 60 natural classification sets and 4 regression sets, the
+E10 (`docs/benchmarks/BENCHMARK_SELECTION.md`), on 60 natural classification sets and 4 regression sets, the
 selection was significantly worse than the input on none and better on 43 (+0.8 to +15.1 points
 of cosine kNN accuracy on the classification sets). Against the candidate that was best on the
 test set in hindsight it lost nothing on 50 sets and at most 1.2 points. It chooses by kNN: a
@@ -750,8 +750,8 @@ all rows to get it, and keeps it in `analysis_report`. No benchmark supports the
 to this dimension lost accuracy on 32 of 35 E4 sets, so pass an explicit `target_dim` when you
 choose `strategy="fixed"`.
 
-Why PCA rather than a refiner without labels: in E1, E6 and E7 (`docs/BENCHMARK_E1_E2.md`,
-`docs/BENCHMARK_E6_E7.md`) the self-supervised refiner never beat the better of PCA and PCA-whitening
+Why PCA rather than a refiner without labels: in E1, E6 and E7 (`docs/benchmarks/BENCHMARK_E1_E2.md`,
+`docs/benchmarks/BENCHMARK_E6_E7.md`) the self-supervised refiner never beat the better of PCA and PCA-whitening
 chosen on validation (with all training rows: 1 win, 4 ties, 1 loss over 6 datasets), lost to them
 when fitted on fewer than a few thousand rows, and cost about 100 times more. Plain PCA rather than
 PCA-whitening because choosing between the two needs labels, and on real data plain PCA was never
@@ -774,7 +774,7 @@ and does not stop early: in E2 no label-free statistic tracked downstream accura
 `early_stopping_patience` counts evaluations, every `eval_every` epochs; with early stopping
 `val_split` defaults to 0.1 of the rows, held out from training, and without it to 0.
 
-Why these defaults: benchmark E8 (`docs/BENCHMARK_SUPERVISED.md`). With class labels, the residual
+Why these defaults: benchmark E8 (`docs/benchmarks/BENCHMARK_SUPERVISED.md`). With class labels, the residual
 adapter (a PCA-initialised linear map plus a zero-initialised MLP) matched the plain MLP on full
 training sets and did not collapse with 1-5 labels per class as the MLP did. Against the raw
 embeddings it had higher kNN accuracy on 4 of 6 datasets and lower on none, by +0.003 to +0.021 on

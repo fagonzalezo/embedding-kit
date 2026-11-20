@@ -2,9 +2,9 @@
 
 ## 0.7.0 (unreleased)
 
-Phase 8 of `docs/IMPLEMENTATION_PLAN.md`: the branch merged and the tags pushed (WP 8.1),
+Phase 8 of `docs/dev/IMPLEMENTATION_PLAN.md`: the branch merged and the tags pushed (WP 8.1),
 selection on a subsample of rows (WP 8.2), the benchmark of the default selection on 64 sets with
-the hubness rule retested on 60 (WP 8.3, `docs/BENCHMARK_SELECTION.md`), the statistics the null
+the hubness rule retested on 60 (WP 8.3, `docs/benchmarks/BENCHMARK_SELECTION.md`), the statistics the null
 model does not calibrate flagged (WP 8.4), and the 0.6.0 deprecations removed (WP 8.5).
 `docs/MIGRATION.md` now runs from 0.1.2 to 0.7.0.
 
@@ -58,14 +58,14 @@ model does not calibrate flagged (WP 8.4), and the 0.6.0 deprecations removed (W
   on E8's four regression sets (`E10_REGRESSION_SETS`, `mode="regression"`, kNN R^2);
   `cluster/e4x_precheck.slurm.sh`.
 - `benchmarks/check_e3_flags.py`: the WP 8.4 acceptance check on the E3 null cells.
-- `docs/BENCHMARK_SELECTION.md` (WP 8.3): E10 on 64 sets. The default selection is
+- `docs/benchmarks/BENCHMARK_SELECTION.md` (WP 8.3): E10 on 64 sets. The default selection is
   significantly worse than the input on none and better on 43; a linear probe on its output is
   worse on 5. The hubness recommendation (R1) passes WP 7.1's rule again on 60 sets and stays.
   E4's rule analysis on the 60 sets is in `benchmarks/results/e4x/`.
 
 ## 0.6.0 (unreleased)
 
-Phase 7 of `docs/IMPLEMENTATION_PLAN.md`: experiment E4 (which diagnostics predict which fix, on
+Phase 7 of `docs/dev/IMPLEMENTATION_PLAN.md`: experiment E4 (which diagnostics predict which fix, on
 35 natural sets) and the recommendations it left, a selection-based `EmbedKit` default, input
 validation and the E9 time and memory table, and the documentation pass (README, manual, skill,
 `docs/MIGRATION.md` from 0.1.2 to 0.6.0).
@@ -173,10 +173,10 @@ validation and the E9 time and memory table, and the documentation pass (README,
 
 ## 0.5.0 (unreleased)
 
-Phase 6 of `docs/IMPLEMENTATION_PLAN.md`: supervised and regression modes. Phase 4, WP 4.1:
+Phase 6 of `docs/dev/IMPLEMENTATION_PLAN.md`: supervised and regression modes. Phase 4, WP 4.1:
 null-calibrated statistics in the report; WP 4.2: intrinsic dimension per estimator; WP 4.3:
 isotropy and spectrum statistics, reported as properties; WP 4.4: one metric in every analyzer
-and the centred kernel spectrum; WP 4.5: benchmarks E3 and E5 (`docs/BENCHMARK_DIAGNOSTICS.md`)
+and the centred kernel spectrum; WP 4.5: benchmarks E3 and E5 (`docs/benchmarks/BENCHMARK_DIAGNOSTICS.md`)
 and the calibration fixes they led to.
 
 ### Breaking changes since 0.4.0 (summary; details below)
@@ -226,7 +226,7 @@ and the calibration fixes they led to.
   stability of six real embeddings) and E5 (`benchmarks/e5.py` and `run.py --experiment e5`:
   six kinds of controlled damage via `bench_datasets.damage`, detection and training-free
   repair), with `report_e3.py`, `report_e5.py`, Slurm scripts and
-  `docs/BENCHMARK_DIAGNOSTICS.md`. The phase 4 exit criterion holds: on all six real data sets
+  `docs/benchmarks/BENCHMARK_DIAGNOSTICS.md`. The phase 4 exit criterion holds: on all six real data sets
   the report reads the same at 2,000 and 20,000 rows.
 
 ### Changed (WP 4.4)
@@ -324,7 +324,7 @@ and the calibration fixes they led to.
 - **Supervised `EmbedKit` trains the residual adapter** (`architecture="residual"`: the
   PCA-initialised linear map plus a zero-initialised MLP). In E8 it ties the plain MLP on full
   training sets and, unlike it, does not collapse with 1-5 labels per class
-  (`docs/BENCHMARK_SUPERVISED.md`).
+  (`docs/benchmarks/BENCHMARK_SUPERVISED.md`).
 - **Regression `EmbedKit` trains the plain MLP on Gaussian-noise views**
   (`architecture="mlp"`, `GaussianNoise(0.05)`, relative to the per-feature scale). In E8 it beats
   the linear RnC refiner, the raw embeddings and PCA on all 4 regression sets. `fit` warns with
@@ -350,7 +350,7 @@ and the calibration fixes they led to.
 - `knn_regression_r2` and the `knn_r2` protocol metric (10-NN regression); the regression ridge probe
   returns per-point terms `1 - e_i^2 / var(y_test)` (mean = R^2), so `compare` bootstraps it.
 - Benchmark E8 (`run.py --experiment e8`, `report_e8.py`, `cluster/e8.slurm.sh`,
-  `docs/BENCHMARK_SUPERVISED.md`): supervised arms
+  `docs/benchmarks/BENCHMARK_SUPERVISED.md`): supervised arms
   against the new default and the previous one, LDA, label noise, superclass fitting, label
   efficiency (`<name>__lpc<k>`), and regression arms (the 0.1.2 RnC in `legacy_losses.py`) on
   `synthetic_regression[_ties]`, `yelp_mpnet` and `fluorescence_esm2`; residual and MLP arms in
@@ -372,9 +372,9 @@ and the calibration fixes they led to.
 
 ## 0.4.0 (unreleased)
 
-Phases 3 and 5 of `docs/IMPLEMENTATION_PLAN.md`: benchmarks E1 and E2 and the decision gate
-(`docs/BENCHMARK_E1_E2.md`), then the refiner ablation E6 and the learning curves E7
-(`docs/BENCHMARK_E6_E7.md`).
+Phases 3 and 5 of `docs/dev/IMPLEMENTATION_PLAN.md`: benchmarks E1 and E2 and the decision gate
+(`docs/benchmarks/BENCHMARK_E1_E2.md`), then the refiner ablation E6 and the learning curves E7
+(`docs/benchmarks/BENCHMARK_E6_E7.md`).
 
 ### Changed
 - **`EmbedKit(mode="self_supervised")` now returns PCA, not a trained refiner** (gate outcome C of the
@@ -432,7 +432,7 @@ Phases 3 and 5 of `docs/IMPLEMENTATION_PLAN.md`: benchmarks E1 and E2 and the de
   acceptance rule; `--shard I/N` splits a dataset's grid between jobs. Stage WP 5.1 results are in
   `benchmarks/results/e6/`. Stage WP 5.2/5.3 adds the arms `mutual`, `nbrmask`, `decoupled`,
   `dropout` (on `residual`, which has dropout) and `matryoshka` (one model at min(256, d) read at each
-  prefix), at fixed d. Results in `docs/BENCHMARK_E6_E7.md`: no WP 5.2 arm is accepted, WP 5.3 is
+  prefix), at fixed d. Results in `docs/benchmarks/BENCHMARK_E6_E7.md`: no WP 5.2 arm is accepted, WP 5.3 is
   non-inferior. `report_e6.py` adds the per-d prefix table and defaults to `--reference e6_linear`.
 - E1 gains the hubness-reduction methods `raw+ls`, `raw+mp`, `raw+csls` and `raw+dsl`, scored on the
   kNN-based metrics only (`Method.hubness_reduction`, `Method.metrics`);
@@ -448,7 +448,7 @@ Phases 3 and 5 of `docs/IMPLEMENTATION_PLAN.md`: benchmarks E1 and E2 and the de
 
 ## 0.2.0 (unreleased)
 
-Phase 2 of `docs/IMPLEMENTATION_PLAN.md`: any transform, trained or not, can be scored with one call on
+Phase 2 of `docs/dev/IMPLEMENTATION_PLAN.md`: any transform, trained or not, can be scored with one call on
 held-out data, against training-free baselines, with a benchmark harness that runs unchanged on a laptop
 and on the cluster.
 
@@ -505,8 +505,8 @@ and on the cluster.
 
 ## 0.1.3 (2026-11-10)
 
-This release fixes defects D1 to D27 of `docs/CRITICAL_REVIEW.md`: every defect rated A or B, and the
-C-rated ones scheduled for phase 1 of `docs/IMPLEMENTATION_PLAN.md` (D28 to D30 come later). Defect numbers refer to section 2 of that review. Several fixes change results or
+This release fixes defects D1 to D27 of `docs/dev/CRITICAL_REVIEW.md`: every defect rated A or B, and the
+C-rated ones scheduled for phase 1 of `docs/dev/IMPLEMENTATION_PLAN.md` (D28 to D30 come later). Defect numbers refer to section 2 of that review. Several fixes change results or
 the public API; the **Breaking** items list what callers must change. Each fix has a regression test
 that fails on 0.1.2.
 

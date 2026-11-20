@@ -1,7 +1,14 @@
 # Benchmarks E1 and E2: does the self-supervised refiner help, and can a label-free statistic tell?
 
-Phase 3 of `docs/IMPLEMENTATION_PLAN.md`, following experiments E1 and E2 of `docs/CRITICAL_REVIEW.md`
-(section 5). Run on 2026-11-11 on the OCCIDATA cluster.
+E1 compares the self-supervised refiner of EmbedKit 0.2.0 with training-free baselines (PCA,
+whitening, all-but-the-top and others) on seven datasets. E2 asks whether any label-free statistic
+the trainer can monitor tracks test accuracy, during a run or across configurations. Both ran on
+2026-11-11 on the OCCIDATA cluster. The decision rule ("the gate", below) was fixed before the runs;
+the design is in the development records (`docs/dev/CRITICAL_REVIEW.md`, section 5).
+
+What changed in the library as a result (0.4.0): self-supervised `EmbedKit` returns PCA instead of a
+trained refiner, and early stopping is off by default. Since 0.6.0 the default without labels is
+centring + L2 normalisation (see `docs/benchmarks/BENCHMARK_SELECTION.md` and the manual).
 
 ## Outcome
 
@@ -14,7 +21,7 @@ Phase 3 of `docs/IMPLEMENTATION_PLAN.md`, following experiments E1 and E2 of `do
   - Its trustworthiness was below PCA's at the same dimension on six of the seven.
   - So it is neither an improvement nor a better compressor.
 - **E1, supervised mode.** The supervised refiner is the strongest method on CIFAR-100, Pets and the
-  synthetic set, with intervals above 0. It is unaffected by the gate.
+  synthetic set, with intervals above 0. The gate does not concern it.
 - **E2. No label-free statistic tracks test accuracy over the epochs of a run.** No monitor has a median
   within-run Spearman correlation above 0.5 on more than one of four datasets.
   - The held-out contrastive loss is anti-correlated with test accuracy on all four: accuracy falls
@@ -25,16 +32,14 @@ Phase 3 of `docs/IMPLEMENTATION_PLAN.md`, following experiments E1 and E2 of `do
   label-free signal on the three real datasets: across-run ρ is 0.72 to 0.79, and its first choice is
   at most 0.002 below the best. It fails on the synthetic set (ρ = −0.03).
   - Uniformity, the trainer's default monitor, ranks the Pets configurations backwards (ρ = −0.60).
-  - The k-skewness stopping rule claimed in `docs/UNSUPERVISED_REFINEMENT_REPORT.md` is not supported:
+  - The k-skewness stopping rule claimed in `docs/dev/UNSUPERVISED_REFINEMENT_REPORT.md` is not supported:
     median within-run ρ is between −0.03 and +0.50.
-- **Gate decision (confirmed by the user, 2026-11-11): outcome C, with WP 5.3 added.**
-  - Phase 5 consists of:
-    - WP 5.1 (residual adapter initialised at PCA);
-    - one two-day attempt at WP 5.2 (better positives and negatives);
-    - WP 5.3 (Matryoshka output), kept because nested prefixes are useful downstream.
-  - If WP 5.2 does not produce wins, `EmbedKit(mode="self_supervised")` returns the best training-free
-    baseline.
-  - Early stopping is now off by default: `EmbedKit` trains for a fixed epoch budget (see the changelog).
+- **Decision: outcome C** (the refiner loses to the baselines on most datasets).
+  - The refiner work that followed was limited to a residual adapter initialised at PCA, one attempt
+    at better positives and negatives, and nested (Matryoshka) output; E6 and E7 judged them
+    (`docs/benchmarks/BENCHMARK_E6_E7.md`). None produced wins, so `EmbedKit(mode="self_supervised")`
+    returns PCA.
+  - Early stopping is off by default: `EmbedKit` trains for a fixed epoch budget (see the changelog).
 
 ## Datasets
 
@@ -58,7 +63,7 @@ The cluster extracted the features. Model and dataset revisions are recorded in 
   - on the whole training split, and scored on the test split.
   - Every hyperparameter is chosen on the validation score of the primary metric, never on test:
     output dimension, number of removed components, and which fixed d for `EmbedKit`. The pilot in
-    `docs/UNSUPERVISED_REFINEMENT_REPORT.md` chose on test accuracy.
+    `docs/dev/UNSUPERVISED_REFINEMENT_REPORT.md` chose on test accuracy.
   - The primary metric is kNN accuracy (cosine, k = 5) for labelled sets and Spearman correlation for
     STS-B.
 - **Seeds.** Five for stochastic methods (`EmbedKit`, random projection); one for deterministic ones.
@@ -166,8 +171,8 @@ run's best test kNN minus the test kNN at that epoch.
 | validation kNN accuracy (labels) | +0.20 / 0.003 | +0.52 / 0.003 | +0.42 / 0.002 | +0.49 / 0.006 |
 | no stopping (last epoch) | — / 0.012 | — / 0.010 | — / 0.005 | — / 0.033 |
 
-- No label-free monitor reaches a median ρ of 0.5 on more than one dataset. By the plan's rule,
-  early stopping is disabled by default.
+- No label-free monitor reaches a median ρ of 0.5 on more than one dataset. By the rule fixed before
+  the runs, early stopping is disabled by default.
 - The regrets show why the decision costs little:
   - On the real datasets, stopping at the best of any label-free monitor saves at most 0.007 over
     training to the end.
@@ -196,9 +201,9 @@ configuration the monitor ranks first.
 On the real embeddings, kNN overlap with the input chooses well. It amounts to "change the
 neighbourhoods as little as possible", which is consistent with E1: the raw embedding is hard to
 beat. On the synthetic set, the input neighbourhoods are polluted by the nuisance directions, so
-preserving them is the wrong goal there. Phase 7's selection-based auto-configuration (WP 7.2) can
-use kNN overlap as its label-free criterion. Labelled validation accuracy is better wherever labels
-exist.
+preserving them is the wrong goal there. Labelled validation accuracy is better wherever labels
+exist. (The selection-based default of 0.6.0 does not use kNN overlap: it gives the unchanged input
+the top score, so it cannot tell whether a transform helps.)
 
 ## Limitations
 
@@ -210,9 +215,9 @@ exist.
   k-skewness, with 10% of the rows held out. In E2, stopping at k-skewness's best epoch lost 0.005
   to 0.009 on the real sets, about as much as training to the end. So the new default (no
   stopping, every row used) is not expected to turn the ties into wins. The losses on synthetic and
-  STS-B are far larger than this margin. E6 (WP 5.6) reruns the default with the new settings.
-- **Limited grid.** E2's configurations are drawn from the existing refiner. Phase 5 changes the
-  architecture (residual adapter initialised at PCA), so its runs should log the same monitors.
+  STS-B are far larger than this margin. E6 reruns the default with the new settings.
+- **Limited grid.** E2's configurations are drawn from the 0.2.0 refiner. The residual and linear
+  refiners of 0.4.0, initialised at PCA, were not part of it.
 - **Dimensions without baselines.** The baselines do not cover the default `EmbedKit` dimensions
   (11 to 28).
 

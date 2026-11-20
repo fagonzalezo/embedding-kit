@@ -4,7 +4,7 @@
 
 Reads ``<results>/{id,gauss,subsample}/*.json`` (whatever parts exist) and writes, next to
 them, ``summary_id.csv``, ``summary_gauss.csv``, ``summary_subsample.csv`` and ``REPORT.md``.
-The analysis follows the criteria fixed in ``docs/IMPLEMENTATION_PLAN.md`` (WP 4.5) before the
+The analysis follows the criteria fixed in ``docs/dev/IMPLEMENTATION_PLAN.md`` (WP 4.5) before the
 runs.
 """
 

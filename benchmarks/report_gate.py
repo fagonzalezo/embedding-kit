@@ -1,4 +1,4 @@
-"""The phase 3 decision gate on E1 results (docs/IMPLEMENTATION_PLAN.md, "Decision gate").
+"""The phase 3 decision gate on E1 results (docs/dev/IMPLEMENTATION_PLAN.md, "Decision gate").
 
     python benchmarks/report_gate.py --out benchmarks/results/e1/GATE.md
 
