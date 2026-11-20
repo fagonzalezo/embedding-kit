@@ -543,8 +543,8 @@ def render(df: pd.DataFrame) -> str:
         f"A whole `fit` took {df.fit_time.min():.0f} s to {df.fit_time.max() / 60:.1f} min "
         f"(median {df.fit_time.median():.0f} s) on one GPU, most of it training the refiner. "
         "The slowest sets have 50,000 training rows. Beyond 50,000 rows the selection runs "
-        "on a subsample (`selection_max_rows`); `docs/manual.md` section 3.5 has time and "
-        "memory up to a million rows.", "",
+        "on a subsample (`selection_max_rows`); the *Time and memory* section of "
+        "`docs/manual.md` has time and memory up to a million rows.", "",
         "## Limitations", "",
         "- **One seed per set.** The intervals cover the sampling of test rows, not the "
         "randomness of training or of the held-out split.",
