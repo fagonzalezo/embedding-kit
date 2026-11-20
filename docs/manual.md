@@ -681,7 +681,7 @@ parameter, `method`, says what it builds:
 | `"refiner"` | A trained `EmbeddingRefiner`, configured by `mode` (below) |
 
 It is sklearn-style: `fit(X, y=None)`, `transform(X, dim=None)`, `fit_transform`, `save` and
-`load`. Up to 0.7.0 a second parameter, `strategy`, switched between choosing and building; it is
+`load`. To find a better refiner for your own data, see section 2.8. Up to 0.7.0 a second parameter, `strategy`, switched between choosing and building; it is
 deprecated (see "Fixed configurations" below).
 
 #### What the default does, and why
@@ -936,6 +936,197 @@ They are the one fix the report recommends (Euclidean metric, when k-skewness or
 The search is exact and chunked to bound memory. A reference row is never its own neighbour when the reference set is queried; a query is a new point, so a duplicate of a reference row is returned.
 
 The kNN-based evaluation metrics take a `hubness_reduction` argument: `knn_accuracy`, `recall_at_k` and `k_skewness` in `embedkit.evaluation.metrics`, and `evaluate_transform(..., hubness_reduction=CSLS())`, which applies it to `knn_accuracy`, `knn_accuracy_euclidean`, `recall_at_10` and `k_skewness` (each with its own base metric) and leaves the other metrics unchanged.
+
+---
+
+### 2.8 Choosing a refiner for your data
+
+With labels, `EmbedKit().fit(X, y)` already compares one refiner with the raw embedding, centring
+and PCA on held-out rows (section 2.5). This section is for the next question: would a different
+refiner do better on your data? It covers how to read the default's decision, when kNN accuracy is
+the wrong yardstick, what is worth tuning, and how to tune without fooling yourself.
+
+#### Start from the default and read its decision
+
+```python
+from embedkit import EmbedKit
+
+ek = EmbedKit().fit(X_train, y_train)          # mode="regression" for continuous targets
+print(ek.selected_)
+print(ek.selection_report_[["candidate", "dim", "score", "diff_vs_identity", "diff_lo", "diff_hi"]])
+```
+
+| What the report shows | What it suggests |
+|---|---|
+| A refiner was selected (`refiner-128`) | You already have a good refiner. Tuning may add a little: its training settings are library defaults, never tuned per data set. |
+| Raw was kept, and the refiner's `diff_vs_identity` is at or below 0 | A refiner is unlikely to help. |
+| Raw was kept, but the refiner's `diff_vs_identity` is above 0 and its interval reaches below 0 | Worth a closer look: tune as below, or hold out more labelled rows so that the interval narrows. |
+
+In E10, on 64 data sets, the default was never significantly worse than the raw embedding, and
+where it kept the raw embedding the best candidate in hindsight was at most 1.2 points better
+(`docs/benchmarks/RESULTS_BY_DATASET.md`).
+
+#### Check that kNN accuracy is your criterion
+
+The default scores candidates by 10-NN accuracy (or 10-NN R²). If you use the embedding
+differently, judge the refiner the way you use it:
+
+- **A linear classifier downstream.** In E10 the default's output lowered linear-probe accuracy,
+  by 0.2 to 0.8 points, on 5 image sets whose raw probe was already 93% or more (the refiner on 4
+  of them, PCA on 1), while kNN accuracy rose or held. Score
+  candidates with `"linear_probe_c1"` (below) as well as `"knn_accuracy"`.
+- **Few labels.** With 5 labels per class, LDA (`sklearn.discriminant_analysis.
+  LinearDiscriminantAnalysis` with shrinkage) beat the best refiner by 4 to 8 points in E8; with
+  1 label per class even the linear refiner fell below the raw embedding on Banking77 and STL-10.
+  Compare against LDA, not only against raw.
+- **Regression with 1,000 training rows or fewer.** No refiner reliably beat the raw embedding in
+  E8; `EmbedKit` warns.
+- **Labels coarser than the classes you care about** (trained on superclasses, used on fine
+  classes). SupCon pulls each class to a point. `SupConLoss(spread_weight=0.5)` keeps the structure
+  inside a class: 0.869 against 0.645 kNN accuracy on CIFAR-100's fine classes in E8.
+- **No labels.** Do not train a refiner: the self-supervised refiner never beat PCA in E1, E6 and
+  E7. The default without labels is centre + L2.
+
+#### What is worth tuning
+
+| Setting | Default | Worth trying | Evidence behind the default |
+|---|---|---|---|
+| `target_dim` | `min(128, d // 2)` | 64, 256 (below d) | Set by design; only 128 was measured in E10 |
+| `loss` | `SupConLoss(0.07)`; regression `RankNContrastLoss(0.07)` | temperature 0.1 to 0.2; `spread_weight` 0.25 to 0.5; `TripletLoss`; SupCon + 0.5 `AlignUniformLoss` | SupCon and RnC chosen in E8; the uniformity term was rejected there; triplet was never benchmarked |
+| `architecture` | `"residual"`; regression `"mlp"` | `"mlp"`, `"linear"` | E8: the MLP tied the residual adapter with full labels and collapsed with few |
+| `lr`, `epochs` | `3e-4`, 100 | `1e-4` to `1e-3`; 50 to 200 | Carried over from earlier versions; never tuned. Early stopping restores the best weights, so `epochs` is an upper bound |
+| `augmentation` | `KNNPairs(5)`; regression `GaussianNoise(0.05)` | `KNNPairs(k=10)`; `GaussianNoise(0.1)` | E8: noise views beat neighbour pairs for regression on 3 of 4 sets |
+
+The losses are described in section 2.3. A loss of your own subclasses `BaseLoss`; set
+`uses_labels = True` on it if `forward` needs the labels.
+
+#### Tuning on a held-out split
+
+Four rules keep the comparison honest:
+
+1. **Three splits.** Fit on one part of the training rows, choose on another (the validation
+   rows), and score the chosen configuration once on a test split that played no part in the
+   choice. With many configurations, the winner's validation score is optimistic: some of its lead
+   is luck. Only the test score is an estimate of what you will get.
+2. **One factor at a time**, starting from the default, so that a gain can be traced to its cause.
+3. **Several seeds** for each trained configuration, so that a difference is not one lucky run.
+4. **Against the raw embedding, with an interval.** Keep a configuration only if its paired
+   interval against raw lies above 0; otherwise keep the raw embedding, as the default does.
+
+`evaluate_transform` and `compare` (section 3.2) do the bookkeeping. The example compares the
+default refiner with two output dimensions, four losses, another architecture and another
+learning rate, with the raw embedding and PCA as references:
+
+```python
+from sklearn.model_selection import train_test_split
+
+from embedkit import EmbedKit
+from embedkit.baselines import Identity, PCAReduce
+from embedkit.evaluation import compare, evaluate_transform
+from embedkit.improvement.losses import AlignUniformLoss, CombinedLoss, SupConLoss, TripletLoss
+
+# 1. Three splits. The test split (X_test, y_test) is used once, at the end.
+X_fit, X_val, y_fit, y_val = train_test_split(X_train, y_train, test_size=0.2,
+                                              stratify=y_train, random_state=0)
+
+
+def refiner(mode="supervised", target_dim=128, loss=None, **kw):
+    """A make_transform for evaluate_transform: a new EmbedKit, and a new loss, per seed."""
+    def make(seed):
+        return EmbedKit(mode=mode, method="refiner", target_dim=target_dim,
+                        loss=loss() if loss else "auto", random_state=seed, **kw)
+    return make
+
+
+# 2. The default refiner, then one factor changed at a time.
+grid = {
+    "default":        refiner(),                                  # SupCon(0.07), residual, 128
+    "dim-64":         refiner(target_dim=64),
+    "dim-256":        refiner(target_dim=256),                    # needs d > 256
+    "supcon-t0.2":    refiner(loss=lambda: SupConLoss(temperature=0.2)),
+    "supcon-spread":  refiner(loss=lambda: SupConLoss(temperature=0.07, spread_weight=0.25)),
+    "supcon+uniform": refiner(loss=lambda: CombinedLoss([(SupConLoss(0.07), 1.0),
+                                                         (AlignUniformLoss(), 0.5)])),
+    "triplet":        refiner(loss=lambda: TripletLoss(margin=0.2, mining="semi-hard",
+                                                       distance="cosine")),
+    "mlp":            refiner(architecture="mlp"),
+    "lr-1e-3":        refiner(lr=1e-3),
+}
+
+val = dict(X_train=X_fit, X_test=X_val, y_train=y_fit, y_test=y_val, metrics=["knn_accuracy"])
+results = [evaluate_transform(lambda s: Identity(), method="raw", seeds=[0], **val),
+           evaluate_transform(lambda s: PCAReduce(128), method="pca-128", seeds=[0], **val)]
+for name, make in grid.items():
+    results.append(evaluate_transform(make, method=name, seeds=[0, 1, 2],
+                                      fit_with_labels=True, **val))
+table = compare(results, reference="raw")
+print(table[["method", "mean", "sd", "diff", "diff_lo", "diff_hi"]]
+      .sort_values("mean", ascending=False).to_string(index=False))
+
+# 3. Keep the best configuration only if its interval against raw is above 0 on the
+#    validation rows; refit it on all the training rows and score it once on the test split.
+passed = table[(table.method != "raw") & (table.diff_lo > 0)]
+best = passed.sort_values("mean", ascending=False).method.iloc[0] if len(passed) else "raw"
+test = dict(X_train=X_train, X_test=X_test, y_train=y_train, y_test=y_test,
+            metrics=["knn_accuracy", "linear_probe_c1"])
+final = [evaluate_transform(lambda s: Identity(), method="raw", seeds=[0], **test)]
+if best in grid:
+    final.append(evaluate_transform(grid[best], method=best, seeds=[0], fit_with_labels=True,
+                                    **test))
+elif best != "raw":
+    final.append(evaluate_transform(lambda s: PCAReduce(128), method=best, seeds=[0], **test))
+print(best)
+print(compare(final, reference="raw")[["method", "metric", "mean", "diff", "diff_lo", "diff_hi"]])
+```
+
+Reading the output:
+
+- **The validation table** has one row per configuration: `mean` and `sd` over the seeds, and
+  `diff` with its interval against raw. If every interval includes 0, step 3 keeps the raw
+  embedding. That is a valid outcome: the data do not show that any of these refiners helps.
+- **The test table** is the result to report. It scores the linear probe too, since a refiner can
+  raise kNN accuracy and lower probe accuracy at the same time.
+- **`knn_accuracy` in `evaluate_transform` uses k = 5**; the default selection uses k = 10. Use the
+  metric that matches your downstream use (`"linear_probe_c1"`, `"knn_accuracy_euclidean"`,
+  `"recall_at_10"`; `embedkit.evaluation.METRICS` lists them) and choose on that one.
+- **Cost.** Nine configurations at three seeds are 27 refiner trainings, each about as long as
+  the refiner candidate of one default `fit`. Tune on a subsample of 10,000 to 20,000 training
+  rows if you have more: in E10, selection on such subsamples chose as well as on all the rows.
+
+For continuous targets, change the mode, the loss and the metric; there are no classes to
+stratify on:
+
+```python
+from embedkit.improvement.losses import RankNContrastLoss
+
+X_fit, X_val, y_fit, y_val = train_test_split(X_train, y_train, test_size=0.2, random_state=0)
+grid = {
+    "default":   refiner(mode="regression"),               # RnC(0.07), MLP, GaussianNoise(0.05)
+    "rnc-t0.2":  refiner(mode="regression", loss=lambda: RankNContrastLoss(temperature=0.2)),
+    "residual":  refiner(mode="regression", architecture="residual"),
+    "dim-64":    refiner(mode="regression", target_dim=64),
+}
+val = dict(X_train=X_fit, X_test=X_val, y_train=y_fit, y_test=y_val, metrics=["knn_r2"])
+results = [evaluate_transform(lambda s: Identity(), method="raw", seeds=[0], **val)]
+for name, make in grid.items():
+    results.append(evaluate_transform(make, method=name, seeds=[0, 1, 2],
+                                      fit_with_labels=True, **val))
+print(compare(results, reference="raw")[["method", "mean", "diff", "diff_lo", "diff_hi"]])
+```
+
+**A shortcut for one candidate.** To try a single change without the grid, pass it to the default
+selection. The refiner candidate then trains with your setting, and it still has to beat the raw
+embedding on held-out rows to be picked:
+
+```python
+from embedkit.improvement.losses import TripletLoss
+
+ek = EmbedKit(loss=TripletLoss(margin=0.2, mining="semi-hard", distance="cosine"),
+              target_dim=64).fit(X_train, y_train)
+print(ek.selected_, ek.selection_report_[["candidate", "score", "diff_lo", "diff_hi"]])
+```
+
+Here `target_dim=64` also replaces the PCA candidate sizes by 64 (section 2.5).
 
 ---
 
