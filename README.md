@@ -64,7 +64,9 @@ digits (raw pixels) and synthetic sets are also in E1 to E8.
 - With continuous targets, Rank-N-Contrast on an MLP beat raw and PCA on ridge R^2 on all 4 sets
   (+0.023 to +0.574 against raw). With 200 or 1,000 training rows it lost to raw on 6 of 8 sets.
 
-**The default selection with labels** (E10, [`docs/benchmarks/BENCHMARK_SELECTION.md`](docs/benchmarks/BENCHMARK_SELECTION.md))
+**The default selection with labels** (E10, [`docs/benchmarks/BENCHMARK_SELECTION.md`](docs/benchmarks/BENCHMARK_SELECTION.md);
+every data set, with its numbers before and after, in
+[`docs/benchmarks/RESULTS_BY_DATASET.md`](docs/benchmarks/RESULTS_BY_DATASET.md))
 
 - On 64 sets (60 classification sets from 7 text and 5 image encoders, and E8's 4 regression sets),
   `EmbedKit().fit(X, y)` was significantly worse than the unchanged input on none and significantly
@@ -211,6 +213,7 @@ More patterns (low-level `Trainer`, custom augmentations, pipelines) are in
 | [`CHANGELOG.md`](CHANGELOG.md) | Changes with their reasons and measurements |
 | [`skills/embedkit/references/metric_guide.md`](skills/embedkit/references/metric_guide.md) | Per-metric reading, and which statistics the report judges |
 | [`skills/embedkit/references/workflow_guide.md`](skills/embedkit/references/workflow_guide.md) | HuggingFace, PyTorch loops, scikit-learn pipelines, retrieval, ONNX export |
+| [`docs/benchmarks/RESULTS_BY_DATASET.md`](docs/benchmarks/RESULTS_BY_DATASET.md) | Every benchmark data set, what the default picked and its scores before and after |
 | `docs/benchmarks/` | Benchmark outcomes: [E1, E2](docs/benchmarks/BENCHMARK_E1_E2.md), [E6, E7](docs/benchmarks/BENCHMARK_E6_E7.md), [E8](docs/benchmarks/BENCHMARK_SUPERVISED.md), [E3, E5](docs/benchmarks/BENCHMARK_DIAGNOSTICS.md), [E10](docs/benchmarks/BENCHMARK_SELECTION.md); E4 in [`benchmarks/results/e4/REPORT.md`](benchmarks/results/e4/REPORT.md) |
 | [`docs/dev/`](docs/dev/README.md) | Development records of the 0.1.2 to 0.7.0 work (review, plan); not maintained |
 
