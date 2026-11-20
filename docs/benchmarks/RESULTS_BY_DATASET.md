@@ -206,7 +206,7 @@ The refiner was picked on all four regression sets and improved each one. The la
 
 ### Cost
 
-A whole `fit` took 9 s to 6.6 min (median 61 s) on one GPU, most of it training the refiner. The slowest sets have 50,000 training rows. Beyond 50,000 rows the selection runs on a subsample (`selection_max_rows`); `docs/manual.md` section 3.5 has time and memory up to a million rows.
+A whole `fit` took 9 s to 6.6 min (median 61 s) on one GPU, most of it training the refiner. The slowest sets have 50,000 training rows. Beyond 50,000 rows the selection runs on a subsample (`selection_max_rows`); the *Time and memory* section of `docs/manual.md` has time and memory up to a million rows.
 
 ## Limitations
 

@@ -228,8 +228,8 @@ spectrum; or `"permuted"`: each column permuted). The comparison runs on a subsa
   neighbour consistency under Euclidean distance above d = 256. An
   uncalibrated statistic raises no recommendation and is not counted in `n_outside_null`.
 - The high-level `EmbedKit` computes no report with `method="auto"` (`analysis_report` is
-  `None`); `method="pca"` or `"refiner"` runs it uncalibrated and reads only
-  `suggested_target_dim`.
+  `None`); `method="pca"` or `"refiner"` runs it uncalibrated, and only with
+  `target_dim="auto"`, to read `suggested_target_dim`.
 
 ---
 

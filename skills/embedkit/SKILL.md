@@ -230,8 +230,8 @@ print(ek.selection_report_)     # DataFrame: candidate, dim, score, diff_vs_iden
                                 # diff_lo, diff_hi, beats_identity, selected
 print(ek.mode_, ek.method_)
 # selection_report_ is None unless method="auto" selected with labels.
-# ek.analysis_report is None for "auto" and "center_l2"; "pca" and "refiner" run the report
-# uncalibrated (they read only suggested_target_dim)
+# ek.analysis_report is None unless method="pca" or "refiner" with target_dim="auto", which
+# runs the report uncalibrated to read suggested_target_dim
 ```
 
 Rules to remember: continuous targets need `mode="regression"` (with `mode="auto"` non-integer

@@ -27,6 +27,14 @@ class TestEmbedKit:
         # method="auto" reads no report, so it computes none.
         assert EmbedKit().fit(small_X).analysis_report is None
 
+    def test_no_analysis_report_with_explicit_target_dim(self, small_X):
+        # The report is read only for target_dim="auto", so an explicit target_dim skips it.
+        from embedkit import EmbedKit
+        assert EmbedKit(method="pca", target_dim=8).fit(small_X).analysis_report is None
+        ek = EmbedKit(method="refiner", target_dim=8, epochs=1, eval_every=100).fit(small_X)
+        assert ek.analysis_report is None
+        assert ek.transform(small_X).shape == (small_X.shape[0], 8)
+
     def test_explicit_target_dim(self, small_X):
         from embedkit import EmbedKit
         ek = EmbedKit(method="refiner", target_dim=4, epochs=2, eval_every=100)

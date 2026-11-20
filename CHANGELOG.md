@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **`EmbedKit` runs the analysis report only when it reads it.** With `method="pca"` or
+  `"refiner"`, `fit` ran `EmbedKitAnalyzer` (uncalibrated) on every call, although only
+  `target_dim="auto"` reads it (`suggested_target_dim`). It now runs only for
+  `target_dim="auto"`; with an explicit `target_dim`, `analysis_report` is `None` and nothing is
+  written to `report.json`. The refiner candidate of the default selection has an explicit
+  `target_dim`, so the selection with labels no longer runs the analyzer, twice when the refiner
+  wins (candidate and refit).
+
+### Documentation
+- `docs/manual.md` reorganised around how the library decides (by validation, not by diagnosis).
+  A new opening explains that principle and what the analysis is for. Part 1 is now improvement
+  (`EmbedKit` first), Part 2 evaluation and Part 3 analysis, which opens with a table of what the
+  evidence says about each statistic. Every analyzer section follows one template. The
+  "good/concerning" thresholds and the claims that E4 did not support are gone ("nearest-neighbor
+  queries become meaningless", "downstream tasks will be unreliable").
+- Manual fixes: the uniformity range (bounded below by about -2t, so "-3 to -5" was impossible);
+  the `suggested_target_dim` formula; the complete `trainer.MONITORS` list, with a supervised
+  `Trainer` example that stops early on `val_knn_accuracy` instead of uniformity; the
+  `evaluate_transform` metric names; `recall_at_k` described as label-based retrieval; the
+  signatures of `HubnessAnalyzer`, `NeighborConsistency`, `IsotropyAnalyzer` and
+  `EmbedKitAnalyzer`; citations (Mu et al. 2018, Khosla et al. 2020) and the order of the
+  references.
+
 ## 0.8.0 (unreleased)
 
 One parameter instead of two: `EmbedKit(method=...)` says what `fit` builds, and `strategy` is
