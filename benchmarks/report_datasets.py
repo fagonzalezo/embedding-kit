@@ -160,6 +160,10 @@ def main(argv=None):
     print(f"wrote {args.out}")
 
 
+# The data sets of benchmark E8, which chose the refiners' design (BENCHMARK_SUPERVISED.md).
+E8_SETS = ("banking77_mpnet", "cifar100_dinov2", "digits", "pets_resnet50", "stl10_clip",
+           "synthetic_anisotropic", "synthetic_regression", "synthetic_regression_ties",
+           "yelp_mpnet", "fluorescence_esm2")
 MODALITIES = (("text", "Text classification"), ("image", "Image classification"),
               ("regression", "Regression"))
 METHOD = {"identity": "raw (kept)", "center_l2": "centre + L2", "refiner": "refiner",
@@ -286,6 +290,8 @@ def render(df: pd.DataFrame) -> str:
     regret_kept = regret[regret.selected == "identity"]
     regret_changed = regret[regret.selected != "identity"]
     probe_floor = probe_worse.probe_raw.min() if len(probe_worse) else np.nan
+    e8_here = [s for s in df.dataset if s in E8_SETS]
+    n_e8 = len(e8_here)
     dino = cls[cls.encoder == "dinov2"]
     dino_high = int((dino.raw >= 0.98).sum())
     bge_kept = int(((cls.encoder == "bge") & (cls.selected == "identity")).sum())
@@ -378,6 +384,31 @@ def render(df: pd.DataFrame) -> str:
         "| Training | Adam, learning rate 3e-4, weight decay 1e-4, cosine schedule, batch 256, "
         "at most 100 epochs; evaluated every 5 epochs, stopped after 10 evaluations without "
         "improvement, best weights restored | the same |", "",
+        "**How the refiners were chosen.** The design (architecture, loss, views and early "
+        f"stopping) comes from benchmark E8, on {len(E8_SETS) - 4} classification and 4 "
+        "regression sets with 5 seeds each (`docs/benchmarks/BENCHMARK_SUPERVISED.md`). "
+        "Starting from SupCon (or Rank-N-Contrast) on a linear map, it changed one factor at "
+        "a time and accepted a change that won, with a 95% interval, on at least half the "
+        "sets.",
+        "- **Regression** (judged by a ridge probe's R², not the kNN R² used here): the MLP "
+        "beat the linear map on all 4 sets, and noisy copies on top of it won on 3 more and "
+        "tied on Yelp.",
+        "- **Classification:** the residual adapter did not pass it (2 wins and 4 ties). The "
+        "plain MLP did (3 wins, 3 ties), but with 1 to 100 labels per class it lost to the "
+        "linear map on 6 of 12 sets (by up to 8.2 points on CIFAR-100 at one label per "
+        "class), while the residual adapter lost on 2, by under 2 points. The residual "
+        "adapter was chosen for that robustness: a judgement, not the rule.",
+        "- **Rejected:** a uniformity term, a spread term against class collapse, nested "
+        "(Matryoshka) training and turning off early stopping.",
+        "- **Not tuned:** the training settings (temperature 0.07, learning rate 3e-4, "
+        "hidden size 256, 2 layers, batch 256, 100 epochs, patience 10) are carried over from "
+        "earlier versions. The only search over temperature and learning rate (benchmark E2) "
+        "was for the self-supervised refiner. The output dimension min(128, d / 2) was set "
+        "by design. A refiner tuned per set might do better; these runs do not measure by "
+        "how much.",
+        f"- **Overlap:** {n_e8} of the {len(df)} sets here were also E8 sets "
+        f"({', '.join(f'`{s}`' for s in e8_here)}); the other {len(df) - n_e8} played no "
+        "part in choosing the refiners.", "",
         "**What is measured**, on the test split:",
         "- **kNN accuracy** (primary, classification): the percentage of test rows whose 10 "
         "nearest training rows by cosine distance vote for the correct class.",
