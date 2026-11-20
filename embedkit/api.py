@@ -32,10 +32,19 @@ from embedkit.utils.validation import _to_numpy, trusted_input, validate_embeddi
 class EmbedKit:
     """Analyse, configure, train and transform in one estimator.
 
-    **Strategy (WP 7.2).** ``strategy="select"`` (the default) picks the output by validation,
-    and ``strategy="fixed"`` builds the configuration given by ``method`` and ``target_dim``.
+    **Method.** ``method`` says what ``fit`` builds:
 
-    ``"select"`` without labels returns the input centred on the training mean and scaled to unit
+    - ``"auto"`` (the default): chosen for you. Without labels, the input centred and
+      L2-normalised; with labels, the candidate that validates best (below).
+    - ``"center_l2"``: the input centred and L2-normalised, with or without labels.
+    - ``"pca"``: the top ``target_dim`` principal directions followed by L2 normalisation.
+    - ``"refiner"``: a refiner trained in the mode's way (below).
+
+    ``strategy`` is deprecated: ``strategy="select"`` is ``method="auto"``, and
+    ``strategy="fixed"`` with ``method="auto"`` is ``method="pca"`` without labels and
+    ``method="refiner"`` with them. It goes in 0.9.0.
+
+    ``"auto"`` without labels returns the input centred on the training mean and scaled to unit
     L2 norm (:class:`~embedkit.baselines.CenterNormalize`). No label-free score can tell whether a
     transform helps (``knn_overlap``, which ranked refiner runs in E2, gives the unchanged input
     the top score), and in E4 no training-free fix beat the raw embedding on most of 35 natural
@@ -44,7 +53,7 @@ class EmbedKit:
     (``benchmarks/results/e4/REPORT.md``). PCA to the report's ``suggested_target_dim``, the
     0.5.0 default, lost accuracy on 32 of the 35 sets.
 
-    ``"select"`` with labels holds out ``val_fraction`` of the rows (stratified for classes),
+    ``"auto"`` with labels holds out ``val_fraction`` of the rows (stratified for classes),
     fits every candidate on the rest and scores it on the held-out rows: ``k``-NN accuracy for
     classes, ``k``-NN regression R^2 for continuous targets (k = 10, ``selection_metric``,
     cosine by default; ``knn_overlap`` is not used, see above). The candidates are ``Identity``
@@ -66,22 +75,22 @@ class EmbedKit:
     ``Identity`` and little for ``CenterNormalize`` and PCA; a refiner that wins is trained on
     all the rows. ``selection_report_.attrs`` records ``n_rows`` and ``n_selection_rows``.
     ``None`` selects on all the rows (the 0.6.0 behaviour).
-    Under ``"select"`` no analysis report is computed (``analysis_report`` is ``None``): no
+    Under ``"auto"`` no analysis report is computed (``analysis_report`` is ``None``): no
     decision reads it. Run :class:`~embedkit.analysis.report.EmbedKitAnalyzer` for one.
 
     ``mode="auto"`` (the default) is ``"self_supervised"`` without labels and ``"supervised"``
     with them; continuous targets need ``mode="regression"``. With ``mode="self_supervised"``
-    and labels, ``"select"`` uses the labels to choose among the training-free candidates only:
-    in E1 the self-supervised refiner never beat PCA and cost about 100 times more.
+    and labels, ``method="auto"`` uses the labels to choose among the training-free candidates
+    only: in E1 the self-supervised refiner never beat PCA and cost about 100 times more.
 
-    **Fixed configurations.** ``strategy="fixed"``, or a ``method`` other than ``"auto"`` (which
-    implies it; ``strategy_`` records what ran), builds ``method``: ``"refiner"`` trains an
+    **One configuration.** ``"center_l2"``, ``"pca"`` and ``"refiner"`` build that
+    configuration with no comparison; ``selected_`` names it as the selection would
+    (``"center_l2"``, ``"pca-<k>"``, ``"refiner-<k>"``). ``"refiner"`` trains an
     :class:`~embedkit.improvement.model.EmbeddingRefiner` with a contrastive loss. ``"pca"``
     trains nothing: it is the ``linear`` refiner at its initialisation, the top ``target_dim``
     principal directions followed by L2 normalisation, with the same ``transform``, ``dim=``,
-    ``save`` and ``load``. ``"auto"`` is ``"pca"`` for ``mode="self_supervised"`` and
-    ``"refiner"`` otherwise; ``target_dim="auto"`` is the report's ``suggested_target_dim``. In
-    E1, E6 and E7 (``docs/benchmarks/BENCHMARK_E1_E2.md``,
+    ``save`` and ``load``. For both, ``target_dim="auto"`` is the report's
+    ``suggested_target_dim``. In E1, E6 and E7 (``docs/benchmarks/BENCHMARK_E1_E2.md``,
     ``docs/benchmarks/BENCHMARK_E6_E7.md``) the self-supervised refiner never beat the better of
     PCA and PCA-whitening, lost to them when fitted on fewer than a few thousand rows, and cost
     about 100 times more. The training parameters
@@ -118,8 +127,7 @@ class EmbedKit:
     def __init__(
         self,
         mode: Literal["auto", "self_supervised", "supervised", "regression"] = "auto",
-        strategy: Literal["select", "fixed"] = "select",
-        method: Literal["auto", "pca", "refiner"] = "auto",
+        method: Literal["auto", "center_l2", "pca", "refiner"] = "auto",
         augmentation: Any = "auto",
         loss: Any = "auto",
         target_dim: int | Literal["auto"] = "auto",
@@ -143,7 +151,15 @@ class EmbedKit:
         val_fraction: float = 0.2,
         selection_metric: Literal["cosine", "euclidean"] = "cosine",
         selection_max_rows: int | None = 50_000,
+        strategy: Literal["select", "fixed"] | None = None,
     ):
+        if strategy is not None:
+            warnings.warn(
+                "EmbedKit(strategy=...) is deprecated and will be removed in 0.9.0: "
+                + ("drop it (method='auto' is the validated selection)" if strategy == "select"
+                   else "pass method='pca' (without labels) or method='refiner' (with labels) "
+                   "instead of strategy='fixed'"),
+                DeprecationWarning, stacklevel=2)
         self.mode = mode
         self.strategy = strategy
         self.method = method
@@ -180,7 +196,10 @@ class EmbedKit:
         if self.mode not in ("auto", "self_supervised", "supervised", "regression"):
             raise ValueError(f"mode must be 'auto', 'self_supervised', 'supervised' or "
                              f"'regression', got {self.mode!r}")
-        if self.strategy not in ("select", "fixed"):
+        if self.method not in METHODS:
+            raise ValueError(f"method must be one of {', '.join(map(repr, METHODS))}, "
+                             f"got {self.method!r}")
+        if self.strategy not in (None, "select", "fixed"):
             raise ValueError(f"strategy must be 'select' or 'fixed', got {self.strategy!r}")
         # The one validation of the call (NaN or infinite values raise; constant columns and
         # duplicate rows warn); the analyzer, the candidates and the trainer below stay silent.
@@ -198,18 +217,32 @@ class EmbedKit:
                 raise ValueError(f"y has {len(y)} entries for {len(X_np)} rows")
         self._trainer, self._baseline = None, None
         self.selected_, self.selection_report_ = None, None
-        # An explicit method is a fixed configuration: there is nothing to select.
-        self.strategy_ = "fixed" if self.method != "auto" else self.strategy
-        if self.strategy_ == "fixed":
+        # An explicit method builds that configuration; "auto" chooses (the deprecated
+        # strategy="fixed" keeps its 0.7.0 meaning: PCA or the refiner of the mode).
+        auto = self.method == "auto" and self.strategy != "fixed"
+        self._strategy = "select" if auto else "fixed"
+        if not auto:
+            if self.method == "center_l2":
+                self.analysis_report = None
+                self._check_no_training_config("method='center_l2' does not train")
+                return self._fit_baseline(X_np, "center_l2")
             return self._fit_fixed(X_np, y)
         self.analysis_report = None
         if y is None:
-            self._check_no_training_config("strategy='select' without labels fits no refiner")
+            self._check_no_training_config("method='auto' without labels fits no refiner")
             return self._fit_baseline(X_np, "center_l2")
         return self._fit_select(X_np, y)
 
+    @property
+    def strategy_(self) -> str:
+        """Deprecated: ``"select"`` when ``method="auto"`` chose the output, else ``"fixed"``."""
+        warnings.warn("EmbedKit.strategy_ is deprecated and will be removed in 0.9.0: "
+                      "selection_report_ is None unless a selection ran, and selected_ names "
+                      "what was built", DeprecationWarning, stacklevel=2)
+        return self._strategy
+
     # ------------------------------------------------------------------------------------
-    # strategy="select"
+    # method="auto": the validated selection
     # ------------------------------------------------------------------------------------
     def _fit_select(self, X_np: np.ndarray, y: np.ndarray) -> EmbedKit:
         from embedkit.evaluation.metrics import knn_accuracy, knn_regression_r2
@@ -219,7 +252,7 @@ class EmbedKit:
         refiner = self.mode_ in ("supervised", "regression")
         if not refiner:
             self._check_no_training_config(
-                "mode='self_supervised' with strategy='select' compares training-free "
+                "mode='self_supervised' with method='auto' compares training-free "
                 "candidates only")
         if not 0.0 < self.val_fraction < 1.0:
             raise ValueError(f"val_fraction must be in (0, 1), got {self.val_fraction!r}")
@@ -238,7 +271,7 @@ class EmbedKit:
             warnings.warn(
                 f"Too few rows to select a transform ({len(tr)} to fit, {len(va)} to score, "
                 f"at least {_MIN_VAL_ROWS} each needed); returning the input unchanged "
-                "(Identity). Pass strategy='fixed' to build a configuration anyway.",
+                "(Identity). Pass method='center_l2', 'pca' or 'refiner' to build one anyway.",
                 UserWarning, stacklevel=3)
             return self._fit_baseline(X_np, "identity")
         Xtr, Xva, ytr, yva = X_np[tr], X_np[va], y[tr], y[va]
@@ -321,8 +354,7 @@ class EmbedKit:
     def _fixed_refiner(self, target_dim: int) -> EmbedKit:
         """The refiner of this mode as a fixed configuration, with this object's settings."""
         params = {name: getattr(self, attr) for name, attr in _PARAMS.items()}
-        params.update(mode=self.mode_, strategy="fixed", method="refiner",
-                      target_dim=target_dim)
+        params.update(mode=self.mode_, method="refiner", target_dim=target_dim)
         return EmbedKit(**params)
 
     def _adopt(self, other: EmbedKit) -> None:
@@ -337,7 +369,7 @@ class EmbedKit:
         self._trainer = None
         self.method_, self.selected_ = name, name
         self.nested_dims_ = None
-        self._config = {"mode": self.mode_, "strategy": self.strategy_, "method": name,
+        self._config = {"mode": self.mode_, "strategy": self._strategy, "method": name,
                         "input_dim": X_np.shape[1], "selected": name}
         return self
 
@@ -350,7 +382,7 @@ class EmbedKit:
             given.append("architecture")
         if given:
             raise ValueError(f"{', '.join(given)} configure training, but {why}; pass "
-                             "strategy='fixed', method='refiner' to train")
+                             "method='refiner' to train")
 
     def _resolve_mode(self, y) -> str:
         if self.mode != "auto":
@@ -358,7 +390,7 @@ class EmbedKit:
         return "self_supervised" if y is None else "supervised"
 
     # ------------------------------------------------------------------------------------
-    # strategy="fixed"
+    # method="pca" or "refiner": one configuration
     # ------------------------------------------------------------------------------------
     def _fit_fixed(self, X_np: np.ndarray, y) -> EmbedKit:
         n, d = X_np.shape
@@ -408,10 +440,12 @@ class EmbedKit:
             eval_metrics += ["train_nc1"] + (["val_nc1"] if self._resolve_val_split() > 0 else [])
         self.monitor_, self.early_stopping_patience_ = monitor, patience
 
+        self.selected_ = f"refiner-{target_dim}"
         self._config = {
             "mode": self.mode_,
             "strategy": "fixed",
             "method": "refiner",
+            "selected": self.selected_,
             "target_dim": target_dim,
             "hidden_dim": self.hidden_dim,
             "n_layers": self.n_layers,
@@ -459,17 +493,18 @@ class EmbedKit:
         return self
 
     def _resolve_method(self) -> str:
-        if self.method not in ("auto", "pca", "refiner"):
-            raise ValueError(f"method must be 'auto', 'pca' or 'refiner', got {self.method!r}")
+        """``"pca"`` or ``"refiner"``; ``"auto"`` here only under the deprecated
+        ``strategy="fixed"``, where it keeps its 0.7.0 meaning."""
         if self.method != "auto":
             return self.method
         return "pca" if self.mode_ == "self_supervised" else "refiner"
 
     def _fit_pca(self, X_np: np.ndarray, target_dim: int) -> EmbedKit:
         """``method="pca"``: the linear refiner at its PCA initialisation, not trained."""
-        self._check_no_training_config(
-            "method='pca' does not train (method='auto' is 'pca' in self-supervised mode)")
-        return self._fit_pca_model(X_np, target_dim)
+        self._check_no_training_config("method='pca' does not train")
+        self._fit_pca_model(X_np, target_dim)
+        self.selected_ = self._config["selected"] = f"pca-{target_dim}"
+        return self
 
     def _fit_pca_model(self, X_np: np.ndarray, target_dim: int) -> EmbedKit:
         model = EmbeddingRefiner(input_dim=X_np.shape[1], target_dim=target_dim,
@@ -480,7 +515,7 @@ class EmbedKit:
         self.architecture_ = "linear"
         self._config = {
             "mode": self.mode_,
-            "strategy": self.strategy_,
+            "strategy": self._strategy,
             "method": "pca",
             "target_dim": target_dim,
             "hidden_dim": self.hidden_dim,
@@ -577,8 +612,7 @@ class EmbedKit:
         bundle = load_bundle(directory)
         cfg = bundle["config"]
         if cfg.get("method") in ("identity", "center_l2"):
-            obj = cls(mode=cfg.get("mode", "self_supervised"),
-                      strategy=cfg.get("strategy", "select"))
+            obj = cls(mode=cfg.get("mode", "self_supervised"))
             base = Identity() if cfg["method"] == "identity" else CenterNormalize()
             base.n_features_in_ = base.n_features_out_ = cfg["input_dim"]
             if cfg["method"] == "center_l2":
@@ -589,7 +623,6 @@ class EmbedKit:
             return obj
         obj = cls(
             mode=cfg.get("mode", "self_supervised"),
-            strategy="fixed",
             method=cfg.get("method", "refiner"),
             target_dim=cfg.get("target_dim", 64),
             hidden_dim=cfg.get("hidden_dim", 256),
@@ -655,7 +688,8 @@ class EmbedKit:
 
 _SMALL_REGRESSION_ROWS = 1000
 _SELECTION_K = 10        # neighbours of the selection score
-_PCA_DIMS = (64, 128, 256)  # PCA candidates of strategy="select" (those below d)
+METHODS = ("auto", "center_l2", "pca", "refiner")
+_PCA_DIMS = (64, 128, 256)  # PCA candidates of method="auto" (those below d)
 _N_BOOT = 2000           # paired bootstrap resamples of the held-out rows
 _MIN_VAL_ROWS = 20       # fewer rows to fit or to score: no selection, Identity
 # Constructor arguments passed on to the refiner candidate (name -> attribute).
@@ -671,7 +705,7 @@ def _restore_selection(obj: EmbedKit, cfg: dict) -> None:
     """Set the fitted attributes that a bundle records (``selection_report_`` since WP 7.2)."""
     obj._config = cfg
     obj.mode_ = cfg.get("mode", "self_supervised")
-    obj.strategy_ = cfg.get("strategy", "fixed")
+    obj._strategy = cfg.get("strategy", "fixed")
     obj.selected_ = cfg.get("selected")
     obj.selection_report_ = None
     if cfg.get("selection_report"):

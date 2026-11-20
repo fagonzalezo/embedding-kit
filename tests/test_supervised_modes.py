@@ -10,7 +10,7 @@ from embedkit.improvement.losses import RankNContrastLoss, SupConLoss
 from embedkit.improvement.model import EmbeddingRefiner
 from embedkit.improvement.trainer import Trainer
 
-KW = dict(id_methods=["TwoNN"], device="cpu", random_state=0, strategy="fixed")
+KW = dict(id_methods=["TwoNN"], device="cpu", random_state=0, method="refiner")
 
 
 def _classes(n=120, d=16, c=3, seed=0):
@@ -72,7 +72,7 @@ def test_explicit_architecture_and_augmentation_override_auto():
     ek = EmbedKit(mode="supervised", target_dim=4, epochs=1, eval_every=100, architecture="linear",
                   augmentation=GaussianNoise(0.1), **KW).fit(X, y)
     assert ek.architecture_ == "linear" and type(ek._trainer.augmentation) is GaussianNoise
-    ek = EmbedKit(method="refiner", target_dim=4, epochs=1, eval_every=100, **KW).fit(X)
+    ek = EmbedKit(target_dim=4, epochs=1, eval_every=100, **KW).fit(X)
     assert ek.architecture_ == "linear" and isinstance(ek._trainer.augmentation, KNNPairs)
 
 
@@ -101,7 +101,7 @@ def test_explicit_settings_override_auto():
     assert ek.monitor_ == "uniformity" and ek._trainer.val_split == 0.0
     assert "train_nc1" in ek._trainer.history and "val_nc1" not in ek._trainer.history
     # Self-supervised refiner keeps no early stopping and k_skewness.
-    ek = EmbedKit(method="refiner", target_dim=4, epochs=2, eval_every=1, **KW).fit(X)
+    ek = EmbedKit(target_dim=4, epochs=2, eval_every=1, **KW).fit(X)
     assert ek.monitor_ == "k_skewness" and ek.early_stopping_patience_ is None
 
 

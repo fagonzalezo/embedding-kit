@@ -1,4 +1,4 @@
-"""EmbedKit(strategy="select"), the default since WP 7.2."""
+"""EmbedKit(method="auto"), the validated selection, and the single configurations."""
 
 import numpy as np
 import pandas as pd
@@ -25,7 +25,7 @@ def _noisy_classes(n=1500, d=1000, n_classes=5, seed=0):
 def test_without_labels_the_default_is_center_l2():
     X = np.random.default_rng(0).standard_normal((200, 16)).astype(np.float32) + 3.0
     ek = EmbedKit(**KW).fit(X)
-    assert ek.selected_ == "center_l2" and ek.strategy_ == "select"
+    assert ek.selected_ == "center_l2"
     assert ek.selection_report_ is None and ek.analysis_report is None
     np.testing.assert_allclose(ek.transform(X), CenterNormalize().fit(X).transform(X),
                                atol=1e-6)
@@ -94,10 +94,10 @@ def test_training_configuration_without_a_refiner_raises():
         EmbedKit(nested_dims="auto", **KW).fit(X)
 
 
-def test_explicit_method_means_fixed():
+def test_explicit_method_builds_one_configuration():
     X = np.random.default_rng(0).standard_normal((100, 16)).astype(np.float32)
     ek = EmbedKit(method="pca", target_dim=4, id_methods=["TwoNN"], **KW).fit(X)
-    assert ek.strategy_ == "fixed" and ek.selected_ is None
+    assert ek.selected_ == "pca-4" and ek.selection_report_ is None
     assert ek.transform(X).shape == (100, 4)
 
 
@@ -107,7 +107,7 @@ def test_save_load_roundtrip(tmp_path, labels):
     ek = EmbedKit(mode="self_supervised", **KW).fit(X, y if labels else None)
     ek.save(tmp_path / "b")
     back = EmbedKit.load(tmp_path / "b", device="cpu")
-    assert back.selected_ == ek.selected_ and back.strategy_ == "select"
+    assert back.selected_ == ek.selected_
     assert back.mode_ == ek.mode_
     if labels:
         pd.testing.assert_frame_equal(back.selection_report_, ek.selection_report_,
@@ -192,3 +192,73 @@ def test_baseline_refit_matches_the_baseline_fit():
     assert fast.mean_.dtype == np.float64
     np.testing.assert_allclose(fast.mean_, ref.mean_, rtol=0, atol=1e-12)
     np.testing.assert_array_equal(fast.transform(X), ref.transform(X))
+
+
+# ----------------------------------------------------------------------------------------
+# One parameter, method: center_l2 on its own, selected_ always set, strategy deprecated
+# ----------------------------------------------------------------------------------------
+
+def test_center_l2_builds_without_selecting():
+    X, y = _noisy_classes(n=300, d=40)
+    for labels in (None, y):
+        ek = EmbedKit(method="center_l2", **KW).fit(X, labels)
+        assert ek.selected_ == "center_l2" and ek.selection_report_ is None
+        assert ek.analysis_report is None
+        np.testing.assert_allclose(ek.transform(X), CenterNormalize().fit(X).transform(X),
+                                   atol=1e-5)
+    with pytest.raises(ValueError, match="method='center_l2' does not train"):
+        EmbedKit(method="center_l2", loss=object(), **KW).fit(X)
+
+
+def test_selected_names_a_single_configuration(tmp_path):
+    X, y = _noisy_classes(n=200, d=24)
+    ek = EmbedKit(mode="supervised", method="refiner", target_dim=6, epochs=1, eval_every=100,
+                  **KW).fit(X, y)
+    assert ek.selected_ == "refiner-6" and ek.selection_report_ is None
+    ek.save(tmp_path / "r")
+    assert EmbedKit.load(tmp_path / "r", device="cpu").selected_ == "refiner-6"
+
+
+def test_unknown_method_raises():
+    X = np.random.default_rng(0).standard_normal((50, 8)).astype(np.float32)
+    for bad in ("identity", "fixed", "select"):
+        with pytest.raises(ValueError, match="method must be one of"):
+            EmbedKit(method=bad, **KW).fit(X)
+
+
+def test_strategy_is_deprecated_and_keeps_its_meaning():
+    X, y = _noisy_classes(n=300, d=40)
+    with pytest.warns(DeprecationWarning, match="strategy"):
+        ek = EmbedKit(strategy="select", **KW)
+    assert ek.fit(X).selected_ == "center_l2"
+    # strategy="fixed" with method="auto": PCA without labels, the refiner with them (0.7.0).
+    with pytest.warns(DeprecationWarning, match="method='pca'"):
+        ek = EmbedKit(strategy="fixed", target_dim=4, id_methods=["TwoNN"], **KW)
+    assert ek.fit(X).method_ == "pca" and ek.selected_ == "pca-4"
+    with pytest.warns(DeprecationWarning):
+        ek = EmbedKit(strategy="fixed", target_dim=4, epochs=1, eval_every=100, **KW)
+    assert ek.fit(X, y).method_ == "refiner" and ek.selected_ == "refiner-4"
+    with pytest.warns(DeprecationWarning):
+        bad = EmbedKit(strategy="sometimes", **KW)
+    with pytest.raises(ValueError, match="strategy must be"):
+        bad.fit(X)
+
+
+def test_strategy_attribute_is_deprecated():
+    X = np.random.default_rng(0).standard_normal((100, 16)).astype(np.float32)
+    ek = EmbedKit(**KW).fit(X)
+    with pytest.warns(DeprecationWarning, match="strategy_"):
+        assert ek.strategy_ == "select"
+    ek = EmbedKit(method="pca", target_dim=4, id_methods=["TwoNN"], **KW).fit(X)
+    with pytest.warns(DeprecationWarning):
+        assert ek.strategy_ == "fixed"
+
+
+def test_no_deprecation_warning_from_the_library_itself():
+    import warnings
+
+    X, y = _noisy_classes(n=300, d=40)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        EmbedKit(epochs=1, eval_every=100, **KW).fit(X, y)   # selection builds a refiner
+        EmbedKit(method="pca", target_dim=4, id_methods=["TwoNN"], **KW).fit(X)

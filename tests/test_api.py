@@ -19,12 +19,12 @@ class TestEmbedKit:
 
     def test_analysis_report_stored(self, small_X):
         from embedkit import EmbedKit
-        ek = EmbedKit(strategy="fixed", epochs=2, eval_every=100)
+        ek = EmbedKit(method="pca")
         ek.fit(small_X)
         assert ek.analysis_report is not None
         # EmbedKit reads only suggested_target_dim, so it skips the null calibration.
         assert ek.analysis_report.calibration is None
-        # strategy="select" reads no report, so it computes none (WP 7.2).
+        # method="auto" reads no report, so it computes none.
         assert EmbedKit().fit(small_X).analysis_report is None
 
     def test_explicit_target_dim(self, small_X):

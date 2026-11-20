@@ -83,7 +83,7 @@ every data set, with its numbers before and after, in
 
 ## What the defaults do
 
-`EmbedKit()` chooses its output by validation, not by diagnosis (`strategy="select"`).
+`EmbedKit()` chooses its output by validation, not by diagnosis (`method="auto"`, the default).
 
 - **Without labels** it returns the input centred on the training mean and scaled to unit L2 norm
   (`CenterNormalize`). No label-free score can say that a transform helps (kNN overlap with the input
@@ -95,8 +95,9 @@ every data set, with its numbers before and after, in
   `Identity` only if a paired bootstrap interval of its gain on the held-out rows lies above 0. Otherwise
   the output is the input unchanged. The winner is refitted on all rows.
 - `mode="auto"` is self-supervised without labels and supervised with them; continuous targets need
-  `mode="regression"`. `strategy="fixed"` (or any `method` other than `"auto"`) builds one configuration
-  as in 0.5.0: `method="pca"`, or the refiner with `method="refiner"`.
+  `mode="regression"`.
+- To build one configuration without comparing, pass `method="center_l2"`, `method="pca"` or
+  `method="refiner"`. `selected_` names what was built, in both cases.
 
 The 0.5.0 behaviour is in [`docs/MIGRATION.md`](docs/MIGRATION.md) with every other breaking change
 since 0.1.2.
@@ -153,7 +154,7 @@ Fixed configurations, and a refiner trained without labels (E1, E6, E7: not bett
 ```python
 from embedkit import EmbedKit
 
-Z = EmbedKit(strategy="fixed", target_dim=64).fit_transform(X)                 # PCA to 64, L2
+Z = EmbedKit(method="pca", target_dim=64).fit_transform(X)                     # PCA to 64, L2
 Z = EmbedKit(method="refiner", target_dim=64, epochs=100).fit_transform(X)     # contrastive refiner
 Z = EmbedKit(mode="regression", epochs=50).fit_transform(X, y=y.astype(float))  # continuous targets
 ```

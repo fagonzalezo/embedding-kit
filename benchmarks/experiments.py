@@ -93,7 +93,7 @@ def e1_methods(dataset) -> list[Method]:
     if labelled:
         m.append(Method(
             "embedkit_supervised",
-            lambda s, ds, dev: EmbedKit(mode="supervised", strategy="fixed", random_state=s,
+            lambda s, ds, dev: EmbedKit(mode="supervised", method="refiner", random_state=s,
                                         device=dev),
             deterministic=False, fit_with_labels=True, family="embedkit_supervised",
         ))
@@ -386,7 +386,7 @@ def e8_methods(dataset) -> list[Method]:
 
         def make(s, ds, dev):
             extra = {key: (v() if callable(v) else v) for key, v in kw.items()}
-            t = EmbedKit(mode=mode, strategy="fixed", target_dim=extra.pop("target_dim", k),
+            t = EmbedKit(mode=mode, method="refiner", target_dim=extra.pop("target_dim", k),
                          random_state=s, device=dev, **extra)
             return wrap(t, s) if wrap else t
         return Method(name, make, deterministic=False, fit_with_labels=True, family=family,
@@ -444,7 +444,7 @@ def e8_methods(dataset) -> list[Method]:
     if top > k:
         m.append(Method(
             f"nested-d{k}",
-            lambda s, ds, dev: _Prefix(EmbedKit(mode="supervised", strategy="fixed",
+            lambda s, ds, dev: _Prefix(EmbedKit(mode="supervised", method="refiner",
                                                 target_dim=top, nested_dims=(k,),
                                                 random_state=s, device=dev), k),
             deterministic=False, fit_with_labels=True, family="supcon_nested",
@@ -608,7 +608,7 @@ E10_REGRESSION_METRICS = ("knn_r2",)  # WP 8.3 regression sets: kNN R^2 (cosine,
 
 
 class _Selected:
-    """``EmbedKit`` with ``strategy="select"`` that records its choice in ``get_params``.
+    """``EmbedKit`` with ``method="auto"`` that records its choice in ``get_params``.
 
     ``selection_report`` is the candidate table as a JSON string (the result record keeps only
     scalars and lists of scalars).
@@ -666,7 +666,7 @@ def e10_methods(dataset) -> list[Method]:
       does a subsample choose as well as all the rows?).
     - The candidates on their own, each fitted on all the training rows, for the best choice
       in hindsight (WP 8.3): ``identity``, ``center_l2``, ``pca_l2-<k>`` (64, 128, 256 below d)
-      and ``refiner`` (the supervised refiner at ``min(128, d // 2)``, ``strategy="fixed"``).
+      and ``refiner`` (the supervised refiner at ``min(128, d // 2)``, ``method="refiner"``).
 
     Classification sets (E4, and the WP 8.3 extra sets E4X) are scored on ``E5_METRICS``.
     Regression sets (WP 8.3: E8's four) run in ``mode="regression"`` (the selection and the
@@ -706,7 +706,7 @@ def e10_methods(dataset) -> list[Method]:
     m.append(Method(
         "refiner",
         lambda s, ds, dev: EmbedKit(mode="regression" if regression else "supervised",
-                                    strategy="fixed", method="refiner", target_dim=t,
+                                    method="refiner", target_dim=t,
                                     random_state=s, device=dev),
         deterministic=False, fit_with_labels=True, family="candidate",
         params=dict(target_dim=t)))

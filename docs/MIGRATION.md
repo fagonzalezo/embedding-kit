@@ -1,11 +1,11 @@
-# Migrating from EmbedKit 0.1.2 to 0.7.0
+# Migrating from EmbedKit 0.1.2 to 0.8.0
 
 This note is for code written against EmbedKit 0.1.2 (analysis reports, `EmbedKit(...)`, `Trainer`,
 losses, augmentations, saved bundles). It lists every breaking change, the version that made it and
 what to do. `CHANGELOG.md` has the reasons and the measurements; `docs/manual.md` describes the
 current API.
 
-Version path: 0.1.2 -> 0.1.3 -> 0.2.0 -> 0.4.0 -> 0.5.0 -> 0.6.0 -> 0.7.0. There is no 0.3.0. The "Since" column
+Version path: 0.1.2 -> 0.1.3 -> 0.2.0 -> 0.4.0 -> 0.5.0 -> 0.6.0 -> 0.7.0 -> 0.8.0. There is no 0.3.0. The "Since" column
 below says which release introduced each change. Releases 0.2.0 and 0.4.0 are mostly additions
 (`embedkit.evaluation`, `embedkit.baselines`, `embedkit.hubness_reduction`, `MatryoshkaLoss`, the
 `residual` and `linear` refiners); only their breaking parts are listed.
@@ -19,7 +19,17 @@ Quick triage:
 - You build `Trainer`, losses and augmentations yourself: section 5.
 - You rely on FAISS being installed with the package: section 6.
 
-Coming from 0.6.0, the changes are the rows marked 0.7.0:
+Coming from 0.7.0, the changes are the rows marked 0.8.0 (section 4). Nothing breaks yet; code
+that passes `strategy=` or reads `strategy_` warns:
+
+- `EmbedKit(strategy=...)` is deprecated: one parameter, `method`, now says what `fit` builds
+  (`"auto"`, `"center_l2"`, `"pca"`, `"refiner"`). Drop `strategy="select"`; replace
+  `strategy="fixed"` by `method="pca"` (without labels) or `method="refiner"` (with labels).
+- `EmbedKit.strategy_` is deprecated; `selected_` is now set for every configuration, not only a
+  selection (`"pca-64"`, `"refiner-128"`, ...).
+- `method` is the second positional parameter (it was `strategy`).
+
+Coming from 0.6.0, the changes are also the rows marked 0.7.0:
 
 - `report.suggested_k` and `report.suggested_sigma` are gone: use `report.k` and
   `report.kernel.sigma` (section 1).
@@ -129,8 +139,9 @@ the defaults.
 
 | Since | 0.1.2 | Now | What to do |
 |---|---|---|---|
-| 0.6.0 | `EmbedKit().fit(X)` built one configuration | New `strategy="select"` (default). Without labels: the input centred and L2-normalised (`CenterNormalize`); no analysis report. With labels: `Identity`, `CenterNormalize`, PCA at 64/128/256 (+ L2) and, in supervised or regression mode, the refiner at `min(128, d // 2)` are fitted on 80% of the rows and scored by 10-NN accuracy (cosine) or 10-NN regression R^2 on the rest; a candidate replaces `Identity` only with a paired-bootstrap interval above 0; the winner is refitted on all rows. `selected_`, `selection_report_` and `strategy_` record it | `strategy="fixed"` (or any explicit `method`) for the 0.5.0 behaviour |
-| 0.7.0 | `strategy="select"` fitted and scored the candidates on all the rows | New `selection_max_rows=50_000`: with more rows than that, the candidates are fitted and scored on a random subsample of that many rows (stratified by class) and only the winner is fitted on all the rows. Selection at a million rows takes minutes instead of hours. The choice on such inputs can differ from 0.6.0's. `selection_report_.attrs` records `n_rows` and `n_selection_rows` | `selection_max_rows=None` for the 0.6.0 behaviour. Caps below about 10,000 rows chose less well in the benchmarks |
+| 0.6.0 | `EmbedKit().fit(X)` built one configuration | New `strategy="select"` (default; `method="auto"` since 0.8.0). Without labels: the input centred and L2-normalised (`CenterNormalize`); no analysis report. With labels: `Identity`, `CenterNormalize`, PCA at 64/128/256 (+ L2) and, in supervised or regression mode, the refiner at `min(128, d // 2)` are fitted on 80% of the rows and scored by 10-NN accuracy (cosine) or 10-NN regression R^2 on the rest; a candidate replaces `Identity` only with a paired-bootstrap interval above 0; the winner is refitted on all rows. `selected_` and `selection_report_` record it | `method="pca"` (without labels) or `method="refiner"` (with labels) for the 0.5.0 behaviour |
+| 0.8.0 | Two parameters: `strategy` (`"select"` or `"fixed"`) and `method` (`"auto"`, `"pca"`, `"refiner"`); `strategy="fixed"` with `method="auto"` meant PCA without labels and the refiner with them | One parameter, `method`: `"auto"` (the selection, as `strategy="select"` was), `"center_l2"` (new: centre + L2 without selecting), `"pca"`, `"refiner"`. `strategy` and `strategy_` warn (`DeprecationWarning`) and keep their meaning until 0.9.0. `selected_` names any configuration (`"pca-<k>"`, `"refiner-<k>"`), not only a selected one | Drop `strategy="select"`; replace `strategy="fixed"` by `method="pca"` or `method="refiner"`; read `selection_report_ is not None` instead of `strategy_ == "select"`. Pass `method` by keyword |
+| 0.7.0 | The selection fitted and scored the candidates on all the rows | New `selection_max_rows=50_000`: with more rows than that, the candidates are fitted and scored on a random subsample of that many rows (stratified by class) and only the winner is fitted on all the rows. Selection at a million rows takes minutes instead of hours. The choice on such inputs can differ from 0.6.0's. `selection_report_.attrs` records `n_rows` and `n_selection_rows` | `selection_max_rows=None` for the 0.6.0 behaviour. Caps below about 10,000 rows chose less well in the benchmarks |
 | 0.6.0 | `mode="self_supervised"` was the default, so `fit(X, y)` ignored `y` except for the report | `mode="auto"`: `"self_supervised"` without labels, `"supervised"` with them; continuous targets raise unless `mode="regression"` | Pass `mode="self_supervised"` to keep labels out of training (they are then used only to select among training-free candidates) |
 | 0.6.0 | Bundles held `model.pt` | An `Identity` or `CenterNormalize` result saves `arrays.npz` instead (the training mean), and `config.json` has `strategy` and `selected` | Older bundles load as before |
 | 0.4.0 | `mode="self_supervised"` trained a refiner (MLP, `KNNPairs(5)`, NT-Xent + 0.5 `AlignUniformLoss`) | New `method="auto"` is `"pca"` without labels: the top `target_dim` principal directions followed by L2 normalisation, no training. `transform`, `dim=`, `save` and `load` work as before. In E1, E6 and E7 the refiner never beat the better of PCA and PCA-whitening | `method="refiner"` trains the refiner. With `method="pca"`, setting `augmentation`, `loss`, `nested_dims` or a non-linear `architecture` raises `ValueError` |
@@ -138,7 +149,7 @@ the defaults.
 | 0.4.0 | `early_stopping_patience=10`, `val_split=0.1`, `monitor="k_skewness"` | Defaults `"auto"`, `None` and `"auto"`. Self-supervised: no early stopping, all rows used for training, `k_skewness` only logged. Supervised and regression: patience 10, 10% of rows held out, best weights restored | Pass `early_stopping_patience=10, val_split=0.1, monitor="k_skewness"` for the 0.1.2 behaviour |
 | 0.5.0 | `mode="supervised"`: `SupConLoss(0.07)` + 0.5 `AlignUniformLoss`, MLP, `k_skewness` monitor | `SupConLoss(0.07)` alone on the residual adapter, monitored by `val_knn_accuracy` | See the snippet below |
 | 0.5.0 | No regression mode | `mode="regression"`: `RankNContrastLoss` on an MLP with `GaussianNoise(0.05)` views, monitored by `val_ridge_r2`; warns with 1000 rows or fewer | Additive |
-| 0.5.0 | `analysis_report` held the full report | With `strategy="fixed"`, `fit` runs the report with `calibrate=False, id_bootstrap=0, id_scale_curve=False`, since it reads only `suggested_target_dim`; with `strategy="select"` (the default since 0.6.0) it runs none and `analysis_report` is `None`. `analysis_report.n_outside_null` and `.calibration` are `None`, and the calibrated recommendations are absent | Run `EmbedKitAnalyzer().fit(X)` yourself for the full report |
+| 0.5.0 | `analysis_report` held the full report | With `method="pca"` or `"refiner"`, `fit` runs the report with `calibrate=False, id_bootstrap=0, id_scale_curve=False`, since it reads only `suggested_target_dim`; with `method="auto"` (the default selection since 0.6.0) or `"center_l2"` it runs none and `analysis_report` is `None`. `analysis_report.n_outside_null` and `.calibration` are `None`, and the calibrated recommendations are absent | Run `EmbedKitAnalyzer().fit(X)` yourself for the full report |
 | 0.1.3, 0.5.0 | `target_dim="auto"` | Can differ: 0.1.3 changed the ID estimates (duplicates removed, sequential runs); 0.5.0 uses 1.5 x TwoNN (Pets 22 to 24, digits 12 to 13) | Pass `target_dim=` to pin it |
 | 0.1.3 | `random_state` did not reproduce a run | Two fits with the same `random_state` return identical arrays on CPU. The initial weights come from `random_state`, so numbers differ from 0.1.2 | Re-run baselines; do not expect 0.1.2 numbers |
 | 0.4.0 | `config.json` had `mode`, `target_dim`, `hidden_dim`, `n_layers`, `input_dim` and the training settings | Also `method`, `architecture`, `nested_dims` | Bundles from 0.1.2 still load (section 6) |
@@ -161,10 +172,10 @@ ek = EmbedKit(mode="supervised", method="refiner", architecture="mlp",
 Z = ek.fit_transform(X, y)
 
 # 0.5.0 defaults: PCA without labels, residual adapter with SupCon and a held-out kNN score with labels
-Z = EmbedKit(strategy="fixed").fit_transform(X)
-Z = EmbedKit(mode="supervised", strategy="fixed").fit_transform(X, y)
+Z = EmbedKit(method="pca").fit_transform(X)
+Z = EmbedKit(mode="supervised", method="refiner").fit_transform(X, y)
 
-# 0.6.0 defaults: centre + L2 without labels, validated selection with labels
+# 0.6.0 to 0.8.0 defaults: centre + L2 without labels, validated selection with labels
 Z = EmbedKit().fit_transform(X)
 ek = EmbedKit().fit(X, y)
 Z = ek.transform(X)
@@ -240,7 +251,7 @@ the baselines, the hubness reductions) raises `ValueError` for NaN or infinite v
 or drop such rows before the call (`embedkit.utils.validation.validate_embeddings` runs the same
 check).
 
-## 7. Deprecated aliases still accepted in 0.7.0
+## 7. Deprecated aliases still accepted in 0.8.0
 
 | Alias | Replacement | Warning | Removal |
 |---|---|---|---|
@@ -248,6 +259,9 @@ check).
 | `KernelDiagnosticsResult.kernel_alignment` | `centered_kernel_alignment` | `DeprecationWarning` | Same |
 | `KernelDiagnosticsResult.condition_number` | `top_k_eigen_ratio` | `DeprecationWarning` | No date |
 | `embedkit.utils.neighbors.clear_cache()` | none (delete) | `DeprecationWarning` | "Next release" (0.1.3 changelog); still present |
+| `EmbedKit(strategy="select")` | drop it (`method="auto"`) | `DeprecationWarning` | 0.9.0 |
+| `EmbedKit(strategy="fixed")` | `method="pca"` without labels, `method="refiner"` with them | `DeprecationWarning` | 0.9.0 |
+| `EmbedKit.strategy_` | `selection_report_ is not None` (a selection ran); `selected_` (what was built) | `DeprecationWarning` | 0.9.0 |
 
 `report.suggested_k` and `report.suggested_sigma`, deprecated in 0.6.0, were removed in 0.7.0
 (section 1).
