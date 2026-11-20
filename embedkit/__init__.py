@@ -1,6 +1,6 @@
 """EmbedKit — analyze and improve ML embedding spaces."""
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 
 from embedkit.analysis.report import EmbedKitAnalyzer
 from embedkit.api import EmbedKit

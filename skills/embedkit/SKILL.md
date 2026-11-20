@@ -86,7 +86,8 @@ print(ek.selection_report_)     # one row per candidate: score, gain over Identi
 ek = EmbedKit(mode="regression", epochs=50).fit(X, targets)
 
 # ── One fixed configuration, no selection ──────────────────
-Z = EmbedKit(strategy="fixed", target_dim=64).fit_transform(X)                  # PCA to 64, L2
+Z = EmbedKit(method="center_l2").fit_transform(X, y)                            # centre + L2, no selection
+Z = EmbedKit(method="pca", target_dim=64).fit_transform(X)                      # PCA to 64, L2
 Z = EmbedKit(method="refiner", target_dim=64, epochs=100).fit_transform(X)      # contrastive refiner
 ```
 
@@ -123,7 +124,7 @@ report = analyzer.fit(X, y=None)    # y enables centered_kernel_alignment
 | `report.recommendations` | `list[str]` | Actions, Euclidean metric only: more hubness or more antihubs than the null (the two rules E4 kept). Otherwise "No recommendation: ..." |
 | `report.k` | `int` | The kNN size the report used (replaces `suggested_k`, removed in 0.7.0) |
 | `report.kernel.sigma` | `float` | The RBF bandwidth of the kernel diagnostics (replaces `suggested_sigma`, removed in 0.7.0) |
-| `report.suggested_target_dim` | `int` | ≈ 1.5 × TwoNN ID. Descriptive: PCA to it lost accuracy on 32 of 35 E4 sets. Only `EmbedKit(strategy="fixed", target_dim="auto")` reads it |
+| `report.suggested_target_dim` | `int` | ≈ 1.5 × TwoNN ID. Descriptive: PCA to it lost accuracy on 32 of 35 E4 sets. Only `EmbedKit(method="pca" or "refiner", target_dim="auto")` reads it |
 
 ---
 
@@ -167,14 +168,14 @@ For detailed interpretation of every metric and its healthy ranges, read
 | Sparse / NLP embeddings | high dim, sparse values | `FeatureDropout` augmentation (not benchmarked) |
 | Locally smooth, pretrained | `n_outside_null == 0` | `EmbeddingMixup` (not benchmarked) |
 
-`strategy="select"` (the default) without labels returns `CenterNormalize` (centred, L2); with
+`method="auto"` (the default) without labels returns `CenterNormalize` (centred, L2); with
 labels it fits `Identity`, `CenterNormalize`, PCA at 64/128/256 (+ L2) and, in supervised and
 regression mode, the refiner on 80% of the rows, scores each by 10-NN accuracy (or R^2) on the
 other 20%, and keeps `Identity` unless a candidate's paired-bootstrap interval of the gain
-(95%, 2,000 resamples) is above 0. `strategy="fixed"` (implied by any `method` other than `"auto"`)
-builds one configuration: `method="pca"` (the self-supervised `"auto"`; nothing trained) or
-`method="refiner"` (the default for supervised and regression modes). With `augmentation="auto"`,
-`loss="auto"` and `architecture="auto"`, the refiner uses:
+(95%, 2,000 resamples) is above 0. `method="center_l2"`, `"pca"` (nothing trained) or
+`"refiner"` builds that one configuration with no comparison. `strategy` is deprecated (0.8.0;
+removed in 0.9.0): `strategy="fixed"` meant `"pca"` without labels and `"refiner"` with them.
+With `augmentation="auto"`, `loss="auto"` and `architecture="auto"`, the refiner uses:
 
 | Mode | Architecture | Augmentation | Loss |
 |---|---|---|---|
@@ -184,8 +185,8 @@ builds one configuration: `method="pca"` (the self-supervised `"auto"`; nothing 
 
 (see `api.py:_resolve_loss`, `_resolve_augmentation`, `_resolve_architecture`). Setting
 `augmentation`, `loss`, `nested_dims` or a non-linear `architecture` when no refiner is fitted or
-compared (`method="pca"`, or `strategy="select"` without labels or in `mode="self_supervised"`)
-raises `ValueError`.
+compared (`method="center_l2"` or `"pca"`, or `method="auto"` without labels or in
+`mode="self_supervised"`) raises `ValueError`.
 
 ---
 
@@ -199,15 +200,14 @@ from embedkit import EmbedKit
 ek = EmbedKit(
     mode="auto",                # "auto" (self-supervised without labels, supervised with them)
                                 # | "self_supervised" | "supervised" | "regression"
-    strategy="select",          # "select" (validated choice) | "fixed" (build `method`)
-    method="auto",              # "auto" | "pca" | "refiner"; any value but "auto" implies "fixed"
+    method="auto",              # "auto" (validated choice) | "center_l2" | "pca" | "refiner"
     augmentation="auto",        # or an augmentation object (refiner only)
     loss="auto",                # or a loss object (refiner only)
-    target_dim="auto",          # select: PCA/refiner dim (auto: PCA 64/128/256, refiner min(128, d // 2));
-                                # fixed: auto = report.suggested_target_dim, but pass an int
-    val_fraction=0.2,           # select: rows held out to score the candidates
-    selection_metric="cosine",  # select: "cosine" | "euclidean" kNN
-    selection_max_rows=50_000,  # select: candidates fitted and scored on at most this many rows
+    target_dim="auto",          # method="auto": PCA/refiner dim (PCA 64/128/256, refiner min(128, d // 2));
+                                # "pca"/"refiner": auto = report.suggested_target_dim, but pass an int
+    val_fraction=0.2,           # auto: rows held out to score the candidates
+    selection_metric="cosine",  # auto: "cosine" | "euclidean" kNN
+    selection_max_rows=50_000,  # auto: candidates fitted and scored on at most this many rows
                                 # (stratified subsample); the winner is refitted on all rows;
                                 # None = all rows (0.6.0)
     epochs=100,
@@ -225,12 +225,13 @@ Z = ek.transform(X)             # transform(X, dim=m) keeps the first m coordina
 Z = ek.fit_transform(X, y=y)
 
 # inspect what was chosen:
-print(ek.selected_)             # winner under "select"; None for a fixed configuration
+print(ek.selected_)             # what was built: "identity", "center_l2", "pca-<k>", "refiner-<k>"
 print(ek.selection_report_)     # DataFrame: candidate, dim, score, diff_vs_identity,
                                 # diff_lo, diff_hi, beats_identity, selected
-print(ek.strategy_, ek.mode_, ek.method_)
-# ek.analysis_report is None under "select"; a fixed configuration runs the report
-# uncalibrated (it reads only suggested_target_dim)
+print(ek.mode_, ek.method_)
+# selection_report_ is None unless method="auto" selected with labels.
+# ek.analysis_report is None for "auto" and "center_l2"; "pca" and "refiner" run the report
+# uncalibrated (they read only suggested_target_dim)
 ```
 
 Rules to remember: continuous targets need `mode="regression"` (with `mode="auto"` non-integer
@@ -411,9 +412,9 @@ collapse early in training.
 
 **kNN backend.** `embedkit.utils.neighbors.knn()` runs an exact scikit-learn search by default and caches nothing. FAISS is optional (`pip install embedkit[faiss]`); select it with `backend="faiss"` or `EMBEDKIT_KNN_BACKEND=faiss`. Both return true distances (Euclidean, or `1 - cos` for cosine), ascending, without the query point.
 
-**`target_dim="auto"` under `strategy="fixed"` is ≈ 1.5 × intrinsic dimension.** No benchmark
-supports that factor and PCA to it lost accuracy on 32 of 35 E4 sets. Pass an explicit integer, or
-leave the default `strategy="select"`, which compares PCA at 64, 128 and 256 with the input.
+**`target_dim="auto"` with `method="pca"` or `"refiner"` is ≈ 1.5 × intrinsic dimension.** No
+benchmark supports that factor and PCA to it lost accuracy on 32 of 35 E4 sets. Pass an explicit
+integer, or leave the default `method="auto"`, which compares PCA at 64, 128 and 256 with the input.
 
 **Do not read a diagnostic as a reason to transform.** Only two rules (hubness and antihubs, Euclidean
 kNN) predicted a fix in E4, and the first fired on 3 sets. Whitening (ZCA, PCA-whitening) hurt on most

@@ -268,7 +268,7 @@ An uncalibrated statistic keeps its z-score, but raises no recommendation and is
 |-------|---------|
 | `k` | The neighbourhood size the report used: the `k` given, else `max(5, round(√min(n, n_max) / 2))`. Replaces `suggested_k` |
 | `kernel.sigma` | The RBF bandwidth of the kernel diagnostics (median pairwise distance). Replaces `suggested_sigma` |
-| `suggested_target_dim` | `clip(1.5 × ID, max(4, ID), D)` with ID the reference estimate (TwoNN by default). No benchmark supports the factor 1.5, and PCA to it lost accuracy on 32 of 35 E4 sets. Only `EmbedKit(strategy="fixed", target_dim="auto")` reads it |
+| `suggested_target_dim` | `clip(1.5 × ID, max(4, ID), D)` with ID the reference estimate (TwoNN by default). No benchmark supports the factor 1.5, and PCA to it lost accuracy on 32 of 35 E4 sets. Only `EmbedKit(method="pca" or "refiner", target_dim="auto")` reads it |
 
 `report.suggested_k` and `report.suggested_sigma`, deprecated in 0.6.0, were removed in 0.7.0.
 
@@ -602,7 +602,7 @@ ek.fit(X)
 Z32 = ek.transform(X, dim=32)   # first 32 coordinates, renormalised
 ```
 
-`EmbedKit(method="refiner", nested_dims=...)` (or `strategy="fixed"`) does the wrapping for the default loss: `"auto"` nests the powers of two from 32 below `target_dim`, a sequence gives the dims. In E6 (`docs/benchmarks/BENCHMARK_E6_E7.md`) the prefixes of one model at 256 matched `linear` models trained separately at 32, 64 and 128, at about 1.5 times the training cost of one of them. Without a refiner, PCA prefixes are nested by construction (`EmbedKit(strategy="fixed", target_dim=128).fit(X).transform(X, dim=32)`).
+`EmbedKit(method="refiner", nested_dims=...)` does the wrapping for the default loss: `"auto"` nests the powers of two from 32 below `target_dim`, a sequence gives the dims. In E6 (`docs/benchmarks/BENCHMARK_E6_E7.md`) the prefixes of one model at 256 matched `linear` models trained separately at 32, 64 and 128, at about 1.5 times the training cost of one of them. Without a refiner, PCA prefixes are nested by construction (`EmbedKit(method="pca", target_dim=128).fit(X).transform(X, dim=32)`).
 
 ```python
 from embedkit import EmbedKit
@@ -670,10 +670,19 @@ print(trainer.history)             # {"loss": [...], "uniformity": [...], ...}
 
 ### 2.5 High-Level EmbedKit API
 
-`EmbedKit` fits one transform on the input embeddings and applies it with `transform`. By default
-(`strategy="select"`) it chooses the output by validation; with `strategy="fixed"` it builds the
-configuration you name. It is sklearn-style: `fit(X, y=None)`, `transform(X, dim=None)`,
-`fit_transform`, `save` and `load`.
+`EmbedKit` fits one transform on the input embeddings and applies it with `transform`. One
+parameter, `method`, says what it builds:
+
+| `method` | Builds |
+|---|---|
+| `"auto"` (default) | Chosen for you: centre + L2 without labels; with labels, the candidate that validates best (below) |
+| `"center_l2"` | The input centred on the training mean and scaled to unit L2 norm, with or without labels |
+| `"pca"` | The top `target_dim` principal directions followed by L2 normalisation; nothing is trained |
+| `"refiner"` | A trained `EmbeddingRefiner`, configured by `mode` (below) |
+
+It is sklearn-style: `fit(X, y=None)`, `transform(X, dim=None)`, `fit_transform`, `save` and
+`load`. Up to 0.7.0 a second parameter, `strategy`, switched between choosing and building; it is
+deprecated (see "Fixed configurations" below).
 
 #### What the default does, and why
 
@@ -723,8 +732,8 @@ After `fit`: `selected_` names the winner (`"identity"`, `"center_l2"`, `"pca-12
 `selection_report_.attrs` holds the criterion, `k`, the metric, the number of fit and held-out rows,
 the number of resamples, the number of input rows (`n_rows`) and the number of rows the
 selection used (`n_selection_rows`). With fewer than 20 rows to fit or to score (about 100 rows or fewer
-at `val_fraction=0.2`), `fit` warns and returns `Identity`; pass `strategy="fixed"` to build a
-configuration anyway.
+at `val_fraction=0.2`), `fit` warns and returns `Identity`; pass `method="center_l2"`, `"pca"` or
+`"refiner"` to build one anyway.
 
 **Modes.** `mode="auto"` (default) is `"self_supervised"` without labels and `"supervised"` with
 them. Continuous targets need `mode="regression"`: with `mode="auto"`, float labels that are not
@@ -735,20 +744,20 @@ refiner, so setting them when no refiner is fitted or compared raises `ValueErro
 
 #### Fixed configurations
 
-`strategy="fixed"`, or any `method` other than `"auto"` (which implies it; `strategy_` records
-what ran), builds one configuration:
+`method="center_l2"`, `"pca"` or `"refiner"` builds that one configuration, with no comparison.
+`selected_` names it as the selection would (`"center_l2"`, `"pca-64"`, `"refiner-128"`) and
+`selection_report_` is `None`.
 
-| `method` | Builds |
-|-----------|--------|
-| `"auto"` | `"pca"` when `mode="self_supervised"`, `"refiner"` when `mode="supervised"` or `"regression"` |
-| `"pca"` | The top `target_dim` principal directions followed by L2 normalisation; nothing is trained. It is the `linear` refiner at its initialisation, so `transform`, `dim=`, `save` and `load` behave as for a trained model. |
-| `"refiner"` | A trained `EmbeddingRefiner` (below) |
-
-`target_dim="auto"` is the report's `suggested_target_dim`, `clip(1.5 × ID, ID, D)`: a fixed
-configuration runs the analysis report (uncalibrated, without the ID bootstrap and scale curve) on
-all rows to get it, and keeps it in `analysis_report`. No benchmark supports the factor 1.5, and PCA
-to this dimension lost accuracy on 32 of 35 E4 sets, so pass an explicit `target_dim` when you
-choose `strategy="fixed"`.
+- `"pca"` is the `linear` refiner at its initialisation, so `transform`, `dim=`, `save` and `load`
+  behave as for a trained model.
+- For `"pca"` and `"refiner"`, `target_dim="auto"` is the report's `suggested_target_dim`,
+  `clip(1.5 × ID, ID, D)`: `fit` runs the analysis report (uncalibrated, without the ID bootstrap and
+  scale curve) on all rows to get it, and keeps it in `analysis_report`. No benchmark supports the
+  factor 1.5, and PCA to this dimension lost accuracy on 32 of 35 E4 sets, so pass an explicit
+  `target_dim`.
+- `strategy` is deprecated and goes in 0.9.0. `strategy="select"` is `method="auto"`;
+  `strategy="fixed"` with `method="auto"` is `method="pca"` without labels and `method="refiner"`
+  with them. `strategy_` is deprecated too: `selection_report_` is `None` unless a selection ran.
 
 Why PCA rather than a refiner without labels: in E1, E6 and E7 (`docs/benchmarks/BENCHMARK_E1_E2.md`,
 `docs/benchmarks/BENCHMARK_E6_E7.md`) the self-supervised refiner never beat the better of PCA and PCA-whitening
@@ -784,14 +793,16 @@ embeddings. For regression the MLP with noise views beat the linear refiner, the
 PCA on all 4 datasets; with 1000 training rows or fewer no refiner reliably beat the raw embeddings,
 and a fixed regression refiner warns.
 
-**Class:** `EmbedKit(mode="auto", strategy="select", method="auto", augmentation="auto", loss="auto", target_dim="auto", hidden_dim=256, n_layers=2, architecture="auto", epochs=100, batch_size=256, optimizer="adam", lr=3e-4, weight_decay=1e-4, scheduler="cosine", eval_every=5, early_stopping_patience="auto", monitor="auto", val_split=None, device=None, id_methods=None, random_state=42, nested_dims=None, val_fraction=0.2, selection_metric="cosine", selection_max_rows=50000)`
+**Class:** `EmbedKit(mode="auto", method="auto", augmentation="auto", loss="auto", target_dim="auto", hidden_dim=256, n_layers=2, architecture="auto", epochs=100, batch_size=256, optimizer="adam", lr=3e-4, weight_decay=1e-4, scheduler="cosine", eval_every=5, early_stopping_patience="auto", monitor="auto", val_split=None, device=None, id_methods=None, random_state=42, nested_dims=None, val_fraction=0.2, selection_metric="cosine", selection_max_rows=50000, strategy=None)` (`strategy` deprecated)
 
 `nested_dims=None` (default), `"auto"` or a sequence trains nested prefixes of a refiner, readable with
 `transform(X, dim=m)`; see `MatryoshkaLoss` above.
 
-Attributes after `fit`: `mode_`, `strategy_`, `method_`, `selected_` and `selection_report_` (both
-`None` for a fixed configuration), `analysis_report` (`None` under `"select"`), and for a refiner
-`architecture_`, `monitor_`, `early_stopping_patience_`, `nested_dims_`.
+Attributes after `fit`: `mode_`, `method_`, `selected_` (what was built: `"identity"`,
+`"center_l2"`, `"pca-<k>"` or `"refiner-<k>"`), `selection_report_` (`None` unless
+`method="auto"` selected with labels), `analysis_report` (`None` for `"auto"` and `"center_l2"`),
+and for a refiner `architecture_`, `monitor_`, `early_stopping_patience_`, `nested_dims_`.
+`strategy_` is deprecated.
 
 `X` is validated once at `fit` (at least 5 rows; NaN or infinite values raise; constant columns and
 duplicate rows warn). `transform(X, dim=m)` keeps the first `m` output coordinates and renormalises
@@ -822,12 +833,12 @@ ek = EmbedKit(mode="self_supervised").fit(X, y)
 ek = EmbedKit(mode="regression", epochs=50).fit(X, y.astype(float))
 
 # One fixed configuration
-ek = EmbedKit(strategy="fixed", target_dim=64)            # self-supervised: PCA to 64, L2
+ek = EmbedKit(method="pca", target_dim=64)                # PCA to 64, L2
 Z = ek.fit_transform(X)
 Z16 = ek.transform(X, dim=16)                             # PCA at 16, renormalised
 ek = EmbedKit(method="refiner", target_dim=64, epochs=50)  # contrastive refiner, no labels
 Z = ek.fit_transform(X)
-ek = EmbedKit(mode="supervised", strategy="fixed", target_dim=32, epochs=50)
+ek = EmbedKit(method="refiner", target_dim=32, epochs=50)
 Z = ek.fit_transform(X, y=y)                              # SupCon on the residual adapter
 
 # What a fixed configuration auto-configured
@@ -842,7 +853,7 @@ ek2 = EmbedKit.load("my_model/")            # device=None: CUDA, then MPS, then 
 Z_new = ek2.transform(X_new)
 ```
 
-`save` writes `config.json` (mode, strategy, method, input dimension, `selected`, and for a model
+`save` writes `config.json` (mode, method, input dimension, `selected`, and for a model
 its dimensions and architecture) plus the state: `model.pt` for PCA and refiner outputs, and
 `arrays.npz` for an `Identity` or `CenterNormalize` result (the training mean; no `model.pt`). It
 writes `report.json` only when `analysis_report` exists. `load` restores `method_` and `selected_`;

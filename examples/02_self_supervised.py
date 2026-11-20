@@ -15,7 +15,7 @@ print("=== Before refinement ===")
 report_before = EmbedKitAnalyzer(id_methods=["TwoNN"]).fit(X)
 report_before.print_summary()
 
-# Without labels the default (strategy="select") centres and L2-normalises: no label-free score
+# Without labels the default (method="auto") centres and L2-normalises: no label-free score
 # can tell whether a transform helps, and in E4 PCA to the suggested dimension lost accuracy on
 # 32 of 35 natural sets. With labels, EmbedKit().fit(X, y) chooses by validation instead.
 X_default = EmbedKit().fit_transform(X)

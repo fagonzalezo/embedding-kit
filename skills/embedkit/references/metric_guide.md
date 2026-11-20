@@ -40,8 +40,8 @@ The k-NN estimators (TwoNN, MLE, MOM) read low at high ID (15 to 17 on a 20-sphe
 |---|---|---|
 | any | No recommendation (the ID / D rule was removed after E4: it fired on all 35 natural sets, and PCA to `suggested_target_dim` lost accuracy on 32) | `clip(1.5 × ID, max(4, ID), D)` |
 
-No benchmark supports the factor 1.5. `EmbedKit` reads it only under `strategy="fixed"` with
-`target_dim="auto"`; the default `strategy="select"` does not compute the report. If you reduce
+No benchmark supports the factor 1.5. `EmbedKit` reads it only with `method="pca"` or
+`"refiner"` and `target_dim="auto"`; the default `method="auto"` does not compute the report. If you reduce
 dimension, pass an explicit `target_dim` and test it against the input on held-out data.
 
 ---
@@ -227,8 +227,9 @@ spectrum; or `"permuted"`: each column permuted). The comparison runs on a subsa
   marked uncalibrated. Also uncalibrated: k-skewness and the antihub ratio under cosine, and
   neighbour consistency under Euclidean distance above d = 256. An
   uncalibrated statistic raises no recommendation and is not counted in `n_outside_null`.
-- The high-level `EmbedKit` computes no report under `strategy="select"` (`analysis_report` is
-  `None`); `strategy="fixed"` runs it uncalibrated and reads only `suggested_target_dim`.
+- The high-level `EmbedKit` computes no report with `method="auto"` (`analysis_report` is
+  `None`); `method="pca"` or `"refiner"` runs it uncalibrated and reads only
+  `suggested_target_dim`.
 
 ---
 

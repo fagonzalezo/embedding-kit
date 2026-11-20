@@ -349,7 +349,7 @@ def render(df: pd.DataFrame) -> str:
         "**Splits.** Every set has a fixed training split and a fixed test split (the sizes are "
         "in the source table below). The test split is used once, to score the final result; "
         "nothing is chosen on it.", "",
-        "**What the default does** (`EmbedKit()`, `strategy=\"select\"`, with labels):",
+        "**What the default does** (`EmbedKit()`, `method=\"auto\"`, with labels):",
         "1. It holds out a random 20% of the training rows, stratified by class "
         "(`val_fraction=0.2`).",
         "2. It fits each candidate on the other 80%:",
