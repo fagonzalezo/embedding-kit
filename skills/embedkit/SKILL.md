@@ -1,13 +1,14 @@
 ---
 name: embedkit
 description: >
-  Guide ML practitioners through analyzing, improving, and integrating embedding spaces
-  using the EmbedKit library. Use this skill whenever the user has embedding arrays
-  (NumPy/PyTorch), wants to assess embedding quality, diagnose geometric pathologies
-  (hubness, anisotropy, distance concentration, intrinsic dimensionality mismatch),
-  choose improvement strategies, apply contrastive learning to refine embeddings, or
-  plug EmbedKit into their own ML workflows (HuggingFace, PyTorch training loops,
-  scikit-learn pipelines, RAG systems, retrieval stacks). Trigger on: "embeddings",
+  Guide ML practitioners through improving, evaluating, describing and integrating embedding
+  spaces with the EmbedKit library. Use this skill whenever the user has embedding arrays
+  (NumPy/PyTorch) and wants to improve them for kNN search or classification (validated
+  selection among the input, centring, PCA and a supervised contrastive refiner), compare
+  transforms on held-out data, tune a refiner, describe embedding geometry (hubness,
+  intrinsic dimension, isotropy, distance concentration, each against a null model), or plug
+  EmbedKit into their own ML workflows (HuggingFace, PyTorch training loops, scikit-learn
+  pipelines, RAG systems, retrieval stacks). Trigger on: "embeddings",
   "hubness", "intrinsic dimension", "isotropy", "embedding space", "refine embeddings",
   "EmbedKit", sentence/image/word embedding quality, kNN quality, representation
   learning diagnostics, retrieval quality, semantic similarity, embedding geometry.
@@ -20,6 +21,17 @@ embedding spaces, compares transforms against training-free baselines on held-ou
 trains a contrastive refiner. The benchmarks mostly found that diagnosing an embedding does not
 tell you how to fix it, so the high-level `EmbedKit` chooses its output by validation, not by
 diagnosis. Say so to the user: do not present a diagnostic reading as a reason to transform.
+
+- **To improve embeddings**, start from `EmbedKit()`: without labels it centres and
+  L2-normalises; with labels it keeps a transform only if it beats the input on held-out rows.
+- **To describe embeddings** (compare encoders or layers, explain a result), use
+  `EmbedKitAnalyzer`. Its one validated action is a hubness-reducing search for Euclidean kNN.
+- **To check a transform on the user's task**, use `evaluate_transform` and `compare` against
+  `Identity`, with a paired bootstrap interval.
+
+The full reference is `docs/manual.md`: the opening explains how EmbedKit decides, Part 1 covers
+`EmbedKit` and tuning a refiner (section 1.2), Part 2 evaluation, Part 3 the analyzers with what
+the evidence says about each statistic.
 
 ## What the benchmarks show (use when advising)
 
@@ -67,11 +79,6 @@ from embedkit import EmbedKit, EmbedKitAnalyzer
 
 X = np.load("embeddings.npy")   # shape (n_samples, n_features)
 
-# ── Analysis only ──────────────────────────────────────────
-report = EmbedKitAnalyzer(k=10).fit(X)
-report.print_summary()          # human-readable overview
-df = report.to_dataframe()      # pandas DataFrame of all metrics
-
 # ── No labels: centred and L2-normalised, nothing trained ──
 Z = EmbedKit().fit_transform(X)
 
@@ -88,8 +95,17 @@ ek = EmbedKit(mode="regression", epochs=50).fit(X, targets)
 # ── One fixed configuration, no selection ──────────────────
 Z = EmbedKit(method="center_l2").fit_transform(X, y)                            # centre + L2, no selection
 Z = EmbedKit(method="pca", target_dim=64).fit_transform(X)                      # PCA to 64, L2
-Z = EmbedKit(method="refiner", target_dim=64, epochs=100).fit_transform(X)      # contrastive refiner
+Z = EmbedKit(method="refiner", target_dim=64, epochs=100).fit_transform(X, y)   # supervised refiner
+
+# ── Describe the space (no transform is chosen from this) ──
+report = EmbedKitAnalyzer(k=10).fit(X)
+report.print_summary()          # human-readable overview
+df = report.to_dataframe()      # pandas DataFrame of all metrics
 ```
+
+Without labels, do not suggest `method="refiner"`: the self-supervised refiner never beat PCA
+(E1, E6, E7). For a smaller embedding without labels, `method="pca"` with an explicit
+`target_dim`.
 
 ---
 
@@ -99,7 +115,7 @@ Z = EmbedKit(method="refiner", target_dim=64, epochs=100).fit_transform(X)      
 from embedkit import EmbedKitAnalyzer
 
 analyzer = EmbedKitAnalyzer(
-    k=10,                                    # kNN size; auto = max(5, round(sqrt(n)/2)) if None
+    k=10,                                    # kNN size; None = max(5, round(sqrt(min(n, n_max))/2))
     id_methods=["TwoNN", "MLE", "lPCA", "MOM"],  # ID estimators (default)
     metric="euclidean",                       # "euclidean" or "cosine" (normalised rows)
     calibrate=True,                           # compare 5 statistics with a null model (z-scores)
@@ -143,30 +159,31 @@ print(report.recommendations)
 print(report.n_outside_null)     # calibrated statistics with |z| > 3
 ```
 
-For detailed interpretation of every metric and its healthy ranges, read
-`references/metric_guide.md`.
+For what every statistic means, which ones the null model calibrates and what the evidence says
+about each, read `references/metric_guide.md`. Present the numbers as description; ranges there
+are not thresholds.
 
 ---
 
-## Pathology → Improvement Quick Reference
+## What to Do, by Situation
 
-> Experiment E4 tested the report's rules on 35 natural classification sets
-> (`benchmarks/results/e4/REPORT.md`). Only the first two rows below are backed by it, and only
+> Experiment E4 tested 9 diagnostic rules on 35 natural classification sets
+> (`benchmarks/results/e4/REPORT.md`). Only the two hubness rows below are backed by it, and only
 > for Euclidean kNN; the report recommends nothing else. Distance concentration, neighbour
 > consistency, low ID/D, the mean direction, the top components, anisotropy and dominant
 > coordinates did not predict which training-free fix helps, so their statistics are reported
-> without an action. PCA to `suggested_target_dim` lost accuracy on 32 of the 35 sets. The
-> rows with labels follow E8 (and with few labels per class, LDA or the raw embeddings can be
-> better). The last two rows were not benchmarked; do not present them as findings.
+> without an action. The rows with labels follow E8 and E10 (with few labels per class, LDA or
+> the raw embeddings can be better). Do not recommend an augmentation or a loss from a
+> diagnostic reading: none was benchmarked that way.
 
-| Detected pathology | Metric signal | Recommended improvement |
+| Situation | Signal | Action |
 |---|---|---|
-| Hubness (Euclidean) | `calibration["k_skewness"].z_score > 3` with `metric="euclidean"` | Hubness-reducing search (`embedkit.hubness_reduction.MutualProximity`, `CSLS`) |
-| Antihubs (Euclidean) | `calibration["antihub_ratio"].z_score > 3` with `metric="euclidean"` | Same |
+| Hubness, Euclidean search | `calibration["k_skewness"].z_score > 3` with `metric="euclidean"` | Hubness-reducing search (`embedkit.hubness_reduction.MutualProximity`, `CSLS`); compare with plain search |
+| Antihubs, Euclidean search | `calibration["antihub_ratio"].z_score > 3` with `metric="euclidean"` | Same |
 | Class labels available | labels given | `EmbedKit().fit(X, y)` (selection; the supervised refiner is a candidate, `SupConLoss`) |
 | Continuous targets available | targets given | `EmbedKit(mode="regression").fit(X, y)` (`RankNContrastLoss`; needs more than 1,000 rows) |
-| Sparse / NLP embeddings | high dim, sparse values | `FeatureDropout` augmentation (not benchmarked) |
-| Locally smooth, pretrained | `n_outside_null == 0` | `EmbeddingMixup` (not benchmarked) |
+| No labels | | `EmbedKit()` (centre + L2); nothing more can be validated without labels |
+| A refiner was close but not selected | refiner's `diff_vs_identity > 0`, interval reaching below 0 | Tune it on a held-out split (`docs/manual.md` section 1.2) |
 
 `method="auto"` (the default) without labels returns `CenterNormalize` (centred, L2); with
 labels it fits `Identity`, `CenterNormalize`, PCA at 64/128/256 (+ L2) and, in supervised and
@@ -245,62 +262,50 @@ infinite values raise, constant columns and duplicate rows warn).
 ```python
 from embedkit.improvement.model import EmbeddingRefiner
 from embedkit.improvement.trainer import Trainer
-from embedkit.improvement.augmentation import (
-    GaussianNoise, FeatureDropout, EmbeddingMixup,
-    KNNPairs, FeatureMasking, CompositeAugmentation,
-)
-from embedkit.improvement.losses import (
-    NTXentLoss, AlignUniformLoss, TripletLoss, SupConLoss,
-    RankNContrastLoss, CombinedLoss,
-)
+from embedkit.improvement.augmentation import KNNPairs   # also GaussianNoise, IdentityPair, ...
+from embedkit.improvement.losses import SupConLoss       # also RankNContrastLoss, TripletLoss, ...
 
+# The supervised refiner that EmbedKit(method="refiner") builds with class labels
 model = EmbeddingRefiner(
     input_dim=768,
     target_dim=64,
-    hidden_dim=256,
-    n_layers=2,
-    normalize_output=True,  # L2-normalize output; required for NTXentLoss
+    architecture="residual",  # "linear" (default), "residual" (PCA-initialised + MLP) or "mlp"
+    normalize_output=True,    # L2-normalised output, as the contrastive losses expect
 )
-
-aug = CompositeAugmentation(
-    [GaussianNoise(std=0.05, adaptive=True), FeatureDropout(p=0.1)],
-    mode="sequential",    # or "random_choice"
-)
-
-loss_fn = CombinedLoss([
-    (NTXentLoss(temperature=0.07), 1.0),
-    (AlignUniformLoss(alpha=2, t=2), 0.5),
-])
-
 trainer = Trainer(
     model=model,
-    augmentation=aug,
-    loss=loss_fn,
-    epochs=200,
+    augmentation=KNNPairs(k=5),
+    loss=SupConLoss(temperature=0.07),
+    epochs=100,
     batch_size=256,
-    optimizer="adam",     # "adam" | "sgd"
+    optimizer="adam",         # "adam" | "sgd"
     lr=3e-4,
     weight_decay=1e-4,
     scheduler="cosine",
-    eval_every=10,        # evaluate the monitors in `eval_metrics` every N epochs
-    early_stopping_patience=20,
-    device="cuda",
+    eval_every=5,
+    monitor="val_knn_accuracy",   # a labelled monitor (val_ridge_r2 for continuous targets)
+    val_split=0.1,
+    early_stopping_patience=10,   # evaluations, not epochs; best weights restored
     random_state=42,
 )
-trainer.fit(X)            # self-supervised; trainer.fit(X, y=y) for supervised
+trainer.fit(X, y=y)       # Trainer.fit initialises a linear or residual model at PCA
 X_refined = trainer.transform(X)
 ```
 
+Stop early only on a labelled monitor. The default `monitor` is `"uniformity"`, and in E2 no
+label-free statistic (uniformity, isotropy, k-skewness, neighbour overlap) tracked test accuracy
+within a run; without labels, train for a fixed number of epochs. A custom loop (not `Trainer`)
+must call `model.initialize_from_data(X_train)` for the linear and residual architectures.
+
 #### Augmentation guide
 
-| Class | Best for |
+| Class | Evidence |
 |---|---|
-| `GaussianNoise(std, adaptive, relative)` | Robust baseline for most situations |
-| `FeatureDropout(p)` | Sparse / over-complete NLP embeddings |
-| `EmbeddingMixup(alpha, k)` | Locally smooth, trusted embeddings |
-| `KNNPairs(k, neighbor_index, metric)` | Auto-config default; pretrained embeddings with good local structure |
-| `FeatureMasking(mask_ratio)` | Structured, correlated embeddings |
-| `CompositeAugmentation(augs, mode)` | Combination strategies |
+| `KNNPairs(k=5)` | Default for the supervised and self-supervised refiners (E8) |
+| `GaussianNoise(std=0.05)` | Default for regression: noise views beat neighbour pairs on 3 of 4 sets (E8). `relative=True` scales `std` by the per-dimension sd computed in `precompute` (the trainer calls it) |
+| `IdentityPair()` | Dropout-only positives (SimCSE); not benchmarked |
+| `FeatureDropout(p)`, `FeatureMasking(mask_ratio, block_size)`, `EmbeddingMixup(k, alpha)` | Not benchmarked |
+| `CompositeAugmentation(augs, mode)` | `"sequential"` or `"random_choice"`; a pair augmentation (`KNNPairs`, `IdentityPair`) must come first |
 
 #### Training-free baselines and evaluation
 
@@ -315,21 +320,25 @@ print(compare(res, reference="raw"))    # mean, sd, and the difference with a pa
 ```
 
 Always compare a proposed transform with `Identity` (and PCA) on held-out data; a win needs the
-95% interval to exclude 0. Hubness-reducing neighbour search (`embedkit.hubness_reduction`:
+95% interval to exclude 0. To tune a refiner (output dimension, loss, temperature, architecture,
+learning rate), follow `docs/manual.md` section 1.2: three splits, one factor at a time, several
+seeds, keep a configuration only if its interval against raw is above 0, then score it once on
+the test split. `evaluate_transform` scores 5-NN accuracy by default, while the selection uses
+10-NN; also score `"linear_probe_c1"` if the embedding feeds a linear classifier. Hubness-reducing neighbour search (`embedkit.hubness_reduction`:
 `LocalScaling`, `MutualProximity`, `CSLS`, `DisSimLocal`) is a secondary distance fitted on a
 gallery, not a transform: `MutualProximity(metric="euclidean").fit(Z_gallery).kneighbors(Z_query,
 n_neighbors=10)`.
 
 #### Loss guide
 
-| Class | Mode | Best for |
+| Class | Labels | Evidence |
 |---|---|---|
-| `NTXentLoss(temperature)` | self-supervised | Default self-supervised choice |
-| `AlignUniformLoss(alpha, t)` | self-supervised | Explicit hubness / uniformity control |
-| `SupConLoss(temperature)` | supervised | Class labels available |
-| `TripletLoss(margin, mining)` | supervised | Complex class boundaries |
-| `RankNContrastLoss(temperature, chunk_size)` | supervised | Continuous/regression labels; ranks neighbors by label distance |
-| `CombinedLoss([(loss, weight)])` | any | Add uniformity regularization to any base loss |
+| `SupConLoss(temperature=0.07, spread_weight=0.0)` | classes | Supervised default (E8). `spread_weight` 0.25 to 0.5 keeps structure inside a class when the labels are coarser than the classes of interest (CIFAR-100 fine classes: 0.869 against 0.645) |
+| `RankNContrastLoss(temperature=0.07, chunk_size=None)` | continuous | Regression default (E8); ranks pairs by label distance |
+| `TripletLoss(margin, mining, distance)` | classes | Never benchmarked |
+| `NTXentLoss(temperature)` + 0.5 `AlignUniformLoss` | none | Self-supervised default; that refiner never beat PCA (E1, E6, E7) |
+| `CombinedLoss([(loss, weight)])` | any | Adding `AlignUniformLoss` to SupCon was rejected in E8 (1 win, 4 ties, 1 loss on kNN accuracy) |
+| `MatryoshkaLoss(base_loss, dims)` | any | Nested prefixes, read with `transform(X, dim=m)`; `EmbedKit(nested_dims="auto")` wraps the default loss (E6) |
 
 ---
 
@@ -348,7 +357,7 @@ fig = plotter.plot_kernel_spectrum()       # RBF kernel eigenvalue spectrum
 fig.savefig("spectrum.png")
 
 # ── Before / after 2-D projection ─────────────────────────
-viz = EmbeddingVisualizer(method="umap")   # or method="pca"
+viz = EmbeddingVisualizer(method="pca")    # or method="umap" (the class default)
 fig = viz.plot_comparison(X, X_refined, labels=y)
 fig.savefig("comparison.png")
 ```
@@ -387,8 +396,9 @@ EmbedKit slots into common ML stacks. For detailed patterns with code, read
   `Trainer` eval into your existing loop
 - **scikit-learn pipelines** — wrap `EmbedKit` as a `TransformerMixin` for use in
   `Pipeline`
-- **RAG / vector store retrieval** — diagnose hub contamination, refine, re-index
-- **Production inference** — batch transform with `trainer.transform(X)`; export
+- **RAG / vector store retrieval** — fit on the corpus, apply to queries; hubness reduction
+  for Euclidean search when the report recommends it; compare with the raw embeddings
+- **Production inference** — batch transform with `EmbedKit.load(...).transform(X)`; export
   `EmbeddingRefiner` to ONNX
 
 ---
@@ -406,9 +416,9 @@ marks the antihub ratio, `distance_cv` and uniformity of such rows as uncalibrat
 `normalize_output=True` for this reason. If you swap in a different loss (e.g., `TripletLoss`
 with Euclidean distance), pass `normalize_output=False`.
 
-**Temperature matters.** `NTXentLoss` and `SupConLoss` are sensitive to temperature.
-The default `0.07` works well for most cases; go lower (colder) if representations
-collapse early in training.
+**Temperature is worth tuning.** The default `0.07` of `SupConLoss` and `RankNContrastLoss`
+was never tuned per data set; `docs/manual.md` section 1.2 suggests trying 0.1 to 0.2, on a
+held-out split.
 
 **kNN backend.** `embedkit.utils.neighbors.knn()` runs an exact scikit-learn search by default and caches nothing. FAISS is optional (`pip install embedkit[faiss]`); select it with `backend="faiss"` or `EMBEDKIT_KNN_BACKEND=faiss`. Both return true distances (Euclidean, or `1 - cos` for cosine), ascending, without the query point.
 
@@ -423,5 +433,6 @@ sets. Test any proposed transform on held-out data against `Identity`.
 **Small data.** With 1,000 rows or fewer, or 1 to 5 labels per class, no refiner reliably beat the
 raw embeddings (E8). With labels, `EmbedKit` selection falls back to `Identity` below about 100 rows.
 
-**Batch size and in-batch negatives.** `NTXentLoss` uses in-batch negatives — larger
-batches give a stronger learning signal. Try `batch_size=512` or higher on GPU.
+**Batch size and in-batch negatives.** `NTXentLoss` and `SupConLoss` use in-batch negatives, so
+the batch size changes the objective. The default 256 was not tuned; treat it like any other
+setting and compare on held-out data.
