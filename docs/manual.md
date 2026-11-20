@@ -1,32 +1,87 @@
 # EmbedKit Concepts Manual
 
-EmbedKit is a Python library for analyzing and improving ML embedding spaces. It has two pillars:
-
-- **Analysis** — a suite of geometry-aware metrics that describe an embedding space (intrinsic dimension, hubness, distance concentration, anisotropy, kernel spectrum), each judged against a null model. The report makes a recommendation only for the two rules that experiment E4 validated (more hubness and more antihubs than the null, under Euclidean distance).
-- **Improvement** — a transform chosen by validation: the input centred and L2-normalised without labels; with labels, the best of the input, centring, PCA and a supervised contrastive refiner, kept only if it is significantly better than the input on held-out rows. A contrastive refiner, training-free baselines and hubness-reducing neighbour search are also available directly.
-
-The benchmarks behind these defaults, and where the library does not help, are summarised in the
-README (`docs/benchmarks/` and `benchmarks/results/e4/REPORT.md` have the tables).
+EmbedKit works on embeddings you already have, the output of a pretrained text or image encoder,
+for example. It fits a transform on them (centring and L2 normalisation, PCA, or a contrastive
+refiner trained with labels), and it describes their geometry (intrinsic dimension, hubness,
+isotropy and more, each compared with a null model).
 
 ```python
 import numpy as np
 from embedkit import EmbedKit, EmbedKitAnalyzer
 
 X = np.load("embeddings.npy")          # (n_samples, n_features)
+y = np.load("labels.npy")              # optional: class labels or continuous targets
 
-# analyze only
+# Without labels: centred and L2-normalised, nothing trained
+Z = EmbedKit().fit_transform(X)
+
+# With labels: the transform that beats the input on held-out rows, or the input itself
+ek = EmbedKit().fit(X, y)              # mode="regression" for continuous targets
+print(ek.selected_)                    # "identity", "center_l2", "pca-128", "refiner-128", ...
+Z = ek.transform(X)
+
+# Describe the space; no transform is chosen from this
 report = EmbedKitAnalyzer().fit(X)
 report.print_summary()
-
-# improve in one call: without labels, centred and L2-normalised
-X_refined = EmbedKit().fit_transform(X)
 ```
+
+## How EmbedKit decides
+
+**By validation, not by diagnosis.** A transform replaces the input only when it beats the
+unchanged input on held-out rows, by the measure the embedding is used for (10-NN accuracy for
+classes and 10-NN R² for continuous targets, by default), with a paired bootstrap interval above
+0. Otherwise the input is kept. Section 1.1 has the details.
+
+Two findings led to this design:
+
+- **Diagnostics did not predict which fix helps.** Experiment E4 tested 9 rules of the form "this
+  statistic is beyond its null range, so apply that fix" on 35 natural classification sets. Seven
+  failed. The two that passed point to a hubness-reducing neighbour search under Euclidean
+  distance (section 1.4).
+- **No label-free score can say whether a transform helps.** Neighbour overlap with the input
+  ranks the unchanged input first, and no label-free statistic tracked test accuracy while a
+  refiner trained (E2).
+
+So without labels `EmbedKit` makes the most consistent small change measured, centring plus L2
+normalisation, and trains nothing. With labels it compares the input, centring, PCA and a refiner
+on held-out rows. On 64 benchmark sets that selection was never significantly worse than the input
+and was better on 43, by +0.8 to +15.1 points of kNN accuracy on the classification sets. The
+results that are not in the library's favour are listed too: the self-supervised refiner never
+beat PCA, and most training-free fixes did not beat the raw embedding on most sets. The README
+summarises the benchmarks; `docs/benchmarks/` has the write-ups and
+`docs/benchmarks/RESULTS_BY_DATASET.md` every data set.
+
+## What the analysis is for
+
+The analyzers (Part 3) describe an embedding space: how many directions it uses, how uneven its
+neighbour graph is, how its distances and directions spread. Each statistic that a null model
+calibrates is reported as a z-score against data of the same size and spectrum. Use them to:
+
+- describe and compare encoders, layers or data sets;
+- check for hubness before a Euclidean kNN search, the one validated rule (section 3.3);
+- understand what a transform changed, alongside the held-out scores of Part 2.
+
+Do not use them to choose a transform. No default reads the report, and a statistic beyond its
+null range does not mean that a fix will help. The one number `EmbedKit` can read is
+`suggested_target_dim`, and only for `method="pca"` or `"refiner"` with `target_dim="auto"`. PCA
+to that dimension lost accuracy on 32 of the 35 E4 sets, so pass `target_dim` explicitly.
+
+## How this manual is organised
+
+- **Part 1, Improving embeddings.** `EmbedKit` (1.1), how to tune a refiner on your own data
+  (1.2), the training-free baselines (1.3) and the hubness-reducing neighbour searches (1.4). After
+  those come the refiner's building blocks for custom training: the model, augmentations, losses
+  and `Trainer` (1.5 to 1.8).
+- **Part 2, Evaluation and input checks.** The metrics and the protocol used to compare
+  transforms on your own data, and the time and memory costs.
+- **Part 3, Analysis: describing an embedding space.** The report, then each analyzer.
+- **Part 4, Visualization.**
 
 ---
 
 ## Part 1 — Improving embeddings
 
-### 1.1 High-Level EmbedKit API
+### 1.1 EmbedKit
 
 `EmbedKit` fits one transform on the input embeddings and applies it with `transform`. One
 parameter, `method`, says what it builds:
@@ -39,8 +94,9 @@ parameter, `method`, says what it builds:
 | `"refiner"` | A trained `EmbeddingRefiner`, configured by `mode` (below) |
 
 It is sklearn-style: `fit(X, y=None)`, `transform(X, dim=None)`, `fit_transform`, `save` and
-`load`. To find a better refiner for your own data, see section 1.2. Up to 0.7.0 a second parameter, `strategy`, switched between choosing and building; it is
-deprecated (see "Fixed configurations" below).
+`load`. To find a better refiner for your own data, see section 1.2. Up to 0.7.0 a second
+parameter, `strategy`, switched between choosing and building; it is deprecated (see "Fixed
+configurations" below).
 
 #### What the default does, and why
 
@@ -109,23 +165,31 @@ refiner, so setting them when no refiner is fitted or compared raises `ValueErro
 - `"pca"` is the `linear` refiner at its initialisation, so `transform`, `dim=`, `save` and `load`
   behave as for a trained model.
 - For `"pca"` and `"refiner"`, `target_dim="auto"` is the report's `suggested_target_dim`,
-  `clip(1.5 × ID, ID, D)`: `fit` runs the analysis report (uncalibrated, without the ID bootstrap and
-  scale curve) on all rows to get it, and keeps it in `analysis_report`. No benchmark supports the
-  factor 1.5, and PCA to this dimension lost accuracy on 32 of 35 E4 sets, so pass an explicit
-  `target_dim`.
+  `clip(round(1.5 × ID), max(4, ID), D)` with ID the TwoNN estimate (section 3.1). Only then does
+  `fit` run the analysis report (uncalibrated, without the ID bootstrap and scale curve) on all
+  rows, and it keeps it in `analysis_report`; with an explicit `target_dim`, `analysis_report` is
+  `None`. No benchmark supports the factor 1.5, and PCA to this dimension lost accuracy on 32 of
+  35 E4 sets, so pass an explicit `target_dim`. (The refiner candidate of the selection does not
+  use this rule: its `"auto"` is `min(128, d // 2)`.)
 - `strategy` is deprecated and goes in 0.9.0. `strategy="select"` is `method="auto"`;
   `strategy="fixed"` with `method="auto"` is `method="pca"` without labels and `method="refiner"`
   with them. `strategy_` is deprecated too: `selection_report_` is `None` unless a selection ran.
 
-Why PCA rather than a refiner without labels: in E1, E6 and E7 (`docs/benchmarks/BENCHMARK_E1_E2.md`,
-`docs/benchmarks/BENCHMARK_E6_E7.md`) the self-supervised refiner never beat the better of PCA and PCA-whitening
-chosen on validation (with all training rows: 1 win, 4 ties, 1 loss over 6 datasets), lost to them
-when fitted on fewer than a few thousand rows, and cost about 100 times more. Plain PCA rather than
-PCA-whitening because choosing between the two needs labels, and on real data plain PCA was never
-more than 0.004 behind whitening, while whitening fell up to 0.020 behind PCA. PCA prefixes are
-nested by construction, so `transform(X, dim=m)` is PCA at `m`.
+**A smaller embedding without labels: `method="pca"`, not `method="refiner"`.** In E1, E6 and E7
+(`docs/benchmarks/BENCHMARK_E1_E2.md`, `docs/benchmarks/BENCHMARK_E6_E7.md`) the self-supervised
+refiner never beat the better of PCA and PCA-whitening chosen on validation (with all training
+rows: 1 win, 4 ties, 1 loss over 6 datasets), lost to them when fitted on fewer than a few thousand
+rows, and cost about 100 times more. Plain PCA rather than PCA-whitening, because choosing between
+the two needs labels, and on real data plain PCA was never more than 0.004 behind whitening, while
+whitening fell up to 0.020 behind PCA. PCA prefixes are nested by construction, so
+`transform(X, dim=m)` is PCA at `m`. Reducing the dimension can cost accuracy: in E4, PCA to the
+low `suggested_target_dim` lost on 32 of 35 sets, while PCA at a dimension chosen on validation
+was significantly better than raw on 7 and worse on 5 (cosine kNN). Without labels you cannot
+tell which case you are in, so keep the dimension as high as your budget allows.
 
-**Refiner configuration** (`method="refiner"`, or the refiner candidate of the selection):
+**Refiner configuration** (`method="refiner"`, or the refiner candidate of the selection). The
+self-supervised column is what `method="refiner"` trains without labels; it is kept for
+experiments, not recommended (above):
 
 | Setting (`"auto"`) | `mode="self_supervised"` | `mode="supervised"` | `mode="regression"` |
 |---|---|---|---|
@@ -153,12 +217,13 @@ and a fixed regression refiner warns.
 
 **Class:** `EmbedKit(mode="auto", method="auto", augmentation="auto", loss="auto", target_dim="auto", hidden_dim=256, n_layers=2, architecture="auto", epochs=100, batch_size=256, optimizer="adam", lr=3e-4, weight_decay=1e-4, scheduler="cosine", eval_every=5, early_stopping_patience="auto", monitor="auto", val_split=None, device=None, id_methods=None, random_state=42, nested_dims=None, val_fraction=0.2, selection_metric="cosine", selection_max_rows=50000, strategy=None)` (`strategy` deprecated)
 
-`nested_dims=None` (default), `"auto"` or a sequence trains nested prefixes of a refiner, readable with
-`transform(X, dim=m)`; see `MatryoshkaLoss` above.
+`nested_dims=None` (default), `"auto"` or a sequence trains nested prefixes of a refiner, readable
+with `transform(X, dim=m)`; see `MatryoshkaLoss` (section 1.7).
 
 Attributes after `fit`: `mode_`, `method_`, `selected_` (what was built: `"identity"`,
 `"center_l2"`, `"pca-<k>"` or `"refiner-<k>"`), `selection_report_` (`None` unless
-`method="auto"` selected with labels), `analysis_report` (`None` for `"auto"` and `"center_l2"`),
+`method="auto"` selected with labels), `analysis_report` (set only by `"pca"` or `"refiner"` with
+`target_dim="auto"`, otherwise `None`),
 and for a refiner `architecture_`, `monitor_`, `early_stopping_patience_`, `nested_dims_`.
 `strategy_` is deprecated.
 
@@ -194,13 +259,11 @@ ek = EmbedKit(mode="regression", epochs=50).fit(X, y.astype(float))
 ek = EmbedKit(method="pca", target_dim=64)                # PCA to 64, L2
 Z = ek.fit_transform(X)
 Z16 = ek.transform(X, dim=16)                             # PCA at 16, renormalised
-ek = EmbedKit(method="refiner", target_dim=64, epochs=50)  # contrastive refiner, no labels
-Z = ek.fit_transform(X)
 ek = EmbedKit(method="refiner", target_dim=32, epochs=50)
 Z = ek.fit_transform(X, y=y)                              # SupCon on the residual adapter
 
 # What a fixed configuration auto-configured
-print(ek.analysis_report.suggested_target_dim, ek.architecture_)
+print(ek.selected_, ek.architecture_, ek.monitor_)        # refiner-32 residual val_knn_accuracy
 ```
 
 #### Saving and loading
@@ -271,7 +334,7 @@ differently, judge the refiner the way you use it:
 
 | Setting | Default | Worth trying | Evidence behind the default |
 |---|---|---|---|
-| `target_dim` | `min(128, d // 2)` | 64, 256 (below d) | Set by design; only 128 was measured in E10 |
+| `target_dim` | `min(128, d // 2)` in the selection; pass it explicitly to `method="refiner"`, whose `"auto"` is `suggested_target_dim` (section 1.1) | 64, 256 (below d) | Set by design; only 128 was measured in E10 |
 | `loss` | `SupConLoss(0.07)`; regression `RankNContrastLoss(0.07)` | temperature 0.1 to 0.2; `spread_weight` 0.25 to 0.5; `TripletLoss`; SupCon + 0.5 `AlignUniformLoss` | SupCon and RnC chosen in E8; the uniformity term was rejected there; triplet was never benchmarked |
 | `architecture` | `"residual"`; regression `"mlp"` | `"mlp"`, `"linear"` | E8: the MLP tied the residual adapter with full labels and collapsed with few |
 | `lr`, `epochs` | `3e-4`, 100 | `1e-4` to `1e-3`; 50 to 200 | Carried over from earlier versions; never tuned. Early stopping restores the best weights, so `epochs` is an upper bound |
@@ -426,7 +489,7 @@ and `ValueError` for a different number of columns.
 | `Standardize()` | Per-column z-score with the training mean and population standard deviation |
 | `PCAReduce(n_components, whiten=False)` | Top principal components of the training data, optionally divided by the root eigenvalues. `n_components` is capped at the data rank, with a warning |
 | `ZCAWhiten(eps=1e-5)` | Full-rank whitening that stays in the input coordinates |
-| `AllButTheTop(n_remove, n_components=None)` | Remove the mean and the top `n_remove` principal directions (Mu & Viswanath, 2018); with `n_components`, the reduce-then-clean variant of Raunak et al. (2019) |
+| `AllButTheTop(n_remove, n_components=None)` | Remove the mean and the top `n_remove` principal directions (Mu et al., 2018); with `n_components`, the reduce-then-clean variant of Raunak et al. (2019) |
 | `ConceptorNegation(alpha=2.0)` | Conceptor negation of Liu et al. (2019) |
 | `RandomProjection(n_components)` | Gaussian random projection |
 
@@ -806,7 +869,9 @@ Z64 = ek.transform(X, dim=64)
 
 ### 1.8 Trainer
 
-`Trainer` orchestrates the full contrastive training loop. It handles batching, optimization, learning rate scheduling, periodic evaluation against analysis metrics, early stopping, and loss history tracking.
+`Trainer` runs the contrastive training loop for a custom refiner: batching, optimisation,
+learning-rate scheduling, periodic evaluation of the metrics in `trainer.MONITORS`, early stopping
+and the loss history. `EmbedKit(method="refiner")` builds one with the defaults of section 1.1.
 
 **Class:** `Trainer(model, augmentation, loss, epochs, batch_size, optimizer, lr, weight_decay, scheduler, warmup_epochs, eval_every, eval_metrics, eval_subsample, eval_k, eval_metric, early_stopping_patience, monitor, restore_best, val_split, device, random_state)`
 
@@ -817,44 +882,47 @@ Z64 = ek.transform(X, dim=64)
 | `optimizer` | `"adam"`, `"sgd"` | Adam is a safe default |
 | `scheduler` | `"cosine"`, `"step"`, `"plateau"`, `None` | Cosine is stepped per batch, step per epoch, plateau per evaluation |
 | `warmup_epochs` | int, default 0 | Linear learning-rate warm-up before the scheduler |
-| `eval_metrics` | names in `trainer.MONITORS`: `"uniformity"`, `"isotropy"`, `"k_skewness"` | Metrics tracked during training; the monitor is always added |
-| `eval_k`, `eval_metric` | default 10, `"cosine"` | Neighbourhood used by `k_skewness` |
-| `monitor` | a name in `MONITORS` | Metric watched for early stopping; its direction (min or max) comes from the registry |
+| `eval_metrics` | names in `trainer.MONITORS` | Recorded in `history` every `eval_every` epochs; the monitor is always added. Without labels: `"uniformity"`, `"isotropy"`, `"k_skewness"`, `"knn_overlap"`, `"effective_rank"`, `"val_loss"`. With labels: `"val_knn_accuracy"` (5-NN, classes), `"val_ridge_r2"` (continuous targets), `"val_nc1"`, `"train_nc1"` |
+| `eval_k`, `eval_metric` | default 10, `"cosine"` | Neighbourhood used by `k_skewness` and `knn_overlap` |
+| `monitor` | a name in `MONITORS`, default `"uniformity"` | Metric watched for early stopping; its direction (min or max) comes from the registry. The `val_*` monitors need `val_split > 0` |
+| `val_split` | float, default 0 | Fraction of the rows held out from training for the `val_*` monitors |
 | `early_stopping_patience` | int or `None` | Stops after N **evaluations** (not epochs) without improvement |
 | `restore_best` | bool, default `True` | With early stopping, reload the best evaluation's weights at the end (`best_score_`, `best_epoch_`) |
 | `device` | `None`, `"cuda"`, `"mps"`, `"cpu"` | `None` picks CUDA, then MPS, then CPU |
 
-**Workflow:**
+**Stop early only on a labelled monitor.** In E2 no label-free statistic (uniformity, isotropy,
+k-skewness, neighbour overlap) tracked test accuracy within a run, so early stopping on one of
+them stops at an arbitrary epoch. With labels, hold out rows and monitor `val_knn_accuracy` or
+`val_ridge_r2`; without labels, train for a fixed number of epochs and log the label-free metrics
+for inspection only.
+
+**Workflow** (the supervised refiner that `EmbedKit(method="refiner")` builds with class labels):
 
 ```python
+from embedkit.improvement.augmentation import KNNPairs
+from embedkit.improvement.losses import SupConLoss
 from embedkit.improvement.model import EmbeddingRefiner
-from embedkit.improvement.augmentation import GaussianNoise
-from embedkit.improvement.losses import NTXentLoss
 from embedkit.improvement.trainer import Trainer
 
-model = EmbeddingRefiner(input_dim=128, target_dim=32)
-aug   = GaussianNoise(std=0.05, adaptive=True)
-loss  = NTXentLoss(temperature=0.07)
-
+model = EmbeddingRefiner(input_dim=X.shape[1], target_dim=32, architecture="residual")
 trainer = Trainer(
     model=model,
-    augmentation=aug,
-    loss=loss,
-    epochs=200,
+    augmentation=KNNPairs(k=5),
+    loss=SupConLoss(temperature=0.07),
+    epochs=100,
     batch_size=256,
-    optimizer="adam",
     lr=3e-4,
     scheduler="cosine",
-    eval_every=10,
-    eval_metrics=["uniformity", "k_skewness"],
-    early_stopping_patience=5,
+    eval_every=5,
+    monitor="val_knn_accuracy",    # 5-NN accuracy of the held-out rows
+    val_split=0.1,
+    early_stopping_patience=10,    # evaluations, not epochs
 )
+trainer.fit(X, y=y)                # initialises the residual map at PCA, then trains
 
-trainer.fit(X)              # self-supervised
-# trainer.fit(X, y=labels)  # supervised
-
-X_refined = trainer.transform(X)   # returns np.ndarray
-print(trainer.history)             # {"loss": [...], "uniformity": [...], ...}
+X_refined = trainer.transform(X)   # np.ndarray, rows L2-normalised
+print(trainer.best_epoch_, trainer.best_score_)
+print(trainer.history.keys())      # "loss", "val_knn_accuracy", ...
 ```
 
 ---
@@ -871,12 +939,31 @@ fits and standardisation use the training split only.
 | `knn_accuracy(Z_train, y_train, Z_test, y_test, k=5, metric="cosine")` | kNN majority-vote accuracy |
 | `knn_regression_r2(...)` | kNN regression R^2 |
 | `linear_probe(...)` | Logistic regression (classes) or ridge (continuous); regularisation chosen by cross-validation on the training split, or fixed with `C=` |
-| `recall_at_k`, `trustworthiness`, `continuity`, `knn_overlap` | Neighbour preservation between an input and its transform |
+| `recall_at_k(Z_query, Z_gallery, relevance, k=10)` | Share of queries with at least one relevant gallery row (same label, or a boolean matrix) among their `k` nearest |
+| `trustworthiness`, `continuity`, `knn_overlap` | Neighbour preservation between an input and its transform |
 | `linear_cka`, `effective_rank`, `k_skewness`, `nc1`, `silhouette` | Geometry of one embedding |
 
 `knn_accuracy`, `linear_probe` and `recall_at_k` accept `return_per_point=True` and then also return the
 per-test-point outcomes, which `compare` bootstraps. Note that `knn_overlap` rates an unchanged input
 as perfect, so it cannot tell whether a transform helps.
+
+`evaluate_transform` (section 2.2) names its metrics by the keys of the registry
+`embedkit.evaluation.METRICS`:
+
+| Name | Scores | Needs |
+|---|---|---|
+| `"knn_accuracy"`, `"knn_accuracy_euclidean"` | 5-NN accuracy, cosine or Euclidean | class labels |
+| `"linear_probe"` | `linear_probe` with the regularisation chosen by cross-validation | labels |
+| `"linear_probe_c1"` | Logistic regression with C = 1, no tuning | class labels |
+| `"recall_at_10"` | Share of test rows with a same-class training row among their 10 nearest (cosine) | class labels |
+| `"knn_r2"` | 10-NN regression R², cosine | continuous targets |
+| `"nc1"`, `"silhouette"` | Class separation of the output | class labels |
+| `"sts_spearman"` | Spearman correlation of pair similarities with gold scores | `test_pairs=` |
+| `"trustworthiness"`, `"continuity"`, `"knn_overlap"`, `"linear_cka"` | Preservation of the input's structure (k = 10) | nothing |
+| `"effective_rank"`, `"k_skewness"` | Geometry of the output | nothing |
+
+The label-free names describe a transform but cannot say whether it helps (section "How EmbedKit
+decides"); choose with a labelled one that matches your use.
 
 ---
 
@@ -1017,31 +1104,112 @@ datasets (1.7 to 6.2 points of kNN accuracy), so do not set the cap much below 1
 
 ## Part 3 — Analysis: describing an embedding space
 
-### 3.1 Unified Analysis Report
+The analyzers describe an embedding space; they do not choose a transform (see "What the analysis
+is for" at the top). Each section below follows one template: what the statistic measures, what
+the evidence says about it, the class and its fields, and how to read the numbers. The ranges
+given are what a value means, not thresholds: no fixed cut-off was found to predict anything.
 
-`EmbedKitAnalyzer` runs all seven analyzers in a single call and assembles the results into an `EmbedKitReport`. The report also holds a null-model calibration, a list of **properties** (descriptive statements about the spectrum, the dominant coordinates, the mean direction and, when calibrated, uniformity against the null; no thresholds) and a list of **recommendations** (actions). Only rules that experiment E4 found to predict the gain of their fix on 35 natural classification sets make a recommendation: more hubness or more antihubs than the null, under `metric="euclidean"`, each pointing to a hubness-reducing neighbour search (`embedkit.hubness_reduction`). E4 tested 9 rules; 7 failed. Distance concentration, neighbour consistency and ID/D are still computed and calibrated but raise no action; nor does anything under cosine (`benchmarks/results/e4/REPORT.md`). When no rule fires the report says "No recommendation: no statistic with a validated rule is beyond its null range.", which does not mean no fix can help, only that the report cannot tell which one would. Everything else in the report is descriptive.
+What the evidence says, statistic by statistic. "Calibrated" means the report compares the
+statistic with a null model (section 3.1). A "rule" is a recommendation drawn from it. The 9 rules
+were tested in E4 on 35 natural classification sets (`benchmarks/results/e4/REPORT.md`) and the
+two that passed were retested in E10 on 60 sets (`docs/benchmarks/BENCHMARK_SELECTION.md`).
 
-**Null-model calibration** (`calibrate=True`, the default). k-skewness, the antihub ratio, `distance_cv`, neighbour consistency and uniformity depend on n, d, k and the covariance spectrum, so a fixed threshold means something different on every dataset. The analyzer recomputes these five statistics on `n_null_draws` (default 20) data sets drawn from a null model of the same size as a subsample of `n_calibration` rows (default 2,000), with the same metric. The k of the calibration (`report.calibration_k`) is `k` when given, and otherwise the default rule applied to the calibration rows (22 for 2,000 rows), so that the z-scores do not change with the size of the data. Rows that arrive with a common norm (normalised upstream) are compared with null draws normalised to the same norm. `report.calibration[name]` holds the observed value, the null mean and standard deviation, the z-score, `z_interval` (a 95% interval for z that reflects the limited number of null draws: with 20 draws, a z between 3 and 4 can land on either side of 3 when the analysis is rerun, and a recommendation whose interval reaches below the threshold says so; raise `n_null_draws` to settle such a reading) and `uncalibrated` (`None`, or the reason the null is not calibrated for that statistic here; `.calibrated` is the boolean). `report.n_outside_null` counts the calibrated statistics with `|z| > z_threshold` (default 3); it replaces the old `severity`. The default `null_model="gaussian"` is a Gaussian with the data's mean (shrunk so that its squared norm is unbiased) and a covariance whose trace and `tr(Σ²)` match unbiased estimates from the data (`embedkit.analysis.null`); `"permuted"` permutes each column independently. The recommendations come from the z-scores (k-skewness and antihub ratio, Euclidean only), and with `calibrate=False` none is made. The null model is not reliable everywhere: on data drawn from the null itself, some statistics fall outside ±3 too often in some settings (`docs/benchmarks/BENCHMARK_DIAGNOSTICS.md`). The report marks those statistics as uncalibrated, with the reason in `uncalibrated`:
+| Statistic | Section | Calibrated | Rule | Evidence |
+|---|---|---|---|---|
+| k-skewness | 3.3 | yes, except under cosine | above the null under Euclidean distance: use a hubness-reducing search | Fired on 3 of 35 sets in E4 and 5 of 60 in E10; the fix helped significantly on all of them |
+| Antihub ratio | 3.3 | yes, except under cosine and on rows normalised upstream | the same | Fired on 8 of 35 sets (gain on 5) in E4 and 22 of 60 (gain on 19) in E10 |
+| `distance_cv` | 3.4 | yes, except on rows normalised upstream | none | The gain of PCA or hubness reduction fell as the signal rose (Spearman -0.50) |
+| Neighbour consistency | 3.6 | yes, except Euclidean above d = 256 | none | Did not predict the gain of PCA (Spearman -0.35 and -0.02, intervals including 0) |
+| Uniformity | 3.7 | yes, except on rows normalised upstream | none; stated in `report.properties` | Clustered directions are a property, not a defect |
+| Intrinsic dimension, ID / D | 3.2 | no | none (removed) | The ID / D rule fired on all 35 sets; PCA to `suggested_target_dim` lost accuracy on 32 |
+| Mean direction, top components, anisotropy, dominant coordinates | 3.5 | no | none; stated in `report.properties` | None predicted its fix; ZCA whitening lost accuracy on 34 of 35 sets (cosine kNN) |
+| Kernel spectrum, kernel alignment | 3.8 | no | none | Not tested as a rule |
 
-- rows normalised upstream (all rows with the same norm): the antihub ratio, `distance_cv` and uniformity, because with an uneven spectrum the null on the sphere is more isotropic than the data;
+---
+
+### 3.1 The report: `EmbedKitAnalyzer`
+
+`EmbedKitAnalyzer` runs the seven analyzers of sections 3.2 to 3.8 in one call and returns an
+`EmbedKitReport` with:
+
+- the results of the analyzers: `intrinsic_dim`, `hubness`, `geometry` (distance concentration,
+  isotropy, neighbour consistency, uniformity) and `kernel`;
+- `calibration`: five statistics compared with a null model, as z-scores (below);
+- `properties`: descriptive sentences about the spectrum, the dominant coordinates, the mean
+  direction and, when calibrated, uniformity against the null. No thresholds;
+- `recommendations`: actions, from the two validated rules only.
+
+**Recommendations.** A recommendation is made only by a rule that E4 found to predict the gain of
+its fix: k-skewness or the antihub ratio above the null under `metric="euclidean"`, each pointing
+to a hubness-reducing neighbour search (section 1.4). E4 tested 9 rules and 7 failed. Distance
+concentration and neighbour consistency are calibrated but raise no action, ID / D is only
+reported, and nothing raises an action under cosine. When no rule fires, the report says "No
+recommendation: no statistic with a validated rule is beyond its null range." That does not mean
+no fix can help, only that the report cannot tell which one would.
+
+**Null-model calibration** (`calibrate=True`, the default). k-skewness, the antihub ratio,
+`distance_cv`, neighbour consistency and uniformity depend on n, d, k and the covariance spectrum,
+so a fixed threshold means something different on every dataset. The analyzer recomputes these
+five statistics on data drawn from a null model and reports where the data fall:
+
+- **The null.** `null_model="gaussian"` (the default) is a Gaussian with the data's mean (shrunk so
+  that its squared norm is unbiased) and a covariance whose trace and `tr(Σ²)` match unbiased
+  estimates from the data (`embedkit.analysis.null`). `"permuted"` permutes each column
+  independently.
+- **The draws.** `n_null_draws` (default 20) data sets of the size of a subsample of
+  `n_calibration` rows (default 2,000), with the same metric. Rows that arrive with a common norm
+  (normalised upstream) are compared with null draws normalised to the same norm.
+- **The k.** `report.calibration_k` is `k` when given, and otherwise the default rule applied to
+  the calibration rows (22 for 2,000 rows), so that the z-scores do not change with the size of
+  the data.
+- **The result.** `report.calibration[name]` holds the observed value, the null mean and standard
+  deviation, `z_score`, `z_interval` and `uncalibrated`. `z_interval` is a 95% interval for z that
+  reflects the limited number of null draws: with 20 draws, a z between 3 and 4 can land on either
+  side of 3 when the analysis is rerun, and a recommendation whose interval reaches below the
+  threshold says so. Raise `n_null_draws` to settle such a reading. `uncalibrated` is `None`, or
+  the reason the null is not calibrated for that statistic here; `.calibrated` is the boolean.
+- **The count.** `report.n_outside_null` counts the calibrated statistics with `|z| > z_threshold`
+  (default 3). It replaces the old `severity`.
+
+The recommendations come from the z-scores, so with `calibrate=False` none is made. Calibration
+costs `n_null_draws + 1` evaluations of the five statistics: about 50 s for 3,680 × 2,048 ResNet
+features on a laptop.
+
+**Where the null is not calibrated.** On data drawn from the null itself, some statistics fall
+outside ±3 too often in some settings (`docs/benchmarks/BENCHMARK_DIAGNOSTICS.md`). The report
+marks those statistics as uncalibrated, with the reason in `uncalibrated`:
+
+- rows normalised upstream (all rows with the same norm): the antihub ratio, `distance_cv` and
+  uniformity, because with an uneven spectrum the null on the sphere is more isotropic than the
+  data;
 - `metric="cosine"`: k-skewness and the antihub ratio;
 - `metric="euclidean"` with more than 256 dimensions: neighbour consistency.
 
-An uncalibrated statistic keeps its z-score, but raises no recommendation and is not counted in `n_outside_null`. In practice the only recommendation this removes is the antihub one on rows normalised upstream. One known weak spot is not flagged: `distance_cv` under cosine on data with a large common mean, whose z-scores occasionally land just beyond ±3 on null data. Calibration costs `n_null_draws + 1` evaluations of the five statistics: about 50 s for 3,680 × 2,048 ResNet features on a laptop.
+An uncalibrated statistic keeps its z-score, but raises no recommendation and is not counted in
+`n_outside_null`. In practice the only recommendation this removes is the antihub one on rows
+normalised upstream. One known weak spot is not flagged: `distance_cv` under cosine on data with a
+large common mean, whose z-scores occasionally land just beyond ±3 on null data.
 
 **Derived values.**
 
 | Field | Meaning |
-|-------|---------|
+|---|---|
 | `k` | The neighbourhood size the report used: the `k` given, else `max(5, round(√min(n, n_max) / 2))`. Replaces `suggested_k` |
 | `kernel.sigma` | The RBF bandwidth of the kernel diagnostics (median pairwise distance). Replaces `suggested_sigma` |
-| `suggested_target_dim` | `clip(1.5 × ID, max(4, ID), D)` with ID the reference estimate (TwoNN by default). No benchmark supports the factor 1.5, and PCA to it lost accuracy on 32 of 35 E4 sets. Only `EmbedKit(method="pca" or "refiner", target_dim="auto")` reads it |
+| `suggested_target_dim` | `clip(round(1.5 × ID), max(4, ID), D)` with ID the reference estimate (TwoNN by default, section 3.2). No benchmark supports the factor 1.5, and PCA to it lost accuracy on 32 of 35 E4 sets. Only `EmbedKit(method="pca" or "refiner", target_dim="auto")` reads it |
 
 `report.suggested_k` and `report.suggested_sigma`, deprecated in 0.6.0, were removed in 0.7.0.
 
-**Class:** `EmbedKitAnalyzer(k, id_methods, metric, random_state, calibrate, null_model, n_null_draws, n_calibration, z_threshold, id_bootstrap, id_scale_curve)`
+**Class:** `EmbedKitAnalyzer(k=None, id_methods=None, metric="euclidean", n_max=20000, random_state=42, calibrate=True, null_model="gaussian", n_null_draws=20, n_calibration=2000, z_threshold=3.0, id_bootstrap=20, id_scale_curve=True)`. `id_methods=None` runs `["TwoNN", "MLE", "lPCA", "MOM"]`; the neighbour statistics use at most `n_max` rows. `d_max` is accepted for compatibility and ignored.
 
-**Metric.** `metric` is `"euclidean"` (default) or `"cosine"`; anything else raises `ValueError`. Every analyzer honours it. With `"cosine"` the rows are L2-normalised once and every number in the report describes the normalised rows, the geometry a cosine search sees: the kNN graph, distance concentration and the kernel use chord distances on the sphere (monotone in cosine distance), intrinsic dimension is estimated on the sphere, and the isotropy statistics describe the normalised rows. The calibration null is the exception: it is fitted to the rows as given and its draws are normalised before the statistics are computed, so the null mean and spread depend on the row norms. Rows with zero norm have no direction and raise `ValueError`.
+**Metric.** `metric` is `"euclidean"` (default) or `"cosine"`; anything else raises `ValueError`.
+Every analyzer honours it. With `"cosine"` the rows are L2-normalised once, and every number in
+the report describes the normalised rows, the geometry a cosine search sees: the kNN graph,
+distance concentration and the kernel use chord distances on the sphere (monotone in cosine
+distance), intrinsic dimension is estimated on the sphere, and the isotropy statistics describe
+the normalised rows. The calibration null is the exception: it is fitted to the rows as given and
+its draws are normalised before the statistics are computed, so the null mean and spread depend on
+the row norms. Rows with zero norm have no direction and raise `ValueError`.
 
 ```python
 from embedkit import EmbedKitAnalyzer
@@ -1066,11 +1234,20 @@ df = report.to_dataframe()
 
 ### 3.2 Intrinsic Dimension
 
-The *intrinsic dimension* (ID) of a dataset is the minimum number of coordinates needed to describe its points without significant information loss. A sentence-embedding model may output 768-dimensional vectors, but those vectors may lie on a manifold whose true dimensionality is closer to 20.
+**What it measures.** The *intrinsic dimension* (ID) of a dataset is the minimum number of
+coordinates needed to describe its points without significant information loss. A
+sentence-embedding model may output 768-dimensional vectors that lie on a manifold whose
+dimensionality is closer to 20. The ID describes how many directions the data use locally, and
+projecting below it loses information.
 
-**Why it matters.** The ID describes how many directions the data uses locally, and projecting below it loses information. It does not say that a reduction helps: in E4, PCA to the report's `suggested_target_dim` (1.5 × the TwoNN estimate) lost kNN accuracy significantly on 32 of 35 natural sets (median -5.1 points under cosine). Treat ID and the ID / D ratio as description.
+**What the evidence says.** Not calibrated, and no rule. The ID does not say that a reduction
+helps: in E4, PCA to the report's `suggested_target_dim` (1.5 × the TwoNN estimate) lost kNN
+accuracy significantly on 32 of 35 natural sets (median -5.1 points under cosine). The 0.1 and 0.3
+rule on ID / D was removed after E4: it fired on all 35 sets. In E3 the k-NN estimators read low
+at high ID (below). Treat ID and the ID / D ratio as description.
 
-EmbedKit supports eight estimators, each making different geometric assumptions. They measure different things and are reported separately; nothing combines them:
+EmbedKit supports eight estimators, each making different geometric assumptions. They measure
+different things and are reported separately; nothing combines them:
 
 | Method | Approach |
 |--------|----------|
@@ -1083,7 +1260,7 @@ EmbedKit supports eight estimators, each making different geometric assumptions.
 | `FisherS` | Separability-based estimate using Fisher information (Albergante et al., 2019) |
 | `ESS` | Expected simplex skewness (Johnsson et al., 2015); the most accurate at high ID in our tests, but about 100 s per fit at n = 5,000 |
 
-**Class:** `IntrinsicDimensionEstimator(methods, n_max, n_bootstrap, scale_curve, random_state)`
+**Class:** `IntrinsicDimensionEstimator(methods=None, n_max=5000, n_bootstrap=20, scale_curve=True, random_state=42)`
 
 **Result fields:**
 - `estimates` — per-method ID values (NaN when a method failed, with a warning).
@@ -1096,9 +1273,9 @@ EmbedKit supports eight estimators, each making different geometric assumptions.
 
 Methods run one after another; running them in threads made results vary between runs with the same `random_state`.
 
-**Ranges & interpretation:**
+**Reading the numbers.**
 - **The intervals cover sampling error only, not bias.** The k-NN estimators (TwoNN, MLE, MOM) read low at high ID: on a 20-sphere with n = 5,000 they give 15 to 17. `lPCA` counts linear dimensions, so it returns d + 1 for a d-sphere and is exact only for flat manifolds.
-- The report makes no recommendation from ID/D. The 0.1 and 0.3 rule was removed after experiment E4: it fired on all 35 natural classification sets, and PCA to `suggested_target_dim` lost kNN accuracy on 32 of them (median -5 points under cosine).
+- Estimates from different methods differ by design; compare like with like (the same method, n and preprocessing) across encoders or layers.
 
 ```python
 from embedkit.analysis.intrinsic_dim import IntrinsicDimensionEstimator
@@ -1113,29 +1290,44 @@ print(result.scale_curve, result.scale_max_deviation)
 
 ### 3.3 Hubness
 
-*Hubness* is a curse-of-dimensionality phenomenon in which a handful of points — called **hubs** — repeatedly appear in the k-nearest-neighbor lists of many other points, while **antihubs** never appear as anyone's neighbor at all (Radovanović et al., 2010). This imbalance emerges from the geometry of high-dimensional spaces and is independent of the specific data distribution.
+**What it measures.** *Hubness* is a curse-of-dimensionality phenomenon in which a handful of
+points, the **hubs**, appear in the k-nearest-neighbor lists of many other points, while
+**antihubs** appear in none (Radovanović et al., 2010). It grows with the intrinsic dimension of
+the data: in high dimension, points close to the centre of the distribution are close to many
+others. kNN retrieval, classification, clustering and anomaly detection all use neighbour graphs,
+in which hubs fill the neighbour lists and antihubs are never retrieved.
 
-**Why it matters.** Hubness can degrade kNN-based tasks: retrieval, classification, clustering and anomaly detection all use nearest-neighbor graphs. Hubs fill neighbour lists and hide antihubs from retrieval. On the pretrained embeddings of E1 to E4, though, hubness reduction changed kNN accuracy by little (best +0.005 on the E1 sets; E4: significantly better than raw on 14 of 35 sets under Euclidean kNN, worse on 3, median +0.4 points). It is the one defect for which the report makes a recommendation (Euclidean only, below).
+**What the evidence says.** Hubness is the one property with validated rules. When
+`report.calibration["k_skewness"]` or `["antihub_ratio"]` has z above `z_threshold` under
+`metric="euclidean"`, the report recommends a hubness-reducing neighbour search
+(`embedkit.hubness_reduction`, section 1.4). In E4 the rule for k-skewness fired on only 3 of 35
+sets (a significant gain on all 3; Spearman 0.36, 95% interval 0.13 to 0.65 across source data
+sets), and the one for antihubs on 8 (a significant gain on 5; 0.32, 0.05 to 0.58). Retested on
+60 sets with 5 more encoders (E10, `docs/benchmarks/BENCHMARK_SELECTION.md`), the k-skewness rule
+fired on 5 (a significant gain on all 5; 0.48, 0.30 to 0.71) and the antihub rule on 22 (19; 0.53,
+0.29 to 0.74). Under cosine neither predicted a gain, so the report recommends nothing there. The
+23 primary tests of E4 had no multiplicity correction; about one false pass is expected by chance.
+The gains are small: hubness reduction was significantly better than raw on 14 of 35 E4 sets under
+Euclidean kNN and worse on 3 (median +0.4 points), and the best change on the E1 sets under cosine
+was +0.005.
 
-**Class:** `HubnessAnalyzer(k, hub_threshold, metric)`
+**Class:** `HubnessAnalyzer(k=10, hub_threshold=2.0, metric="euclidean", subsample=20000, random_state=42)`. At most `subsample` rows are used; `fit(X, neighbor_index=...)` takes a precomputed kNN graph instead.
 
-**Result fields:** `k_skewness`, `robinhood_index`, `antihub_ratio`, `hub_ratio`, `k_occurrence`, `hubs`, `antihubs`, `hub_contamination`
+**Result fields:**
 
-**Ranges & interpretation.** The ranges below are rough guides for reading a number. The report does not use them: it compares `k_skewness` and `antihub_ratio` with a null model.
+| Field | Range | Meaning |
+|---|---|---|
+| `k_skewness` | (−∞, ∞) | Skewness of the k-occurrence distribution N_k (how many times each point is a kNN of another). Near 0 when points are retrieved about equally often; positive with a tail of hubs |
+| `robinhood_index` | [0, 1] | Inequality of the N_k values, Gini-like: 0 when every point is retrieved equally often, near 1 when a few points take most of the neighbour lists |
+| `antihub_ratio` | [0, 1] | Fraction of points with N_k = 0 (never retrieved) |
+| `hub_ratio` | [0, 1] | Fraction of points with N_k > `hub_threshold` × mean N_k |
+| `hub_contamination` | [0, 1] | Fraction of a hub's own neighbours that are also hubs: hubs that cluster together |
+| `k_occurrence`, `hubs`, `antihubs` | arrays | N_k per point, and the indices of the hubs and antihubs |
 
-| Metric | Range | Good | Concerning |
-|--------|-------|------|------------|
-| `k_skewness` | (−∞, ∞) | near 0 | > 2 (moderate), > 5 (severe) |
-| `robinhood_index` | [0, 1] | near 0 | > 0.3 |
-| `antihub_ratio` | [0, 1] | depends on n, d, k | above the null (see below) |
-| `hub_ratio` | [0, 1] | < 0.05 | > 0.1 |
-| `hub_contamination` | [0, 1] | near 0 | > 0.3 |
-
-- `k_skewness`: skewness of the k-occurrence distribution N_k (how many times each point is a kNN of someone else). Gaussian distributions have zero skewness; positive skew means a fat tail of highly popular hubs.
-- `robinhood_index`: Gini-like inequality measure over N_k values. 0 = every point is equally popular; near 1 = a few points dominate the entire neighbor graph.
-- `antihub_ratio`: fraction of points with N_k = 0 (never retrieved). It depends strongly on n, d, k and the row norms (an isotropic Gaussian at d = 1,024 has 0.21 to 0.39 under Euclidean distance and none under cosine), so the report judges it against the null model instead of a fixed threshold.
-- `hub_ratio`: fraction of points classified as hubs (N_k > `hub_threshold` × mean N_k). Should be small.
-- `hub_contamination`: fraction of a hub's own kNN that are also hubs. High values indicate that hubs cluster together, further compounding retrieval skew.
+**Reading the numbers.** The raw values depend on n, d, k, the metric and the row norms: an
+isotropic Gaussian at d = 1,024 has an antihub ratio of 0.21 to 0.39 under Euclidean distance and
+none under cosine. Compare them with the null (`report.calibration`), or between embeddings of the
+same data at the same k, not with fixed cut-offs.
 
 ```python
 from embedkit.analysis.hubness import HubnessAnalyzer
@@ -1146,24 +1338,34 @@ print(f"Robin Hood idx: {result.robinhood_index:.3f}")
 print(f"Antihub ratio:  {result.antihub_ratio:.3f}")
 ```
 
-**The recommendation.** When `report.calibration["k_skewness"]` or `["antihub_ratio"]` has z above `z_threshold` under `metric="euclidean"`, the report recommends a hubness-reducing neighbour search (`embedkit.hubness_reduction`, section 1.4). In E4 the rule for k-skewness fired on only 3 of 35 sets (a significant gain on all 3; Spearman 0.36, 95% interval 0.13 to 0.65 across source data sets), and the one for antihubs on 8 (a significant gain on 5; 0.32, 0.05 to 0.58). Retested on 60 sets with 5 more encoders (E10, `docs/benchmarks/BENCHMARK_SELECTION.md`), the k-skewness rule fired on 5 (a significant gain on all 5; 0.48, 0.30 to 0.71) and the antihub rule on 22 (19; 0.53, 0.29 to 0.74). Under cosine neither predicted a gain, so the report recommends nothing there. The 23 primary tests of E4 had no multiplicity correction; about one false pass is expected by chance.
-
 ---
 
 ### 3.4 Distance Concentration
 
-In high-dimensional spaces, pairwise Euclidean distances tend to concentrate near their mean — the ratio `(d_max − d_min) / d_mean` shrinks toward zero as dimensionality grows (Beyer et al., 1999). When this happens, all points look equally (dis)similar and nearest-neighbor queries become meaningless.
+**What it measures.** In high-dimensional spaces, pairwise distances tend to concentrate near
+their mean: the spread of the distances shrinks relative to their size as the dimension grows
+(Beyer et al., 1999). In the limit, the nearest and the farthest point of a query are almost
+equally far away.
 
-**Class:** `DistanceConcentration(subsample, n_bins, random_state)`
+**What the evidence says.** `distance_cv` is calibrated against the null (z-score in
+`report.calibration`), but no rule is drawn from it: in E4 the gain of PCA or hubness reduction
+fell as the signal rose (Spearman -0.50), the opposite of what a concentration rule assumes.
 
-**Result fields:** `distance_cv`, `relative_contrast_per_query`, `relative_contrast`, `concentration_ratio`, `distance_histogram`, `bin_edges`
+**Class:** `DistanceConcentration(subsample=2000, n_bins=50, random_state=42)`
 
-**Ranges & interpretation:**
+**Result fields and reading:**
 
-- `distance_cv` = standard deviation over mean of the pairwise distances: `[0, ∞)`. **Larger is better.** For iid Gaussian data it is about `1 / sqrt(2d)`. The report compares it with the null model (a z-score in `report.calibration`), not with a fixed value, because its scale depends on d and the spectrum; it makes no recommendation from it, since in E4 the gain of PCA or hubness reduction fell as the signal rose (Spearman -0.50). Robust to a single duplicated pair.
-- `relative_contrast_per_query` = median over query points of `(d_max − d_min) / d_min`, with zero distances excluded.
-- `relative_contrast` = `(d_max − d_min) / d_mean`: `[0, ∞)`. **Larger is better.** Near 0 means the distance histogram is a narrow spike; high-dimensional random data can push this below 0.1. Values above 1.0 indicate a healthy spread of distances.
-- `concentration_ratio` = `d_min / d_max`: `[0, 1]`. Near 0 = healthy (minimum distances are much smaller than maximum). Near 1 = severe concentration (every pair of points is nearly the same distance apart). One duplicated pair sets it to 0, so the report no longer uses it (since 0.1.3).
+- `distance_cv` = standard deviation over mean of the pairwise distances, `[0, ∞)`. Small values
+  mean concentrated distances. For iid Gaussian data it is about `1 / sqrt(2d)`; its scale
+  depends on d and the spectrum, so the report compares it with the null model, not with a fixed
+  value. Robust to a single duplicated pair.
+- `relative_contrast_per_query` = median over query points of `(d_max − d_min) / d_min`, with zero
+  distances excluded.
+- `relative_contrast` = `(d_max − d_min) / d_mean`, `[0, ∞)`. Near 0 means the distance histogram
+  is a narrow spike; high-dimensional random data can push it below 0.1.
+- `concentration_ratio` = `d_min / d_max`, `[0, 1]`. Near 1 means every pair is about the same
+  distance apart. One duplicated pair sets it to 0, so the report no longer uses it (since 0.1.3).
+- `distance_histogram`, `bin_edges`: the histogram of the pairwise distances, for plotting.
 
 ```python
 from embedkit.analysis.geometry import DistanceConcentration
@@ -1177,20 +1379,30 @@ print(f"Distance CV:        {result.distance_cv:.4f}")
 
 ### 3.5 Isotropy
 
-An *isotropic* embedding space uses all directions equally — variance is spread evenly across every dimension. An *anisotropic* space concentrates most variance in a small number of principal directions, leaving the rest unused.
+**What it measures.** An *isotropic* embedding space uses all directions equally: variance is
+spread evenly across every dimension. An *anisotropic* space concentrates most variance in a few
+principal directions. Anisotropy often co-occurs with hubness (a few dominant directions create
+hub structure), and removing the mean and top components helped some language-model tasks (Mu et
+al., 2018).
 
-**Why it matters.** Anisotropy often co-occurs with hubness (a few dominant directions create hub structure), and removing the mean and top components helped some language-model tasks (Mu et al., 2018). It is a property, not a defect: strict isotropy is at odds with cluster structure, and whitening can hurt classification. The report therefore describes these statistics in `report.properties` and makes no recommendation from them. Experiment E4 tested the review's hypotheses (a dominant mean direction, dominant top components, anisotropy, rogue coordinates) against their fixes (mean removal, all-but-the-top, ZCA and PCA whitening, standardising): none predicted its fix, and ZCA lost accuracy on 34 of 35 sets under cosine kNN and on all 35 under Euclidean kNN.
+**What the evidence says.** Not calibrated, and no rule: the report describes these statistics in
+`report.properties` and makes no recommendation from them. Anisotropy is a property, not a defect:
+strict isotropy is at odds with cluster structure, and whitening can hurt classification. E4
+tested four hypotheses (a dominant mean direction, dominant top components, anisotropy, rogue
+coordinates) against their fixes (mean removal, all-but-the-top, ZCA and PCA whitening,
+standardising): none predicted its fix, and ZCA lost accuracy on 34 of 35 sets under cosine kNN
+and on all 35 under Euclidean kNN.
 
-**Class:** `IsotropyAnalyzer(n_components=512, n_max=5000, random_state=42)`
+**Class:** `IsotropyAnalyzer(n_components=512, n_max=5000, random_state=42)`. `d_max` is accepted for compatibility and ignored.
 
 **Result fields:** `isotropy_score`, `participation_ratio`, `participation_ratio_corrected`, `participation_ratio_normalized`, `effective_rank`, `isoscore`, `top_k_variance_share`, `top_k_coordinate_share`, `spectrum_alpha`, `mean_vector_ratio`, `mean_cosine`, `eigenvalue_spectrum_top`, `explained_variance_ratio`
 
 All statistics are computed exactly, from the covariance or the Gram matrix of at most `n_max` rows, at any dimension. `eigenvalue_spectrum_top` holds the top `n_components` eigenvalues, for plotting (`eigenvalue_spectrum` is a deprecated alias).
 
-**Ranges & interpretation:**
+**Reading the numbers:**
 
-- `isotropy_score` = `effective_rank / min(n − 1, D)`: `[0, 1]` (clipped). **1 = perfectly isotropic** (all directions used equally); near 0 = the space has effectively collapsed to a single direction.
-- `participation_ratio` = `(Σλᵢ)² / Σλᵢ²`: `[1, D]`. Intuitively, the number of eigenvalue-weighted dimensions that contribute to the space. Near D = isotropic. The sample value is biased downward by about `1 / (1 + D/n)`, so an isotropic Gaussian with n = 3,000 gives 0.75·D at D = 1,000 and 0.55·D at D = 2,500.
+- `isotropy_score` = `effective_rank / min(n − 1, D)`: `[0, 1]` (clipped). 1 means all directions are used equally; near 0, the space has effectively collapsed to a single direction.
+- `participation_ratio` = `(Σλᵢ)² / Σλᵢ²`: `[1, D]`. Intuitively, the number of eigenvalue-weighted dimensions that contribute to the space; near D for an isotropic space. The sample value is biased downward by about `1 / (1 + D/n)`, so an isotropic Gaussian with n = 3,000 gives 0.75·D at D = 1,000 and 0.55·D at D = 2,500.
 - `participation_ratio_corrected`: the same ratio with an unbiased estimate of `tr(Σ²)` (exact for Gaussian data), clipped to `[1, D]`. `participation_ratio_normalized` = corrected / D, in `[0, 1]`: the summary of isotropy that does not depend on n.
 - `effective_rank` = `exp(H)` where H is the entropy of the normalized eigenvalue spectrum: `[1, D]`. Measures how many "effective" principal components are needed to describe the space. Like `isotropy_score`, it is a plug-in value, biased low when n is not much larger than D (0.66 of the maximum for iid data at n = 3,000, D = 2,500).
 - `isoscore`: IsoScore (Rudman et al., 2022), `[0, 1]`, computed as published. Its six steps reduce to `(participation_ratio − 1) / (D − 1)`, so it carries the plug-in bias: iid data at n = 300, D = 512 score 0.37, not 1.
@@ -1211,16 +1423,23 @@ print(f"Effective rank:    {result.effective_rank:.1f}")
 
 ### 3.6 Neighbor Consistency
 
-*Neighbor consistency* measures how stable the k-NN graph is under small Gaussian perturbations. For each point, a perturbed copy of the dataset is generated with noise of standard deviation `noise_std × s`, where `s` is the RMS per-coordinate standard deviation `sqrt(mean_j var(X[:, j]))` (translation-invariant; before 0.5 it was the standard deviation over all entries, which also counted the spread of the coordinate means), and the fraction of original neighbors that survive in the perturbed graph is recorded.
+**What it measures.** How stable the k-NN graph is under small Gaussian perturbations. For each
+point, a perturbed copy of the dataset is generated with noise of standard deviation
+`noise_std × s`, where `s` is the RMS per-coordinate standard deviation `sqrt(mean_j var(X[:, j]))`
+(translation-invariant; before 0.5 it was the standard deviation over all entries, which also
+counted the spread of the coordinate means), and the fraction of original neighbors that survive
+in the perturbed graph is recorded. Low values mean that the neighbour lists change under small
+noise.
 
-**Why it matters.** An unstable kNN graph means that tiny changes in input (e.g., measurement noise, model updates) can completely reorganize the neighborhood structure. Downstream tasks that rely on kNN will be unreliable in such spaces.
+**What the evidence says.** Calibrated against the null, but no rule: in E4 it did not predict the
+gain of PCA (Spearman -0.35 and -0.02 for the two metrics, intervals including 0). Whether an
+unstable graph hurts a given task was not shown.
 
-**Class:** `NeighborConsistency(k, n_perturbations, noise_std, metric, random_state)`
+**Class:** `NeighborConsistency(k=10, n_perturbations=5, noise_std=0.01, metric="euclidean", subsample=10000, random_state=42)`
 
-**Result fields:** `mean_consistency`, `std_consistency`, `per_perturbation`
-
-**Ranges & interpretation:**
-- `mean_consistency`: `[0, 1]`. Fraction of original k-neighbors that are preserved after perturbation, averaged over all points and all perturbation trials. Near 1 = robust neighborhood structure. Low values mean the neighbour lists change under small noise. The report compares it with the null model but makes no recommendation from it: in E4 it did not predict the gain of PCA (Spearman -0.35 and -0.02 for the two metrics, intervals including 0).
+**Result fields and reading:**
+- `mean_consistency`: `[0, 1]`. Fraction of original k-neighbors that are preserved after perturbation, averaged over all points and all perturbation trials. Near 1 means the neighbourhoods hardly move under the noise.
+- `std_consistency`, `per_perturbation`: the spread over trials and the value of each trial.
 
 ```python
 from embedkit.analysis.geometry import NeighborConsistency
@@ -1233,32 +1452,43 @@ print(f"Mean consistency: {result.mean_consistency:.3f}  ± {result.std_consiste
 
 ### 3.7 Uniformity
 
-The *uniformity* metric (Wang & Isola, 2020) measures how evenly normalized embeddings are distributed on the unit hypersphere. A uniform distribution means the space is well-utilized; a non-uniform one means embeddings cluster in pockets.
+**What it measures.** How evenly the L2-normalised embeddings spread over the unit hypersphere
+(Wang & Isola, 2020). Representation collapse, where all embeddings converge to one point, shows
+up as values near 0. The same quantity is the uniformity term of `AlignUniformLoss`.
 
-**Why it matters.** Representation collapse — where all embeddings converge to the same point — shows up as extreme non-uniformity. Uniformity is also directly optimized by `AlignUniformLoss`.
+**What the evidence says.** Calibrated against the null; the report states the result in
+`report.properties` (clustered directions are a property, not a defect). No rule.
 
-**Class:** `UniformityScore(t, subsample, random_state)`
+**Class:** `UniformityScore(t=2.0, subsample=2000, random_state=42)`
 
-**Result field:** `uniformity`
-
-**Ranges & interpretation:**
-- `uniformity` = `log E[exp(−t ‖zᵢ − zⱼ‖²)]` for L2-normalized vectors: always **negative** (the expectation is strictly less than 1 for any non-degenerate distribution). **More negative = more uniform** (better coverage of the sphere). Near 0 means embeddings are tightly clustered or collapsed. The report compares it with the null model and states the result in `report.properties` (clustered directions are a property, not a defect); there is no fixed threshold.
+**Result field and reading:**
+- `uniformity` = `log E[exp(−t ‖zᵢ − zⱼ‖²)]` over pairs of distinct L2-normalised rows. It is
+  negative for any non-degenerate data, and more negative means more spread out. Since the mean
+  of `‖zᵢ − zⱼ‖²` over pairs is about 2 at most, Jensen's inequality bounds it below by about
+  `−2t` (−4 at the default `t = 2`), the value that rows spread uniformly in high dimension
+  approach. Near 0 means the rows point in nearly the same direction.
 
 ```python
 from embedkit.analysis.geometry import UniformityScore
 
 result = UniformityScore(t=2.0).fit(X)
-print(f"Uniformity: {result.uniformity:.4f}")
-# rough reading: around -3 to -5 is spread out; above -1 is clustered
+print(f"Uniformity: {result.uniformity:.4f}")   # between about -4 (spread out) and 0 (collapsed)
 ```
 
 ---
 
 ### 3.8 Kernel Diagnostics
 
-The RBF (Gaussian) kernel matrix `K(xᵢ, xⱼ) = exp(−‖xᵢ − xⱼ‖² / 2σ²)` encodes a non-linear similarity structure. Analyzing its eigenspectrum reveals whether the embeddings are well-separated and numerically stable for kernel-based methods (SVMs, kernel PCA, MMD tests).
+**What it measures.** The RBF (Gaussian) kernel matrix `K(xᵢ, xⱼ) = exp(−‖xᵢ − xⱼ‖² / 2σ²)`
+encodes a non-linear similarity structure. Its eigenspectrum describes how many directions of the
+kernel feature space carry the variance and whether one direction dominates (for example two
+well-separated clusters), which matters to kernel methods (SVMs, kernel PCA, MMD tests). With
+labels, the kernel alignment measures how far the kernel geometry follows the labels.
 
-**Class:** `KernelDiagnostics(sigma, n_components, subsample, random_state)`
+**What the evidence says.** Not calibrated by the null and not tested as a rule: the kernel
+statistics are description only.
+
+**Class:** `KernelDiagnostics(sigma="median", n_components=50, subsample=2000, random_state=42)`
 
 When `sigma="median"` (default), σ is set to the median pairwise distance — a standard heuristic.
 
@@ -1274,7 +1504,7 @@ The spectrum statistics come from the centred kernel `Kc = HKH` (`H = I − 11�
 | `row_sum_skewness` | (−∞, ∞) | Skewness of the row sums of the uncentred kernel: a continuous analogue of hubness. |
 | `centered_kernel_alignment` | [−1, 1] or None | See below. |
 
-The effective rank depends on σ: a small bandwidth makes every point its own direction. With `sigma="median"` it is comparable between data sets of the same size. Before 0.5 `effective_rank` was the entropy rank of the top 50 eigenvalues of the uncentred kernel, capped at 50.
+**Reading the numbers.** The effective rank depends on σ: a small bandwidth makes every point its own direction. With `sigma="median"` it is comparable between data sets of the same size. Before 0.5 `effective_rank` was the entropy rank of the top 50 eigenvalues of the uncentred kernel, capped at 50.
 - `centered_kernel_alignment`: populated only when labels `y` are passed to `fit(X, y)`. Centred alignment (both kernels centred, `HKH`) between the data kernel and a label kernel (Cristianini et al., 2001): the indicator kernel for class labels (integers, strings, booleans), an RBF kernel with a median-heuristic bandwidth for continuous labels (1-D floats or 2-D arrays). About 0 for labels independent of the data; near 1 means the RBF geometry reflects the labels. `kernel_alignment` is a deprecated alias (before 0.1.3 it was uncentred, and mostly measured class balance).
 
 ```python
@@ -1344,9 +1574,9 @@ Denti, F., Doimo, D., Laio, A., & Mira, A. (2022). The generalized ratios intrin
 
 DeVries, T., & Taylor, G. W. (2017). Improved regularization of convolutional neural networks with Cutout. *arXiv preprint arXiv:1708.04552*.
 
-Feldbauer, R., & Flexer, A. (2019). A comprehensive empirical comparison of hubness reduction in high-dimensional spaces. *Knowledge and Information Systems*, 59, 137–166.
-
 Facco, E., d'Errico, M., Rodriguez, A., & Laio, A. (2017). Estimating the intrinsic dimension of datasets by a minimal neighborhood information. *Scientific Reports*, 7, 12140.
+
+Feldbauer, R., & Flexer, A. (2019). A comprehensive empirical comparison of hubness reduction in high-dimensional spaces. *Knowledge and Information Systems*, 59, 137–166.
 
 Gao, T., Yao, X., & Chen, D. (2021). SimCSE: Simple contrastive learning of sentence embeddings. In *Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing (EMNLP 2021)* (pp. 6894–6910).
 
@@ -1356,7 +1586,7 @@ Hara, K., Suzuki, I., Kobayashi, K., Fukumizu, K., & Radovanović, M. (2016). Fl
 
 Johnsson, K., Soneson, C., & Fontes, M. (2015). Low bias local intrinsic dimension estimation from expected simplex skewness. *IEEE Transactions on Pattern Analysis and Machine Intelligence*, 37(1), 196–202.
 
-Khosla, P., Tian, Y., Wang, X., Liu, C., Isola, P., & others (2020). Supervised contrastive learning. In *Advances in Neural Information Processing Systems* (Vol. 33, pp. 18661–18673). Curran Associates.
+Khosla, P., Teterwak, P., Wang, C., Sarna, A., Tian, Y., Isola, P., Maschinot, A., Liu, C., & Krishnan, D. (2020). Supervised contrastive learning. In *Advances in Neural Information Processing Systems* (Vol. 33, pp. 18661–18673). Curran Associates.
 
 Kusupati, A., Bhatt, G., Rege, A., Wallingford, M., Sinha, A., Ramanujan, V., Howard-Snyder, W., Chen, K., Kakade, S., Jain, P., & Farhadi, A. (2022). Matryoshka representation learning. In *Advances in Neural Information Processing Systems* (Vol. 35, pp. 30233–30249).
 
@@ -1366,9 +1596,9 @@ Liu, T., Ungar, L., & Sedoc, J. (2019). Unsupervised post-processing of word vec
 
 Mu, J., Bhat, S., & Viswanath, P. (2018). All-but-the-top: Simple and effective postprocessing for word representations. In *International Conference on Learning Representations (ICLR 2018)*.
 
-Raunak, V., Gupta, V., & Metze, F. (2019). Effective dimensionality reduction for word embeddings. In *Proceedings of the 4th Workshop on Representation Learning for NLP (RepL4NLP)*.
-
 Radovanović, M., Nanopoulos, A., & Ivanovic, M. (2010). Hubs in space: Popular nearest neighbors in high-dimensional data. *Journal of Machine Learning Research*, 11, 2487–2531.
+
+Raunak, V., Gupta, V., & Metze, F. (2019). Effective dimensionality reduction for word embeddings. In *Proceedings of the 4th Workshop on Representation Learning for NLP (RepL4NLP)*.
 
 Rudman, W., Gillman, N., Rayne, T., & Eickhoff, C. (2022). IsoScore: Measuring the uniformity of embedding space utilization. In *Findings of the Association for Computational Linguistics: ACL 2022*.
 
@@ -1376,9 +1606,9 @@ Schnitzer, D., Flexer, A., Schedl, M., & Widmer, G. (2012). Local and global sca
 
 Schroff, F., Kalenichenko, D., & Philbin, J. (2015). FaceNet: A unified embedding for face recognition and clustering. In *Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR 2015)* (pp. 815–823). IEEE.
 
-van den Oord, A., Li, Y., & Vinyals, O. (2018). Representation learning with contrastive predictive coding. *arXiv preprint arXiv:1807.03748*.
-
 Timkey, W., & van Schijndel, M. (2021). All bark and no bite: Rogue dimensions in transformer language models obscure representational quality. In *Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing (EMNLP)*.
+
+van den Oord, A., Li, Y., & Vinyals, O. (2018). Representation learning with contrastive predictive coding. *arXiv preprint arXiv:1807.03748*.
 
 Wang, T., & Isola, P. (2020). Understanding contrastive representation learning through alignment and uniformity on the hypersphere. In *Proceedings of the 37th International Conference on Machine Learning (ICML 2020)*, PMLR 119.
 

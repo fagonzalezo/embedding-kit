@@ -209,7 +209,7 @@ More patterns (low-level `Trainer`, custom augmentations, pipelines) are in
 
 | Document | Description |
 |---|---|
-| [`docs/manual.md`](docs/manual.md) | Concepts manual: every analyzer, the improvement pipeline, the high-level API |
+| [`docs/manual.md`](docs/manual.md) | Manual: how EmbedKit decides, `EmbedKit` and tuning a refiner, baselines, evaluation, and every analyzer with what the evidence says about it |
 | [`docs/MIGRATION.md`](docs/MIGRATION.md) | Every breaking change since 0.1.2, with what to do |
 | [`CHANGELOG.md`](CHANGELOG.md) | Changes with their reasons and measurements |
 | [`skills/embedkit/references/metric_guide.md`](skills/embedkit/references/metric_guide.md) | Per-metric reading, and which statistics the report judges |
