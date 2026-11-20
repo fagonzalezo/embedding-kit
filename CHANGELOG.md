@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **`EmbedKit` runs the analysis report only when it reads it.** With `method="pca"` or
+  `"refiner"`, `fit` ran `EmbedKitAnalyzer` (uncalibrated) on every call, although only
+  `target_dim="auto"` reads it (`suggested_target_dim`). It now runs only for
+  `target_dim="auto"`; with an explicit `target_dim`, `analysis_report` is `None` and nothing is
+  written to `report.json`. The refiner candidate of the default selection has an explicit
+  `target_dim`, so the selection with labels no longer runs the analyzer, twice when the refiner
+  wins (candidate and refit).
+
 ## 0.8.0 (unreleased)
 
 One parameter instead of two: `EmbedKit(method=...)` says what `fit` builds, and `strategy` is

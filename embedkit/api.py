@@ -90,10 +90,12 @@ class EmbedKit:
     trains nothing: it is the ``linear`` refiner at its initialisation, the top ``target_dim``
     principal directions followed by L2 normalisation, with the same ``transform``, ``dim=``,
     ``save`` and ``load``. For both, ``target_dim="auto"`` is the report's
-    ``suggested_target_dim``. In E1, E6 and E7 (``docs/benchmarks/BENCHMARK_E1_E2.md``,
-    ``docs/benchmarks/BENCHMARK_E6_E7.md``) the self-supervised refiner never beat the better of
-    PCA and PCA-whitening, lost to them when fitted on fewer than a few thousand rows, and cost
-    about 100 times more. The training parameters
+    ``suggested_target_dim``: only then does ``fit`` run the analysis report (uncalibrated) and
+    keep it in ``analysis_report``; with an explicit ``target_dim`` it is ``None``. In E1, E6
+    and E7 (``docs/benchmarks/BENCHMARK_E1_E2.md``, ``docs/benchmarks/BENCHMARK_E6_E7.md``)
+    the self-supervised refiner never beat the better of PCA and PCA-whitening, lost to them
+    when fitted on fewer than a few thousand rows, and cost about 100 times more. The training
+    parameters
     (``augmentation``, ``loss``, ``architecture``, ``nested_dims``, ``epochs`` and the
     optimiser settings) apply to the refiner only; setting ``augmentation``, ``loss``,
     ``nested_dims`` or a non-linear ``architecture`` when no refiner is fitted or compared
@@ -403,27 +405,24 @@ class EmbedKit:
                 "or PCA.",
                 UserWarning, stacklevel=4)
 
-        # Step 1: analyze
-        # Only suggested_target_dim is read here, so the null calibration, the ID bootstrap and
-        # the ID scale curve are skipped.
-        analyzer = EmbedKitAnalyzer(
-            id_methods=self.id_methods,
-            random_state=self.random_state,
-            calibrate=False,
-            id_bootstrap=0,
-            id_scale_curve=False,
-        )
-        self.analysis_report = analyzer.fit(X_np, y)
-        report = self.analysis_report
-
-        # Step 2: auto-configure
-        target_dim = self._resolve_target_dim(d, report)
+        # The report is read only for target_dim="auto" (its suggested_target_dim), so it is
+        # computed only then, without the null calibration, the ID bootstrap and the scale curve.
+        self.analysis_report = None
+        if self.target_dim == "auto":
+            self.analysis_report = EmbedKitAnalyzer(
+                id_methods=self.id_methods,
+                random_state=self.random_state,
+                calibrate=False,
+                id_bootstrap=0,
+                id_scale_curve=False,
+            ).fit(X_np, y)
+        target_dim = self._resolve_target_dim()
         method = self._resolve_method()
         self.method_ = method
         if method == "pca":
             return self._fit_pca(X_np, target_dim)
-        augmentation = self._resolve_augmentation(report)
-        loss_fn = self._resolve_loss(report)
+        augmentation = self._resolve_augmentation()
+        loss_fn = self._resolve_loss()
         nested = self._resolve_nested_dims(target_dim)
         architecture = self._resolve_architecture()
         self.architecture_ = architecture
@@ -643,10 +642,10 @@ class EmbedKit:
         _restore_selection(obj, cfg)
         return obj
 
-    def _resolve_target_dim(self, d: int, report: EmbedKitReport) -> int:
+    def _resolve_target_dim(self) -> int:
         if self.target_dim != "auto":
             return int(self.target_dim)
-        return report.suggested_target_dim
+        return self.analysis_report.suggested_target_dim
 
     def _resolve_nested_dims(self, target_dim: int) -> tuple[int, ...] | None:
         if self.nested_dims is None:
@@ -665,7 +664,7 @@ class EmbedKit:
             raise ValueError(f"nested_dims {dims} exceed the output dimension {target_dim}")
         return dims
 
-    def _resolve_augmentation(self, report: EmbedKitReport):
+    def _resolve_augmentation(self):
         if self.augmentation_cfg != "auto":
             return self.augmentation_cfg
         if self.mode_ == "regression":
@@ -673,7 +672,7 @@ class EmbedKit:
             return GaussianNoise(std=0.05)
         return KNNPairs(k=5)
 
-    def _resolve_loss(self, report: EmbedKitReport):
+    def _resolve_loss(self):
         if self.loss_cfg != "auto":
             return self.loss_cfg
 
