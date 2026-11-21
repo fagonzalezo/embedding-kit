@@ -13,6 +13,13 @@
   one-column `y` is treated as 1-D; targets of higher rank raise a `ValueError` that suggests
   flattening them.
 
+### Fixed
+- **`HubnessAnalyzer.robinhood_index` was the negative of a Gini coefficient**, at most 0 and
+  more negative with more hubness, although it was documented as lying in [0, 1] with 0 for a
+  uniform k-occurrence. It is now the Robin Hood (Hoover) index of the hubness literature,
+  `sum |N_k - mean N_k| / (2 sum N_k)`, in [0, 1]. Values from earlier versions are not
+  comparable. No rule, default or calibrated statistic used it.
+
 ### Changed
 - **`EmbedKit` runs the analysis report only when it reads it.** With `method="pca"` or
   `"refiner"`, `fit` ran `EmbedKitAnalyzer` (uncalibrated) on every call, although only

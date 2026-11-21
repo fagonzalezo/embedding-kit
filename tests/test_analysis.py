@@ -1,6 +1,7 @@
 """Tests for embedkit.analysis.*"""
 
 import numpy as np
+import pytest
 
 
 class TestIntrinsicDim:
@@ -49,6 +50,23 @@ class TestHubness:
         assert 0.0 <= result.antihub_ratio <= 1.0
         assert 0.0 <= result.hub_ratio <= 1.0
         assert 0.0 <= result.hub_contamination <= 1.0
+
+    def test_robinhood_index(self, small_X):
+        from embedkit.analysis.hubness import HubnessAnalyzer
+
+        result = HubnessAnalyzer(k=5).fit(small_X)
+        N = result.k_occurrence
+        assert 0.0 <= result.robinhood_index <= 1.0
+        assert result.robinhood_index == pytest.approx(np.abs(N - N.mean()).sum() / (2 * N.sum()))
+        # A ring graph: every point is the neighbour of exactly k others, so the index is 0.
+        n, k = 20, 2
+        ring = np.array([[(i + 1) % n, (i - 1) % n] for i in range(n)])
+        flat = HubnessAnalyzer(k=k).fit(np.zeros((n, 3)), neighbor_index=ring)
+        assert flat.robinhood_index == pytest.approx(0.0)
+        # One hub in every list: half of the neighbour slots go to it.
+        star = np.array([[0 if i else 1, (i + 1) % n if i + 1 < n else 2] for i in range(n)])
+        hubby = HubnessAnalyzer(k=k).fit(np.zeros((n, 3)), neighbor_index=star)
+        assert hubby.robinhood_index > 0.4
 
     def test_hub_contamination(self, small_X):
         from embedkit.analysis.hubness import HubnessAnalyzer

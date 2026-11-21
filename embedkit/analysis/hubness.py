@@ -62,12 +62,10 @@ class HubnessAnalyzer(BaseAnalyzer):
         mean_N = N_k.mean()
         k_skewness = k_occurrence_skewness(N_k)
 
-        sorted_N = np.sort(N_k)
-        n_arr = np.arange(1, n + 1)
-        robinhood = float(
-            1.0 - 2.0 * np.sum(sorted_N * n_arr) / (n * np.sum(N_k) + 1e-10)
-            + 1.0 / n
-        )
+        # Robin Hood (Hoover) index: the share of all k-occurrences that would have to move to
+        # make every N_k equal (Feldbauer et al., 2018). 0 when every point is retrieved equally
+        # often, near 1 when a few points take most of the neighbour lists.
+        robinhood = float(np.abs(N_k - mean_N).sum() / (2.0 * N_k.sum())) if N_k.sum() else 0.0
 
         threshold = self.hub_threshold * mean_N
         hubs = np.where(N_k > threshold)[0].astype(np.int64)
