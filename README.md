@@ -78,7 +78,7 @@ every data set, with its numbers before and after, in
 - It scores candidates by kNN: a linear probe on its output was better on 21 sets but worse on 5
   (by 0.2 to 0.8 points).
 - It took 9 s to 6.6 min per set on one GPU. Time and memory for n up to 1e6 and d up to 4,096 are
-  in the manual's *Time and memory* section: the analyzer takes minutes at any n, and selection stays at a few
+  in the manual's *Time and memory* section (11): the analyzer takes minutes at any n, and selection stays at a few
   minutes because it is run on at most 50,000 rows (`selection_max_rows`).
 
 ## What the defaults do
@@ -209,7 +209,7 @@ More patterns (low-level `Trainer`, custom augmentations, pipelines) are in
 
 | Document | Description |
 |---|---|
-| [`docs/manual.md`](docs/manual.md) | Manual: how EmbedKit decides, `EmbedKit` and tuning a refiner, baselines, evaluation, and every analyzer with what the evidence says about it |
+| [`docs/manual.md`](docs/manual.md) | User manual: design philosophy, which method for which situation, `EmbedKit`, tuning a refiner, baselines, hubness reduction, custom refiners, evaluation, the analyzers, time and memory, troubleshooting |
 | [`docs/MIGRATION.md`](docs/MIGRATION.md) | Every breaking change since 0.1.2, with what to do |
 | [`CHANGELOG.md`](CHANGELOG.md) | Changes with their reasons and measurements |
 | [`skills/embedkit/references/metric_guide.md`](skills/embedkit/references/metric_guide.md) | Per-metric reading, and which statistics the report judges |

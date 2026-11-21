@@ -30,6 +30,14 @@
   wins (candidate and refit).
 
 ### Documentation
+- `docs/manual.md` rewritten as a user manual for someone improving their own embeddings: the
+  design philosophy, a "which method for your situation" table, then each method with when to use
+  it, how to call it and what to check afterwards, plus new sections on applying a transform to
+  new data, preparing regression targets (including `(n, m)` targets), and troubleshooting. The
+  experiment numbers, design justifications and version history are gone from the manual; the
+  evidence stays in the README and `docs/benchmarks/`, and the history in `CHANGELOG.md` and
+  `docs/MIGRATION.md`. Sections are renumbered 1 to 12 (tuning a refiner is now section 4, the
+  analyzers section 9); the skill's pointers follow.
 - `docs/manual.md` reorganised around how the library decides (by validation, not by diagnosis).
   A new opening explains that principle and what the analysis is for. Part 1 is now improvement
   (`EmbedKit` first), Part 2 evaluation and Part 3 analysis, which opens with a table of what the
