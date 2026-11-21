@@ -112,12 +112,13 @@ class EmbedKit:
 
     Modes of the refiner (WP 6.1). ``"supervised"`` (class labels): ``SupConLoss`` alone on the
     ``"residual"`` architecture with ``KNNPairs(5)`` views, ``val_knn_accuracy`` as the monitor.
-    ``"regression"`` (continuous targets, cast to float): ``RankNContrastLoss`` on the ``"mlp"``
-    architecture with ``GaussianNoise(0.05)`` views, ``val_ridge_r2`` (a ridge probe) as the
-    monitor; a fixed refiner warns with 1000 rows or fewer, where in E8 no refiner reliably beat
-    the raw embeddings. ``"self_supervised"``: the ``"linear"`` architecture with ``KNNPairs(5)``
-    views and NT-Xent plus 0.5 alignment-uniformity, monitored by ``k_skewness``. These are the
-    ``"auto"`` values of ``architecture`` and ``augmentation``;
+    ``"regression"`` (continuous targets of shape ``(n,)`` or ``(n, m)``, cast to float; with
+    ``m`` outputs the selection scores the R^2 averaged over them): ``RankNContrastLoss`` on
+    the ``"mlp"`` architecture with ``GaussianNoise(0.05)`` views, ``val_ridge_r2`` (a ridge
+    probe) as the monitor; a fixed refiner warns with 1000 rows or fewer, where in E8 no refiner
+    reliably beat the raw embeddings. ``"self_supervised"``: the ``"linear"`` architecture with
+    ``KNNPairs(5)`` views and NT-Xent plus 0.5 alignment-uniformity, monitored by
+    ``k_skewness``. These are the ``"auto"`` values of ``architecture`` and ``augmentation``;
     ``docs/benchmarks/BENCHMARK_SUPERVISED.md`` has the evidence (E8).
     ``monitor="auto"`` and ``early_stopping_patience="auto"`` resolve per mode: with labels, 10%
     of the rows are held out, training stops after 10 evaluations without improvement of the
@@ -715,7 +716,13 @@ def _restore_selection(obj: EmbedKit, cfg: dict) -> None:
 def _labels_array(y, mode: str) -> np.ndarray:
     y = _to_numpy(y) if isinstance(y, torch.Tensor) else np.asarray(y)
     if mode == "regression":
-        return np.asarray(y, dtype=np.float32)
+        y = np.asarray(y, dtype=np.float32)
+        if y.ndim == 2 and y.shape[1] == 1:
+            y = y[:, 0]
+        if y.ndim not in (1, 2):
+            raise ValueError(f"regression targets must have shape (n,) or (n, m), got {y.shape}; "
+                             "flatten each row's targets, e.g. y.reshape(len(y), -1)")
+        return y
     if y.ndim != 1:
         raise ValueError(f"class labels must be 1-D, got shape {y.shape}")
     if y.dtype.kind == "f" and not np.all(np.isfinite(y) & (y == np.round(y))):

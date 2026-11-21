@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added
+- **Multivariate regression targets in the default selection.** `EmbedKit(mode="regression")`
+  with `y` of shape `(n, m)` failed inside the selection ("knn_regression_r2 needs 1-D
+  targets"); the refiner and PCA already accepted such targets. `knn_regression_r2` now takes
+  `(n, m)` targets and scores the R^2 averaged over the outputs (scikit-learn's
+  `uniform_average`), with per-row terms whose mean is that R^2, so the paired bootstrap of the
+  selection and of `compare` works as for one target. `linear_probe` returns these per-row terms
+  for 2-D targets too (it returned `None`), unless an output is constant on the test split. A
+  one-column `y` is treated as 1-D; targets of higher rank raise a `ValueError` that suggests
+  flattening them.
+
 ### Changed
 - **`EmbedKit` runs the analysis report only when it reads it.** With `method="pca"` or
   `"refiner"`, `fit` ran `EmbedKitAnalyzer` (uncalibrated) on every call, although only

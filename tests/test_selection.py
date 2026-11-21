@@ -262,3 +262,23 @@ def test_no_deprecation_warning_from_the_library_itself():
         warnings.simplefilter("error", DeprecationWarning)
         EmbedKit(epochs=1, eval_every=100, **KW).fit(X, y)   # selection builds a refiner
         EmbedKit(method="pca", target_dim=4, id_methods=["TwoNN"], **KW).fit(X)
+
+
+def test_regression_selection_with_multivariate_targets():
+    rng = np.random.default_rng(0)
+    X = rng.standard_normal((300, 12)).astype(np.float32)
+    Y = X[:, :3] @ rng.standard_normal((3, 3)) + 0.1 * rng.standard_normal((300, 3))
+    ek = EmbedKit(mode="regression", epochs=1, eval_every=100, **KW).fit(X, Y)
+    t = ek.selection_report_
+    assert t.attrs["criterion"] == "knn_regression_r2"
+    assert "refiner-6" in set(t["candidate"])
+    rest = t[t["candidate"] != "identity"]
+    assert np.isfinite(rest[["diff_lo", "diff_hi"]].to_numpy()).all()
+    assert ek.transform(X).shape[0] == 300
+
+
+def test_regression_targets_of_higher_rank_raise():
+    rng = np.random.default_rng(0)
+    X = rng.standard_normal((300, 12)).astype(np.float32)
+    with pytest.raises(ValueError, match=r"\(n,\) or \(n, m\)"):
+        EmbedKit(mode="regression", **KW).fit(X, rng.standard_normal((300, 2, 2)))
