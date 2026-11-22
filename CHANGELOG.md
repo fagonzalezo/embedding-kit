@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Added
+- **Multivariate regression targets in the default selection.** `EmbedKit(mode="regression")`
+  with `y` of shape `(n, m)` failed inside the selection ("knn_regression_r2 needs 1-D
+  targets"); the refiner and PCA already accepted such targets. `knn_regression_r2` now takes
+  `(n, m)` targets and scores the R^2 averaged over the outputs (scikit-learn's
+  `uniform_average`), with per-row terms whose mean is that R^2, so the paired bootstrap of the
+  selection and of `compare` works as for one target. `linear_probe` returns these per-row terms
+  for 2-D targets too (it returned `None`), unless an output is constant on the test split. A
+  one-column `y` is treated as 1-D; targets of higher rank raise a `ValueError` that suggests
+  flattening them.
+
+### Fixed
+- **`HubnessAnalyzer.robinhood_index` was the negative of a Gini coefficient**, at most 0 and
+  more negative with more hubness, although it was documented as lying in [0, 1] with 0 for a
+  uniform k-occurrence. It is now the Robin Hood (Hoover) index of the hubness literature,
+  `sum |N_k - mean N_k| / (2 sum N_k)`, in [0, 1]. Values from earlier versions are not
+  comparable. No rule, default or calibrated statistic used it.
+
 ### Changed
 - **`EmbedKit` runs the analysis report only when it reads it.** With `method="pca"` or
   `"refiner"`, `fit` ran `EmbedKitAnalyzer` (uncalibrated) on every call, although only
@@ -12,6 +30,14 @@
   wins (candidate and refit).
 
 ### Documentation
+- `docs/manual.md` rewritten as a user manual for someone improving their own embeddings: the
+  design philosophy, a "which method for your situation" table, then each method with when to use
+  it, how to call it and what to check afterwards, plus new sections on applying a transform to
+  new data, preparing regression targets (including `(n, m)` targets), and troubleshooting. The
+  experiment numbers, design justifications and version history are gone from the manual; the
+  evidence stays in the README and `docs/benchmarks/`, and the history in `CHANGELOG.md` and
+  `docs/MIGRATION.md`. Sections are renumbered 1 to 12 (tuning a refiner is now section 4, the
+  analyzers section 9); the skill's pointers follow.
 - `docs/manual.md` reorganised around how the library decides (by validation, not by diagnosis).
   A new opening explains that principle and what the analysis is for. Part 1 is now improvement
   (`EmbedKit` first), Part 2 evaluation and Part 3 analysis, which opens with a table of what the

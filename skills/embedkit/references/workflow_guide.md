@@ -6,8 +6,8 @@ Patterns for integrating EmbedKit into real-world ML pipelines.
 
 ## Recommended workflow
 
-EmbedKit chooses a transform by validation, not by diagnosis (`docs/manual.md`, "How EmbedKit
-decides"):
+EmbedKit chooses a transform by validation, not by diagnosis (`docs/manual.md`, section 1,
+"Design philosophy"):
 
 1. **Start from the default.** `EmbedKit().fit_transform(X)` without labels returns the input
    centred and L2-normalised. With labels, `EmbedKit().fit(X, y)` selects among `Identity`,
@@ -18,7 +18,7 @@ decides"):
    only if the interval excludes 0. The selection scores by kNN; if the embedding feeds a linear
    classifier, score `"linear_probe_c1"` too.
 3. **Tune only with held-out data.** If the refiner came close but was not selected, tune it as in
-   `docs/manual.md` section 1.2 (three splits, one factor at a time, several seeds).
+   `docs/manual.md` section 4.4 (three splits, one factor at a time, several seeds).
 4. **For Euclidean search, check hubness.** Run `EmbedKitAnalyzer(metric="euclidean")`; if
    `report.recommendations` names a hubness-reducing search, try `embedkit.hubness_reduction`
    (`MutualProximity`, `CSLS`) on the gallery and compare with plain search the same way. Every

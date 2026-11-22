@@ -202,7 +202,9 @@ def linear_probe(
     ``per_point`` is the float array of shape ``(n_test,)`` of 0/1 correctness (its mean is the
     accuracy); for regression it is ``1 - e_i^2 / v`` with ``e_i`` the residual of test point
     ``i`` and ``v`` the (population) variance of the test targets, whose mean is exactly R^2
-    (see :func:`_r2_terms`). For 2-D targets ``per_point`` is ``None``.
+    (see :func:`_r2_terms`). For 2-D targets the term is averaged over outputs, each output
+    with its own variance, so the mean is the R^2 averaged over outputs; ``per_point`` is
+    ``None`` when an output is constant on the test split.
 
     Convergence warnings from L-BFGS are not silenced. The largest ``C`` on the grid is close to
     unregularised and may not converge within ``max_iter`` on separable data; that candidate then
@@ -295,20 +297,32 @@ def _probe_regression(Ztr, y_train, Zte, y_test) -> float:
     model = RidgeCV(alphas=_PROBE_ALPHAS).fit(Ztr, ytr)
     pred = model.predict(Zte)
     value = float(r2_score(yte, pred, multioutput="uniform_average"))
-    return value, (_r2_terms(yte, pred) if yte.ndim == 1 else None)
+    constant = np.any(np.var(yte.reshape(len(yte), -1), axis=0) == 0.0)
+    return value, (None if yte.ndim == 2 and constant else _r2_terms(yte, pred))
 
 
 def _r2_terms(y, pred) -> np.ndarray:
     """Per-point terms ``1 - (y_i - pred_i)^2 / var(y)``, whose mean is R^2.
 
-    With a fixed test set the denominator is a constant, so a paired bootstrap over these terms
+    For 2-D targets ``(n, m)`` the term of point ``i`` is
+    ``1 - mean_j (y_ij - pred_ij)^2 / var(y_j)``, whose mean is the R^2 averaged over the ``m``
+    outputs (scikit-learn's ``multioutput="uniform_average"``).
+
+    With a fixed test set the denominators are constants, so a paired bootstrap over these terms
     resamples R^2 differences as differences of squared errors.
     """
     y = np.asarray(y, dtype=np.float64)
-    v = float(np.mean((y - y.mean()) ** 2))
-    if v == 0.0:
-        raise ValueError("R^2 is undefined for constant test targets")
-    return 1.0 - (y - np.asarray(pred, dtype=np.float64)) ** 2 / v
+    pred = np.asarray(pred, dtype=np.float64).reshape(y.shape)
+    if y.ndim == 1:
+        v = float(np.mean((y - y.mean()) ** 2))
+        if v == 0.0:
+            raise ValueError("R^2 is undefined for constant test targets")
+        return 1.0 - (y - pred) ** 2 / v
+    v = np.mean((y - y.mean(axis=0)) ** 2, axis=0)
+    if np.any(v == 0.0):
+        cols = np.flatnonzero(v == 0.0).tolist()
+        raise ValueError(f"R^2 is undefined for constant test targets (output columns {cols})")
+    return 1.0 - np.mean((y - pred) ** 2 / v, axis=1)
 
 
 def knn_regression_r2(
@@ -317,9 +331,11 @@ def knn_regression_r2(
 ):
     """Test R^2 of ``k``-nearest-neighbour regression (mean target of the neighbours).
 
-    Neighbours of each test point are searched among the training points. Targets must be
-    continuous and 1-D (integers are accepted and treated as numbers). With
-    ``return_per_point=True`` the result is ``(r2, terms)``, with the terms of :func:`_r2_terms`.
+    Neighbours of each test point are searched among the training points. Targets are
+    continuous, of shape ``(n,)`` or ``(n, m)`` (integers are accepted and treated as numbers);
+    for ``(n, m)`` the R^2 is averaged over the ``m`` outputs, and a single column is treated as
+    1-D. With ``return_per_point=True`` the result is ``(r2, terms)``, with the terms of
+    :func:`_r2_terms`.
     """
     from sklearn.neighbors import KNeighborsRegressor
 
@@ -327,8 +343,11 @@ def knn_regression_r2(
     _check_same_dim(Ztr, Zte)
     ytr = np.asarray(_labels_to_numpy(y_train), dtype=np.float64)
     yte = np.asarray(_labels_to_numpy(y_test), dtype=np.float64)
-    if ytr.ndim != 1 or yte.ndim != 1:
-        raise ValueError("knn_regression_r2 needs 1-D targets")
+    if ytr.ndim == 2 and ytr.shape[1] == 1 and yte.ndim == 2 and yte.shape[1] == 1:
+        ytr, yte = ytr[:, 0], yte[:, 0]
+    if ytr.ndim not in (1, 2) or ytr.ndim != yte.ndim or ytr.shape[1:] != yte.shape[1:]:
+        raise ValueError("knn_regression_r2 needs targets of shape (n,) or (n, m), with the "
+                         f"same m on both splits; got {ytr.shape} and {yte.shape}")
     _check_rows(Ztr, ytr, "train")
     _check_rows(Zte, yte, "test")
     reg = KNeighborsRegressor(n_neighbors=min(k, len(Ztr)), metric=metric, algorithm="brute")

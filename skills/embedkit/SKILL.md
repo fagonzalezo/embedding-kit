@@ -29,9 +29,10 @@ diagnosis. Say so to the user: do not present a diagnostic reading as a reason t
 - **To check a transform on the user's task**, use `evaluate_transform` and `compare` against
   `Identity`, with a paired bootstrap interval.
 
-The full reference is `docs/manual.md`: the opening explains how EmbedKit decides, Part 1 covers
-`EmbedKit` and tuning a refiner (section 1.2), Part 2 evaluation, Part 3 the analyzers with what
-the evidence says about each statistic.
+The user manual is `docs/manual.md`, written for users (no benchmark detail; the evidence is in
+this skill, the README and `docs/benchmarks/`): section 1 the design philosophy, 2 which method
+for which situation, 3 `EmbedKit`, 4 tuning a refiner, 5 to 7 baselines, hubness reduction and
+custom refiners, 8 evaluation, 9 the analyzers, 11 time and memory, 12 troubleshooting.
 
 ## What the benchmarks show (use when advising)
 
@@ -181,9 +182,9 @@ are not thresholds.
 | Hubness, Euclidean search | `calibration["k_skewness"].z_score > 3` with `metric="euclidean"` | Hubness-reducing search (`embedkit.hubness_reduction.MutualProximity`, `CSLS`); compare with plain search |
 | Antihubs, Euclidean search | `calibration["antihub_ratio"].z_score > 3` with `metric="euclidean"` | Same |
 | Class labels available | labels given | `EmbedKit().fit(X, y)` (selection; the supervised refiner is a candidate, `SupConLoss`) |
-| Continuous targets available | targets given | `EmbedKit(mode="regression").fit(X, y)` (`RankNContrastLoss`; needs more than 1,000 rows) |
+| Continuous targets available | targets given, shape `(n,)` or `(n, m)` | `EmbedKit(mode="regression").fit(X, y)` (`RankNContrastLoss`; needs more than 1,000 rows) |
 | No labels | | `EmbedKit()` (centre + L2); nothing more can be validated without labels |
-| A refiner was close but not selected | refiner's `diff_vs_identity > 0`, interval reaching below 0 | Tune it on a held-out split (`docs/manual.md` section 1.2) |
+| A refiner was close but not selected | refiner's `diff_vs_identity > 0`, interval reaching below 0 | Tune it on a held-out split (`docs/manual.md` section 4) |
 
 `method="auto"` (the default) without labels returns `CenterNormalize` (centred, L2); with
 labels it fits `Identity`, `CenterNormalize`, PCA at 64/128/256 (+ L2) and, in supervised and
@@ -321,7 +322,7 @@ print(compare(res, reference="raw"))    # mean, sd, and the difference with a pa
 
 Always compare a proposed transform with `Identity` (and PCA) on held-out data; a win needs the
 95% interval to exclude 0. To tune a refiner (output dimension, loss, temperature, architecture,
-learning rate), follow `docs/manual.md` section 1.2: three splits, one factor at a time, several
+learning rate), follow `docs/manual.md` section 4.4: three splits, one factor at a time, several
 seeds, keep a configuration only if its interval against raw is above 0, then score it once on
 the test split. `evaluate_transform` scores 5-NN accuracy by default, while the selection uses
 10-NN; also score `"linear_probe_c1"` if the embedding feeds a linear classifier. Hubness-reducing neighbour search (`embedkit.hubness_reduction`:
@@ -417,7 +418,7 @@ marks the antihub ratio, `distance_cv` and uniformity of such rows as uncalibrat
 with Euclidean distance), pass `normalize_output=False`.
 
 **Temperature is worth tuning.** The default `0.07` of `SupConLoss` and `RankNContrastLoss`
-was never tuned per data set; `docs/manual.md` section 1.2 suggests trying 0.1 to 0.2, on a
+was never tuned per data set; `docs/manual.md` section 4.3 suggests trying 0.1 to 0.2, on a
 held-out split.
 
 **kNN backend.** `embedkit.utils.neighbors.knn()` runs an exact scikit-learn search by default and caches nothing. FAISS is optional (`pip install embedkit[faiss]`); select it with `backend="faiss"` or `EMBEDKIT_KNN_BACKEND=faiss`. Both return true distances (Euclidean, or `1 - cos` for cosine), ascending, without the query point.

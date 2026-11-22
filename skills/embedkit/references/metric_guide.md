@@ -1,7 +1,7 @@
 # EmbedKit Metric Guide
 
 What every statistic in `EmbedKitReport` measures, how to read it, whether the null model
-calibrates it, and what the benchmarks say about it. `docs/manual.md` Part 3 is the full reference.
+calibrates it, and what the benchmarks say about it. `docs/manual.md` section 9 is the user-facing reference.
 
 The analysis describes an embedding space; it does not choose a transform (`EmbedKit` chooses by
 validation on held-out rows). The report applies no fixed thresholds. Hubness, antihubs, distance
